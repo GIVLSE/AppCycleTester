@@ -11,6 +11,7 @@ Repository: https://github.com/GIVLSE/AppCycleTester
 - Repeat once, N times (1–999), or indefinitely.
 - Optional overall duration cap (0 means unlimited).
 - Start, pause, resume, stop.
+- V1.1 interactive on-demand Accessibility onboarding with direct App info and Accessibility settings links and connected-status feedback; no programmatic permission grant.
 - Persistent plan and local event log.
 - Uses explicitly user-enabled Accessibility Service to request app launches and check foreground window events.
 - Timeout if an app's window is not confirmed within 8 seconds. Reports FAIL after losing the foreground for over 5 seconds.
@@ -29,7 +30,10 @@ There is no gradle-wrapper.jar in this initial repository: Android Studio must u
 ## How to use
 
 1. Install the debug APK on a test device.
-2. In the app open Android Accessibility settings and enable **App Cycle Runner**.
+2. Select the apps and press **Start**. If the accessibility service is unavailable, V1.1 opens an in-app setup guide instead of disabling Start.
+   - For sideloaded installs on Android 13+, Android/HyperOS may restrict Accessibility; in the guide open **App info** and explicitly allow restricted settings if offered.
+   - Open **Accessibility → Downloaded apps → App Cycle Runner** and enable the service. This permission is granted only by the device owner in Android Settings, never silently by the app.
+   - Return to App Cycle Tester: the guide detects when the service is connected and offers **Start test**.
 3. Select multiple apps and set individual durations and ordering.
 4. Set repeat mode and optional total duration cap.
 5. Keep device unlocked with display on. On a dedicated phone, Developer options → **Stay awake while charging** is recommended.
@@ -40,6 +44,8 @@ There is no gradle-wrapper.jar in this initial repository: Android Studio must u
 
 - No root, forced package stop, background process kill, or wake-lock bypass.
 - Android/OEM policies may prevent activity launches from background. Device verification is essential.
+- On Android 13+ sideloaded builds may need an additional manual **Allow restricted settings** confirmation in Settings → App info. Some ROMs hide/relocate this action; the app cannot force it.
+- Android 11–16 behavior varies by OEM; UI guidance cannot guarantee access is granted.
 - Screen lock/automatic display timeout is not solved by this version.
 - Accessibility is used to detect window changes only. This version does not capture UI content or gestures.
 - The Android process or accessibility service may be stopped by the OS, ending the run.

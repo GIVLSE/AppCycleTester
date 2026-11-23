@@ -1,6 +1,7 @@
 package io.github.givlse.appcycletester
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
 import androidx.activity.ComponentActivity
@@ -63,9 +64,17 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 Surface(Modifier.fillMaxSize()) {
-                    CycleScreen(onOpenAccessibility = {
-                        startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-                    })
+                    CycleScreen(
+                        onOpenAccessibility = {
+                            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                        },
+                        onOpenAppDetails = {
+                            startActivity(Intent(
+                                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                Uri.parse("package:" + packageName)
+                            ))
+                        }
+                    )
                 }
             }
         }
@@ -73,12 +82,13 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun CycleScreen(onOpenAccessibility: () -> Unit) {
+private fun CycleScreen(onOpenAccessibility: () -> Unit, onOpenAppDetails: () -> Unit) {
     val context = LocalContext.current
     val store = remember { SettingsStore(context) }
     val available = remember { AppCatalog.list(context) }
     var plan by remember { mutableStateOf(store.loadPlan()) }
     var showChooser by remember { mutableStateOf(false) }
+    var showAccessSetup by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
     val runtime by RunnerRuntime.state.collectAsState()
     val busy = runtime.phase == RunPhase.RUNNING || runtime.phase == RunPhase.PAUSED
@@ -104,11 +114,15 @@ private fun CycleScreen(onOpenAccessibility: () -> Unit) {
         item {
             Card {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Accessibility: " + if (runtime.accessibilityReady) "подключена" else "не включена",
+                    val isReady = runtime.accessibilityReady && CycleAccessibilityService.instance != null
+                    Text(if (isReady) "Служба переключения подключена" else "Требуется настройка доступа",
                         fontWeight = FontWeight.SemiBold)
-                    Text("Для переключения приложений включите App Cycle Runner в специальных возможностях Android.")
-                    if (!runtime.accessibilityReady) {
-                        OutlinedButton(onClick = onOpenAccessibility) { Text("Открыть настройки") }
+                    Text(if (isReady) "Можно запускать цикл приложений."
+                        else "Нажмите «Старт» или «Настроить доступ»: покажем необходимые шаги.")
+                    if (!isReady) {
+                        OutlinedButton(onClick = { showAccessSetup = true }) {
+                            Text("Настроить доступ")
+                        }
                     }
                 }
             }
@@ -202,9 +216,14 @@ private fun CycleScreen(onOpenAccessibility: () -> Unit) {
             if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (!busy) {
-                    Button(enabled = runtime.accessibilityReady && plan.targets.isNotEmpty(), onClick = {
-                        error = CycleAccessibilityService.instance?.start(plan)
-                            ?: "Служба Accessibility не подключена"
+                    Button(enabled = plan.targets.isNotEmpty(), onClick = {
+                        if (runtime.accessibilityReady && CycleAccessibilityService.instance != null) {
+                            error = CycleAccessibilityService.instance?.start(plan)
+                                ?: "Служба Accessibility не подключена"
+                        } else {
+                            error = ""
+                            showAccessSetup = true
+                        }
                     }) { Text("Старт") }
                 } else {
                     Button(onClick = {
@@ -228,6 +247,20 @@ private fun CycleScreen(onOpenAccessibility: () -> Unit) {
                 style = MaterialTheme.typography.bodySmall)
         }
         item { Spacer(Modifier.height(12.dp)) }
+    }
+
+    if (showAccessSetup) {
+        AccessSetupDialog(
+            ready = runtime.accessibilityReady && CycleAccessibilityService.instance != null,
+            onOpenAppDetails = onOpenAppDetails,
+            onOpenAccessibility = onOpenAccessibility,
+            onDismiss = { showAccessSetup = false },
+            onStart = {
+                showAccessSetup = false
+                error = CycleAccessibilityService.instance?.start(plan)
+                    ?: "Служба Accessibility не подключена"
+            }
+        )
     }
 
     if (showChooser) {

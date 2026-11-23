@@ -20,3 +20,18 @@ Use a dedicated device with screen kept awake.
 
 PASS is not established just by calling startActivity(): check actual foreground windows and duration.
 These are test cases, NOT completed real-device test results.
+
+## V1.1 onboarding tests
+
+| ID | Action | Expected outcome |
+|---|---|---|
+| ONB-01 | Disable Accessibility, select apps, press Start | Setup dialog opens; Start is not blocked and no test starts |
+| ONB-02 | In setup, tap App info | Opens **App Cycle Tester** system app details |
+| ONB-03 | In setup, tap Accessibility | Opens Android Accessibility settings |
+| ONB-04 | Enable service and return | Dialog shows connected state and **Start test** |
+| ONB-05 | Start test after enabling | Cycle begins, without manually restarting the app |
+| ONB-06 | Disable service again | Subsequent Start requests setup again |
+| ONB-07 | Android 13+ sideloaded installer | Guide explains restricted settings, user grants manually only if required |
+| ONB-08 | Android 11/no restricted settings | User can skip App info and directly enable service |
+
+No tests in this section are marked PASS without testing on-device.
