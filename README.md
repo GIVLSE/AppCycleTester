@@ -19,7 +19,7 @@ Repository: https://github.com/GIVLSE/AppCycleTester
 - Timeout if an app's window is not confirmed within 8 seconds. Reports FAIL after losing the foreground for over 5 seconds.
 - Kotlin + Jetpack Compose, minSdk 26, targetSdk 36.
 
-**Application ID:** `com.sequmio.givlse` · **Version:** `0.2.1` (`versionCode` 4).
+**Application ID:** `com.sequmio.givlse` · **Version:** `0.3.0` (`versionCode` 5).
 
 **Important:** This is a new Android package compared to the prototype `io.github.givlse.appcycletester`; installing Sequmio will not update the previous package in place.
 
@@ -76,3 +76,7 @@ There is no gradle-wrapper.jar in this initial repository: Android Studio must u
 
 V1.1: better foreground recovery, profiles, export reports and second-level timers.
 V2: E2E recorder/player with accessibility node selectors and tap/swipe assertions.
+
+## Release verification
+
+Sequmio 0.3.0 includes a native dark-mode UI matching the approved visual design. CI compiles the APK and release bundle and runs the cycle navigation unit tests. UI and long-running accessibility switching still require real-device QA before wider production rollout. Signed Play bundles use the owner's permanent upload key. Never commit this private key or its password.
