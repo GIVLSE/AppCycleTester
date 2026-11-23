@@ -33,6 +33,7 @@ internal fun SequmioAccessSetup(
     onConsent: () -> Unit,
     onAppInfo: () -> Unit,
     onAccessibility: () -> Unit,
+    onPrivacy: () -> Unit,
     onBack: () -> Unit,
     onStart: () -> Unit
 ) {
@@ -93,6 +94,7 @@ internal fun SequmioAccessSetup(
             Text("Waiting for system permission. Return here after enabling the service.",
                 color = SeqColors.Muted)
         }
+        TextButton(onClick = onPrivacy) { Text("Privacy Policy") }
         TextButton(onClick = onBack) { Text("Not now") }
     }
 }

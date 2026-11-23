@@ -1,6 +1,8 @@
 package com.sequmio.givlse
 
 import androidx.compose.foundation.Image
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -43,6 +45,11 @@ internal fun SequmioApp(openAccessibility: () -> Unit, openAppDetails: () -> Uni
     var durationTarget by remember { mutableStateOf<TestTarget?>(null) }
     var message by remember { mutableStateOf("") }
     val connected = runner.accessibilityReady && CycleAccessibilityService.instance != null
+    val openPrivacy = {
+        context.startActivity(
+            Intent(Intent.ACTION_VIEW, Uri.parse("https://givlse.github.io/AppCycleTester/privacy.html"))
+        )
+    }
     val active = runner.phase == RunPhase.RUNNING || runner.phase == RunPhase.PAUSED
     val history = remember(runner.events.lastOrNull()?.timestampMillis, runner.phase, page) {
         store.readHistory().takeLast(120).reversed()
@@ -66,6 +73,7 @@ internal fun SequmioApp(openAccessibility: () -> Unit, openAppDetails: () -> Uni
                     onStart = { requestStart() },
                     onEdit = { page = Page.PLAN },
                     onSetup = { page = Page.SETUP },
+                    onPrivacy = openPrivacy,
                     onPause = { CycleAccessibilityService.instance?.pause() },
                     onResume = { CycleAccessibilityService.instance?.resume() },
                     onStop = { CycleAccessibilityService.instance?.stop() }
@@ -99,6 +107,7 @@ internal fun SequmioApp(openAccessibility: () -> Unit, openAppDetails: () -> Uni
                     onBack = { page = Page.HOME },
                     onAppInfo = openAppDetails,
                     onAccessibility = openAccessibility,
+                    onPrivacy = openPrivacy,
                     onStart = { start() }
                 )
             }
@@ -147,6 +156,7 @@ internal fun SequmioApp(openAccessibility: () -> Unit, openAppDetails: () -> Uni
 private fun SequmioHome(
     plan: TestPlan, runner: RunSnapshot, connected: Boolean, message: String,
     onStart: () -> Unit, onEdit: () -> Unit, onSetup: () -> Unit,
+    onPrivacy: () -> Unit,
     onPause: () -> Unit, onResume: () -> Unit, onStop: () -> Unit
 ) {
     val active = runner.phase == RunPhase.RUNNING || runner.phase == RunPhase.PAUSED
@@ -251,6 +261,11 @@ private fun SequmioHome(
                         else "Ready for testing", color = SeqColors.Muted)
                     if (message.isNotEmpty()) Text(message, color = SeqColors.Error)
                 }
+            }
+        }
+        item {
+            TextButton(onClick = onPrivacy) {
+                Text("Privacy Policy", color = SeqColors.Muted)
             }
         }
         item { Spacer(Modifier.height(8.dp)) }
