@@ -1,5 +1,6 @@
 package com.sequmio.givlse
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -11,6 +12,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.core.graphics.drawable.toBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -163,7 +166,7 @@ private fun SequmioHome(
     ) {
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("SEQU MIO", color = SeqColors.Muted, fontSize = 12.sp, letterSpacing = 2.sp)
+                Text("SEQUMIO", color = SeqColors.Muted, fontSize = 12.sp, letterSpacing = 2.sp)
                 Text("QA AUTOMATION", color = SeqColors.Teal, fontSize = 12.sp)
             }
         }
@@ -297,7 +300,7 @@ private fun SequmioPlan(
             SeqCard(Modifier.fillMaxWidth()) {
                 Row(Modifier.fillMaxWidth().padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically) {
-                    SeqAppLetter(target.label)
+                    SeqAppLetter(target.packageName, target.label)
                     Spacer(Modifier.width(9.dp))
                     Column(Modifier.weight(1f).clickable(enabled = enabled) {
                         onDuration(target)
@@ -377,11 +380,22 @@ private fun SeqCounter(label: String, value: Int, low: Int, high: Int,
 }
 
 @Composable
-private fun SeqAppLetter(label: String) {
+private fun SeqAppLetter(packageName: String, label: String) {
+    val context = LocalContext.current
+    val icon = remember(packageName) {
+        runCatching {
+            context.packageManager.getApplicationIcon(packageName)
+                .toBitmap(width = 96, height = 96).asImageBitmap()
+        }.getOrNull()
+    }
     Box(Modifier.size(43.dp).background(SeqColors.CardRaised,
         RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
-        Text(label.take(1).uppercase(), color = SeqColors.Teal, fontSize = 18.sp,
-            fontWeight = FontWeight.Bold)
+        if (icon != null) {
+            Image(bitmap = icon, contentDescription = label, modifier = Modifier.fillMaxSize())
+        } else {
+            Text(label.take(1).uppercase(), color = SeqColors.Teal, fontSize = 18.sp,
+                fontWeight = FontWeight.Bold)
+        }
     }
 }
 
