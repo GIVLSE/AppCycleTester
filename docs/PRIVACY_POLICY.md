@@ -1,29 +1,34 @@
-# Политика конфиденциальности — Sequmio
+# Sequmio Privacy Policy
 
-**Обновлено:** 23 ноября 2026 года. Версия приложения: V1.
+**Effective date:** November 23, 2026
 
-**Разработчик:** GIVLSE. Репозиторий: https://github.com/GIVLSE/AppCycleTester
+**App:** Sequmio (\`com.sequmio.givlse\`)
 
-Sequmio — локальный инструмент для автоматизированного циклического запуска выбранных пользователем Android-приложений.
+**Developer:** Vladislav Girskii (GIVLSE)
 
-### Локальная информация
+**Public web version:** https://givlse.github.io/AppCycleTester/privacy.html (requires GitHub Pages to be enabled)
 
-Приложение получает список приложений, доступных для запуска, чтобы позволить выбрать тестируемые приложения. Во время теста Android Accessibility Service получает названия пакетов активных окон и время переключения, чтобы проверить, что нужное приложение открыто. Порядок приложений, индивидуальные таймеры и журнал запуска сохраняются локально на устройстве.
+Sequmio allows users to automate timed switching between selected Android applications for local QA testing.
 
-В текущей версии **не** записываются нажатия, содержимое экранов, скриншоты, звук и видео. Нет интеграций с рекламой или аналитикой. У приложения отсутствует передача данных на сервер разработчика либо третьим лицам.
+## Data used locally
+- Launchable installed applications: display names, package identifiers and launcher activity names for the app picker.
+- Test plans: selection and order of apps, timers, repeat mode and total-duration limit.
+- Active window package identifiers and timestamps, observed through Android Accessibility Service to verify foreground app changes.
+- Execution log records with timestamps, and user consent acknowledgement.
 
-### Accessibility Service
+These records are stored locally in Android SharedPreferences. They are used only for running the selected test plans and displaying results. The current version does not send them to developer servers or third parties, and has no analytics, ads, or user accounts.
 
-Служба запрашивается только при согласии пользователя. Она необходима для автоматического запуска выбранных приложений и проверки активного окна, не используется для скрытого просмотра содержимого экрана или обхода настроек безопасности. Пользователь может отключить её в настройках Android. Отказ от согласия не удаляет приложение, но блокирует автоматические циклы.
+## Accessibility permission
+The user must explicitly consent to Sequmio's in-app disclosure and enable the Sequmio Runner service in Android Accessibility settings. The service is used to open apps and detect active app windows. It does not read screen text, record taps, capture screenshots, audio or video in the current version. The user can disable the service at any time.
 
-### Хранение, удаление и изменения
+## Data retention and deletion
+Plans remain until modified or local app data is deleted. Run history is a rolling recent-event log. Clear Sequmio's app storage or uninstall it to remove local data.
 
-Конфигурация тестов и журнал событий хранятся на устройстве через Android SharedPreferences. Чтобы удалить данные, можно очистить хранилище приложения или удалить его с устройства.
+## Children
+Sequmio is intended for developers and testers, not children.
 
-При появлении E2E-записи и захвата экрана политика и экран согласия должны быть обновлены до включения этих функций.
+## Changes
+If new features such as E2E recording, screenshots or sharing are introduced, the policy and in-app disclosure will be updated first.
 
-### Контакты
-
-Обращения по вопросам конфиденциальности: https://github.com/GIVLSE/AppCycleTester/issues
-
-Для страницы Google Play разработчик должен проверить эту политику, добавить контактную информацию и убедиться, что декларация Data Safety соответствует фактической версии приложения.
+## Privacy contact
+Vladislav Girskii (GIVLSE): https://github.com/GIVLSE/AppCycleTester/issues

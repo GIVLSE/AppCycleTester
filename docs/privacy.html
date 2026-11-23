@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="Privacy Policy for Sequmio, an Android QA test runner by GIVLSE.">
+  <title>Privacy Policy · Sequmio</title>
+  <style>
+    :root{color-scheme:dark;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --bg:#0d1424;--card:#1b263a;--text:#f4f6fc;--muted:#b0bfd2;--accent:#48e2d0;--line:#3b4860;}
+    *{box-sizing:border-box}
+    body{margin:0;color:var(--text);background:linear-gradient(160deg,#0d1424,#15152d);
+      min-height:100vh;line-height:1.65}
+    main{width:min(850px,calc(100% - 36px));margin:56px auto 80px}
+    header{display:flex;gap:16px;align-items:center;margin-bottom:32px}
+    .mark{display:inline-grid;place-items:center;width:56px;height:56px;border-radius:15px;
+      font-size:24px;font-weight:800;background:#213858;color:var(--accent)}
+    .brand{font-size:22px;font-weight:750;letter-spacing:-.4px}
+    .sub{font-size:13px;color:var(--muted);margin-top:0}
+    article{padding:clamp(20px,4vw,45px);border-radius:24px;background:var(--card);border:1px solid var(--line)}
+    h1{font-size:clamp(28px,4vw,40px);line-height:1.15;margin:0 0 10px}
+    h2{font-size:19px;line-height:1.4;margin:26px 0 8px;color:#f4f6fc}
+    p{margin:8px 0 14px}
+    ul{padding-left:24px;margin:8px 0 16px}
+    li{margin:5px 0}
+    a{color:var(--accent);text-underline-offset:3px;overflow-wrap:anywhere}
+    .intro{color:var(--muted);margin-bottom:24px}
+    .meta{color:var(--muted);font-size:14px}
+    .notice{border-left:3px solid var(--accent);padding:10px 15px;background:#152d38;border-radius:0 10px 10px 0}
+    footer{font-size:13px;color:var(--muted);margin-top:23px}
+  </style>
+</head>
+<body>
+<main>
+<header>
+  <div class="mark" aria-hidden="true">↻</div>
+  <div><div class="brand">Sequmio</div><p class="sub">Mobile QA Automation</p></div>
+</header>
+<article>
+  <h1>Privacy Policy</h1>
+  <p class="meta">Effective date: November 23, 2026 · App: Sequmio (com.sequmio.givlse)</p>
+  <p class="intro">This policy describes the data used by Sequmio, an Android app-testing utility developed by Vladislav Girskii (GIVLSE).</p>
+
+  <h2>1. What Sequmio does</h2>
+  <p>Sequmio helps you create test plans that open selected installed Android apps one after another, each for a specified duration. It supports repeated runs and locally stored test history.</p>
+
+  <h2>2. Information accessed on your device</h2>
+  <ul>
+    <li><strong>Launchable installed apps:</strong> application display names, package identifiers and launcher activities to show a list of apps that you can select.</li>
+    <li><strong>Test plans:</strong> selected apps, execution order, per-app durations, repeat options and time limits.</li>
+    <li><strong>Foreground app events:</strong> the active app's package identifier and window-change timestamps detected by the user-enabled Android Accessibility Service.</li>
+    <li><strong>Execution history:</strong> local time-stamped run events, such as launches, confirmations, failures and completion.</li>
+    <li><strong>Consent setting:</strong> a local record of your acknowledgement of Sequmio's Accessibility Service disclosure.</li>
+  </ul>
+  <p>These items are used solely to run the test plan you requested, check app switching, and display results.</p>
+
+  <h2>3. Accessibility Service</h2>
+  <p>Sequmio requests use of Android's Accessibility Service to launch apps you select and detect which app is active. This service is enabled only by you in Android system settings after a prominent disclosure and an explicit consent step.</p>
+  <p class="notice">The current version does not read on-screen text, record taps or gestures, take screenshots, record audio or video, or run an E2E recording feature.</p>
+  <p>You can revoke this access at any time in Android Settings → Accessibility. Automatic app cycling will not work without this service.</p>
+
+  <h2>4. Storage, data sharing and security</h2>
+  <p>Test plans, consent setting and execution history are stored <strong>locally on your device</strong> using Android SharedPreferences. Sequmio's current version does not transmit these records to the developer or other parties, and it has no analytics, advertising, user accounts or remote backend. No personal information is sold.</p>
+  <p>Because this information is stored locally, anyone with access to your unlocked device may be able to view the test log in the app. Protect your device with Android's normal screen-lock security.</p>
+
+  <h2>5. Retention and deletion</h2>
+  <p>The app keeps selected test settings until you change or delete the app's local data. Its execution log keeps a rolling history of recent events. You can delete all locally held Sequmio data by clearing its storage in Android Settings or uninstalling the app.</p>
+
+  <h2>6. Children</h2>
+  <p>Sequmio is designed for developers and app testers and is not directed at children.</p>
+
+  <h2>7. Changes to this policy</h2>
+  <p>If future versions add E2E recording, screenshots, sharing or new data processing, this policy and the related in-app disclosure will be updated before those features are introduced.</p>
+
+  <h2>8. Developer and privacy contact</h2>
+  <p>Developer: Vladislav Girskii (GIVLSE). For questions or requests relating to this policy, please use <a href="https://github.com/GIVLSE/AppCycleTester/issues">Sequmio's public project issue tracker</a>.</p>
+</article>
+<footer>Sequmio · Privacy Policy · No cookies, trackers or third-party scripts on this page.</footer>
+</main>
+</body>
+</html>
