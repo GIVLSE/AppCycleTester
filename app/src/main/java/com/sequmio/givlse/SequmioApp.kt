@@ -43,6 +43,7 @@ internal fun SequmioApp(
     permissionRefreshToken: Int,
     requestNotificationPermission: () -> Unit,
     openAccessibility: () -> Unit,
+    openDisplaySettings: () -> Unit,
     openAppDetails: () -> Unit
 ) {
     val context = LocalContext.current
@@ -133,6 +134,7 @@ internal fun SequmioApp(
                     onAppInfo = openAppDetails,
                     onAccessibility = openAccessibility,
                     onNotifications = requestNotificationPermission,
+                    onDisplaySettings = openDisplaySettings,
                     onPrivacy = openPrivacy,
                     onStart = { start() }
                 )

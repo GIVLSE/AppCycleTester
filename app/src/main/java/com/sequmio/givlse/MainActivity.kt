@@ -87,6 +87,9 @@ class MainActivity : ComponentActivity() {
                                     notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                             },
                             openAccessibility = { showAccessibilityServiceSettings() },
+                            openDisplaySettings = {
+                                startActivity(Intent(Settings.ACTION_DISPLAY_SETTINGS))
+                            },
                             openAppDetails = {
                                 startActivity(Intent(
                                     Settings.ACTION_APPLICATION_DETAILS_SETTINGS,

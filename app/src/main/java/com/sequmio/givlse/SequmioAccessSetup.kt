@@ -44,6 +44,7 @@ internal fun SequmioAccessSetup(
     onAppInfo: () -> Unit,
     onAccessibility: () -> Unit,
     onNotifications: () -> Unit,
+    onDisplaySettings: () -> Unit,
     onPrivacy: () -> Unit,
     onBack: () -> Unit,
     onStart: () -> Unit
@@ -209,6 +210,9 @@ internal fun SequmioAccessSetup(
             "Android does not allow it to keep other apps' screens awake; " +
             "configure device screen timeout or Stay awake while charging for long tests.",
             color = SeqColors.Muted, fontSize = 12.sp)
+        SeqTextButton(onClick = onDisplaySettings) {
+            Text("Open Android screen timeout settings")
+        }
         if (consent && ready) {
             SeqPrimaryButton("Start test", onStart, Modifier.fillMaxWidth())
         } else if (consent) {
