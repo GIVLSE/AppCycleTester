@@ -12,12 +12,25 @@ Package ID: `com.sequmio.givlse`. Keep it unchanged after Play Console app creat
 
 Google Play review is required even for testing tracks. Closed testing does not eliminate Accessibility API policy obligations.
 
-## Generate permanent upload key (on your PC)
+## Upload signing key
+
+The first v0.3.0 release bundle was signed with a dedicated **Sequmio upload key**.
+The owner must keep a secure, offline backup of that keystore and use the
+**same key** for subsequent uploads. The private key is never committed to this
+repository. If you already registered a different upload key with Play Console,
+sign future bundles with the key registered there instead.
+
+### If you already have the upload-key backup
+
+Use the provided `sequmio-upload.jks` and the corresponding password from its private backup.
+Do not generate a replacement key for updates.
+
+### Generating a new key locally (only if this app has no registered upload key)
 
 In a JDK terminal:
 
 ```powershell
-keytool -genkeypair -v -keystore appcycletester-upload.jks -storetype JKS -alias appcycletester-upload -keyalg RSA -keysize 3072 -validity 10000
+keytool -genkeypair -v -keystore sequmio-upload.jks -storetype PKCS12 -alias sequmio-upload -keyalg RSA -keysize 3072 -validity 10000
 ```
 
 **Keep the .jks and passwords offline. Never send them to chat, and never commit them.** Keep a secure backup so future releases use the same upload certificate.
@@ -25,7 +38,7 @@ keytool -genkeypair -v -keystore appcycletester-upload.jks -storetype JKS -alias
 Encode the local file (PowerShell):
 
 ```powershell
-[Convert]::ToBase64String([IO.File]::ReadAllBytes("appcycletester-upload.jks")) | Set-Clipboard
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("sequmio-upload.jks")) | Set-Clipboard
 ```
 
 Open GitHub → GIVLSE/AppCycleTester → Settings → Secrets and variables → Actions. Create these repository secrets:
@@ -34,16 +47,16 @@ Open GitHub → GIVLSE/AppCycleTester → Settings → Secrets and variables →
 |---|---|
 | ACT_UPLOAD_KEYSTORE_B64 | Base64 contents of upload .jks |
 | ACT_UPLOAD_STORE_PASSWORD | Keystore password |
-| ACT_UPLOAD_KEY_ALIAS | appcycletester-upload |
+| ACT_UPLOAD_KEY_ALIAS | sequmio-upload |
 | ACT_UPLOAD_KEY_PASSWORD | Private key password |
 
 Only the repo owner should configure these. GitHub Actions will reconstruct the keystore temporarily, sign the AAB and leave the keystore out of artifacts.
 
 ## Build for Play
 
-Open GitHub → Actions → **Play closed-test AAB** → Run workflow. This separate manual workflow will fail before compiling if any of the signing secrets are missing. A successful run produces artifact `Sequmio-play-upload-aab` containing `Sequmio-play-upload.aab`.
+Open GitHub → Actions → **Sequmio Play closed-test AAB** → Run workflow. This separate manual workflow will fail before compiling if any of the signing secrets are missing. A successful run produces artifact `Sequmio-play-upload-aab` containing `Sequmio-play-upload.aab`.
 
-The regular Android V1 CI continues building a debug APK for local QA. Debug APKs are not Play release bundles.
+The regular Sequmio CI builds a debug APK and an **unsigned** release AAB for verification. These unsigned artifacts are not Play uploads. Use the manual signing workflow with the registered permanent upload key for subsequent releases.
 
 ## Accessibility policy
 
