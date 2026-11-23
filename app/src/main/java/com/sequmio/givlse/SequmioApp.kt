@@ -207,7 +207,7 @@ private fun SequmioHome(
                         Spacer(Modifier.width(9.dp))
                         Text("Test Plan", fontWeight = FontWeight.Bold, fontSize = 21.sp)
                         Spacer(Modifier.weight(1f))
-                        TextButton(onClick = onEdit, enabled = !active) { Text("Edit") }
+                        SeqTextButton(onClick = onEdit, enabled = !active) { Text("Edit") }
                     }
                     Text(if (plan.targets.isEmpty()) "Add apps to create a test sequence."
                         else "Run the selected apps automatically in order.",
@@ -226,7 +226,14 @@ private fun SequmioHome(
                                 if (runner.phase == RunPhase.RUNNING) "Pause" else "Resume",
                                 if (runner.phase == RunPhase.RUNNING) onPause else onResume,
                                 Modifier.weight(1f))
-                            OutlinedButton(onClick = onStop, modifier = Modifier.weight(1f)) {
+                            OutlinedButton(
+                                onClick = onStop,
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = SeqColors.Primary,
+                                    disabledContentColor = SeqColors.Muted
+                                )
+                            ) {
                                 Text("Stop")
                             }
                         }
@@ -250,7 +257,7 @@ private fun SequmioHome(
                     if (!connected) {
                         Text("Accessibility access is needed to switch between apps.",
                             color = SeqColors.Muted, fontSize = 12.sp)
-                        TextButton(onClick = onSetup) { Text("Set up runner →") }
+                        SeqTextButton(onClick = onSetup) { Text("Set up runner →") }
                     } else if (runner.phase == RunPhase.FINISHED) {
                         Text(if (runner.success == true) "Last run: PASS" else "Last run: FAIL / STOP",
                             color = if (runner.success == true) SeqColors.Success else SeqColors.Error)
@@ -264,7 +271,7 @@ private fun SequmioHome(
             }
         }
         item {
-            TextButton(onClick = onPrivacy) {
+            SeqTextButton(onClick = onPrivacy) {
                 Text("Privacy Policy", color = SeqColors.Muted)
             }
         }
@@ -301,7 +308,7 @@ private fun SequmioPlan(
                 Text("Selected Apps (" + plan.targets.size + ")",
                     fontSize = 17.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.weight(1f))
-                TextButton(onClick = onAdd, enabled = enabled) { Text("+ Add App") }
+                SeqTextButton(onClick = onAdd, enabled = enabled) { Text("+ Add App") }
             }
         }
         if (plan.targets.isEmpty()) item {
@@ -327,12 +334,12 @@ private fun SequmioPlan(
                     }
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Row(horizontalArrangement = Arrangement.spacedBy(0.dp)) {
-                            TextButton(onClick = { onUp(index, -1) },
+                            SeqTextButton(onClick = { onUp(index, -1) },
                                 enabled = enabled && index > 0) { Text("↑") }
-                            TextButton(onClick = { onUp(index, 1) },
+                            SeqTextButton(onClick = { onUp(index, 1) },
                                 enabled = enabled && index < plan.targets.lastIndex) { Text("↓") }
                         }
-                        TextButton(onClick = { onRemove(target.packageName) },
+                        SeqTextButton(onClick = { onRemove(target.packageName) },
                             enabled = enabled) { Text("Remove", fontSize = 11.sp) }
                     }
                 }
@@ -350,7 +357,9 @@ private fun SequmioPlan(
                         label = { Text(label, fontSize = 12.sp, maxLines = 1) },
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = SeqColors.PrimaryDark,
-                            selectedLabelColor = Color.White
+                            selectedLabelColor = Color.White,
+                            labelColor = SeqColors.Text,
+                            disabledLabelColor = SeqColors.Muted
                         )
                     )
                 }
@@ -366,7 +375,14 @@ private fun SequmioPlan(
                 Switch(checked = plan.maxDurationMinutes > 0,
                     onCheckedChange = { onLimit(if (it) 15 else 0) },
                     enabled = enabled,
-                    colors = SwitchDefaults.colors(checkedTrackColor = SeqColors.Teal))
+                    colors = SwitchDefaults.colors(
+                        checkedTrackColor = SeqColors.Teal,
+                        checkedThumbColor = SeqColors.Background,
+                        uncheckedTrackColor = SeqColors.CardRaised,
+                        uncheckedThumbColor = SeqColors.Muted,
+                        uncheckedBorderColor = SeqColors.Border,
+                        checkedBorderColor = SeqColors.Teal
+                    ))
             }
             if (plan.maxDurationMinutes > 0)
                 SeqCounter("Minutes", plan.maxDurationMinutes, 5, 10080, 5, enabled, onLimit)
@@ -385,10 +401,10 @@ private fun SeqCounter(label: String, value: Int, low: Int, high: Int,
     SeqCard(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth().padding(9.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(label, Modifier.weight(1f), color = SeqColors.Muted)
-            TextButton(onClick = { onChange((value - step).coerceAtLeast(low)) },
+            SeqTextButton(onClick = { onChange((value - step).coerceAtLeast(low)) },
                 enabled = enabled && value > low) { Text("−", fontSize = 23.sp) }
             Text(value.toString(), fontWeight = FontWeight.Bold)
-            TextButton(onClick = { onChange((value + step).coerceAtMost(high)) },
+            SeqTextButton(onClick = { onChange((value + step).coerceAtMost(high)) },
                 enabled = enabled && value < high) { Text("+", fontSize = 23.sp) }
         }
     }
@@ -418,7 +434,7 @@ private fun SeqAppLetter(packageName: String, label: String) {
 internal fun SeqTopBar(title: String, onBack: (() -> Unit)? = null) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         if (onBack != null) {
-            TextButton(onClick = onBack) {
+            SeqTextButton(onClick = onBack) {
                 Text("‹", color = SeqColors.Text, fontSize = 30.sp)
             }
         }

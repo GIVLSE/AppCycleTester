@@ -9,6 +9,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 
 class MainActivity : ComponentActivity() {
@@ -20,18 +21,26 @@ class MainActivity : ComponentActivity() {
         window.decorView.systemUiVisibility = 0
         setContent {
             SequmioTheme {
-                Box(Modifier.fillMaxSize().background(SeqBackground)) {
-                    SequmioApp(
-                        openAccessibility = {
-                            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-                        },
-                        openAppDetails = {
-                            startActivity(Intent(
-                                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                                Uri.parse("package:$packageName")
-                            ))
-                        }
-                    )
+                // Unlike Box.background(), Surface propagates the foreground text color
+                // to every Compose Text, including content outside custom cards.
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = SeqColors.Background,
+                    contentColor = SeqColors.Text
+                ) {
+                    Box(Modifier.fillMaxSize().background(SeqBackground)) {
+                        SequmioApp(
+                            openAccessibility = {
+                                startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                            },
+                            openAppDetails = {
+                                startActivity(Intent(
+                                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                    Uri.parse("package:$packageName")
+                                ))
+                            }
+                        )
+                    }
                 }
             }
         }

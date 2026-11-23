@@ -1,6 +1,8 @@
 <resources>
-    <style name="Theme.Sequmio" parent="android:style/Theme.Material.Light.NoActionBar">
+    <style name="Theme.Sequmio" parent="android:style/Theme.Material.NoActionBar">
         <item name="android:statusBarColor">#0D1424</item>
-        <item name="android:navigationBarColor">#14243A</item>
+        <item name="android:navigationBarColor">#0D1424</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
     </style>
 </resources>

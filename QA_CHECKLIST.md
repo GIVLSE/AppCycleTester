@@ -42,3 +42,15 @@ No tests in this section are marked PASS without testing on-device.
 - [ ] `adb shell pm list packages com.sequmio.givlse` finds the installed package.
 - [ ] Accessibility service is shown as `Sequmio Runner`.
 - [ ] The Google Play bundle manifest has applicationId `com.sequmio.givlse`.
+
+## V0.3.2 visual accessibility — contrast and typography
+
+- [ ] All headings, metric values and body text render light on the dark background, even outside Cards.
+- [ ] Onboard Accessibility disclosure, checkboxes and action labels are readable.
+- [ ] Dialogs: Add Apps search input, dropdown labels, selection rows, duration picker and Cancel/Save.
+- [ ] Controls: Start, Pause/Resume/Stop, disabled editing buttons, selected/unselected repeat chips, overall duration switch.
+- [ ] Bottom navigation: selected/unselected tabs and history timestamps.
+- [ ] Test with HyperOS dark mode AND light mode, Android 11/14/16, and large accessibility text size.
+- [ ] Confirm system status/navigation bar icons are light on dark backgrounds.
+
+New color tokens: content #F4F6FC; muted #ADBAD0; text links #B99AFF; filled buttons #7048B9 with white text. Normal-text contrast ratios against #1B263A Cards: content 14.03:1, muted 7.73:1, links 6.59:1; white on filled buttons 6.33:1 (WCAG AA ≥4.5:1).

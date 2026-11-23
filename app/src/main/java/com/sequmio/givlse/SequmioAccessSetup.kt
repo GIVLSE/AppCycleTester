@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -77,7 +79,15 @@ internal fun SequmioAccessSetup(
             SeqCard(Modifier.fillMaxWidth()) {
                 Row(Modifier.fillMaxWidth().clickable { approved = !approved }
                     .padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = approved, onCheckedChange = { approved = it })
+                    Checkbox(
+                        checked = approved,
+                        onCheckedChange = { approved = it },
+                        colors = CheckboxDefaults.colors(
+                            checkedColor = SeqColors.PrimaryAction,
+                            uncheckedColor = SeqColors.Muted,
+                            checkmarkColor = Color.White
+                        )
+                    )
                     Spacer(Modifier.width(8.dp))
                     Text("I understand this access and consent to its use for app testing.",
                         fontWeight = FontWeight.Medium)
@@ -94,8 +104,8 @@ internal fun SequmioAccessSetup(
             Text("Waiting for system permission. Return here after enabling the service.",
                 color = SeqColors.Muted)
         }
-        TextButton(onClick = onPrivacy) { Text("Privacy Policy") }
-        TextButton(onClick = onBack) { Text("Not now") }
+        SeqTextButton(onClick = onPrivacy) { Text("Privacy Policy") }
+        SeqTextButton(onClick = onBack) { Text("Not now") }
     }
 }
 

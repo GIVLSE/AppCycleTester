@@ -3,6 +3,7 @@ package com.sequmio.givlse
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -11,6 +12,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
@@ -33,8 +35,10 @@ internal object SeqColors {
     val Card = Color(0xFF1B263A)
     val CardRaised = Color(0xFF263147)
     val Border = Color(0xFF3B4860)
-    val Primary = Color(0xFF9B73EA)
-    val PrimaryDark = Color(0xFF7154B8)
+    // Accessible lavender text links and distinctly darker filled controls.
+    val Primary = Color(0xFFB99AFF)
+    val PrimaryAction = Color(0xFF7048B9)
+    val PrimaryDark = Color(0xFF593A9C)
     val Teal = Color(0xFF48E2D0)
     val Sky = Color(0xFF8FDFFF)
     val Text = Color(0xFFF4F6FC)
@@ -51,17 +55,30 @@ internal fun SequmioTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = darkColorScheme(
             primary = SeqColors.Primary,
-            onPrimary = Color.White,
+            onPrimary = SeqColors.Background,
+            primaryContainer = SeqColors.PrimaryDark,
+            onPrimaryContainer = Color.White,
             secondary = SeqColors.Teal,
             onSecondary = SeqColors.Background,
+            secondaryContainer = SeqColors.CardRaised,
+            onSecondaryContainer = SeqColors.Text,
+            tertiary = SeqColors.Sky,
+            onTertiary = SeqColors.Background,
             background = SeqColors.Background,
             onBackground = SeqColors.Text,
             surface = SeqColors.Card,
             onSurface = SeqColors.Text,
+            surfaceContainerLowest = SeqColors.Background,
+            surfaceContainerLow = SeqColors.Card,
+            surfaceContainer = SeqColors.Card,
+            surfaceContainerHigh = SeqColors.CardRaised,
+            surfaceContainerHighest = SeqColors.CardRaised,
             surfaceVariant = SeqColors.CardRaised,
             onSurfaceVariant = SeqColors.Muted,
             outline = SeqColors.Border,
-            error = SeqColors.Error
+            outlineVariant = SeqColors.Border,
+            error = SeqColors.Error,
+            onError = SeqColors.Background
         ), content = content
     )
 }
@@ -69,7 +86,12 @@ internal fun SequmioTheme(content: @Composable () -> Unit) {
 @Composable
 internal fun SeqCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     Card(modifier = modifier,
-        colors = CardDefaults.cardColors(containerColor = SeqColors.Card),
+        colors = CardDefaults.cardColors(
+            containerColor = SeqColors.Card,
+            contentColor = SeqColors.Text,
+            disabledContainerColor = SeqColors.CardRaised,
+            disabledContentColor = SeqColors.Muted
+        ),
         border = androidx.compose.foundation.BorderStroke(1.dp, SeqColors.Border.copy(alpha = 0.65f)),
         shape = RoundedCornerShape(20.dp)
     ) { Column(content = content) }
@@ -81,10 +103,31 @@ internal fun SeqPrimaryButton(title: String, onClick: () -> Unit,
     Button(onClick = onClick, enabled = enabled, modifier = modifier,
         shape = RoundedCornerShape(16.dp),
         colors = ButtonDefaults.buttonColors(
-            containerColor = SeqColors.Primary, contentColor = Color.White,
-            disabledContainerColor = SeqColors.CardRaised),
+            containerColor = SeqColors.PrimaryAction, contentColor = Color.White,
+            disabledContainerColor = SeqColors.CardRaised,
+            disabledContentColor = SeqColors.Muted),
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 14.dp)
     ) { Text(title, fontWeight = FontWeight.SemiBold) }
+}
+
+/** Keep text actions legible on every dark screen, including disabled states. */
+@Composable
+internal fun SeqTextButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    content: @Composable RowScope.() -> Unit
+) {
+    TextButton(
+        onClick = onClick,
+        modifier = modifier,
+        enabled = enabled,
+        colors = ButtonDefaults.textButtonColors(
+            contentColor = SeqColors.Primary,
+            disabledContentColor = SeqColors.Muted
+        ),
+        content = content
+    )
 }
 
 /** Native vector rendering based on the approved Sequmio logo concept. */
