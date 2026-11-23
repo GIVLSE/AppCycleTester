@@ -88,7 +88,7 @@ internal fun SequmioAccessSetup(
                 ) {
                     Checkbox(
                         checked = consent || consentChecked,
-                        onCheckedChange = if (consent) null else { consentChecked = it },
+                        onCheckedChange = if (consent) null else ({ checked: Boolean -> consentChecked = checked }),
                         enabled = !consent,
                         colors = checkColors
                     )
@@ -120,7 +120,7 @@ internal fun SequmioAccessSetup(
                 ) {
                     Checkbox(
                         checked = systemEnabled,
-                        onCheckedChange = if (consent) ({ onAccessibility() }) else null,
+                        onCheckedChange = if (consent) ({ _: Boolean -> onAccessibility() }) else null,
                         enabled = consent,
                         colors = checkColors
                     )
