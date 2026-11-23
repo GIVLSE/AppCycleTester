@@ -1,10 +1,10 @@
-# App Cycle Tester — Google Play closed testing
+# Sequmio — Google Play closed testing
 
-Package ID: `io.github.givlse.appcycletester`. Keep it unchanged after Play Console app creation.
+Package ID: `com.sequmio.givlse`. Keep it unchanged after Play Console app creation.
 
 ## Google Play Console (manual; owner's developer account)
 
-1. Visit https://play.google.com/console and create a **new app** named **App Cycle Tester** in the existing developer account.
+1. Visit https://play.google.com/console and create a **new app** named **Sequmio** in the existing developer account.
 2. Complete app details, Data safety, privacy policy, target audience, store listing and **Accessibility API declaration**, including a video of in-app disclosure, consent, service activation and one cycle.
 3. Enroll in **Play App Signing** with a Google-generated app signing key. Use a different, permanent upload key locally.
 4. Under Testing → Closed testing create a track, add tester email addresses or a Google Group, and create a release with the signed AAB.
@@ -41,7 +41,7 @@ Only the repo owner should configure these. GitHub Actions will reconstruct the 
 
 ## Build for Play
 
-Open GitHub → Actions → **Play closed-test AAB** → Run workflow. This separate manual workflow will fail before compiling if any of the signing secrets are missing. A successful run produces artifact `AppCycleTester-play-upload-aab` containing `AppCycleTester-play-upload.aab`.
+Open GitHub → Actions → **Play closed-test AAB** → Run workflow. This separate manual workflow will fail before compiling if any of the signing secrets are missing. A successful run produces artifact `Sequmio-play-upload-aab` containing `Sequmio-play-upload.aab`.
 
 The regular Android V1 CI continues building a debug APK for local QA. Debug APKs are not Play release bundles.
 
@@ -60,6 +60,10 @@ Google Play may sign generated APKs with a different key than locally installed 
 ## Current public policy draft
 
 https://github.com/GIVLSE/AppCycleTester/blob/main/docs/PRIVACY_POLICY.md
+
+## Package migration
+
+The final selected Google Play package ID is `com.sequmio.givlse` (not the prototype's old `io.github.givlse.appcycletester`). Use **com.sequmio.givlse** in the Play Console app creation form before uploading any AAB. Android treats it as a separate app; uninstall the old debug package if unnecessary. Repository stays `GIVLSE/AppCycleTester`.
 
 ## Important
 

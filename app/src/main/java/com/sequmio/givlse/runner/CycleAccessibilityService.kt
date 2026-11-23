@@ -1,4 +1,4 @@
-package io.github.givlse.appcycletester.runner
+package com.sequmio.givlse.runner
 
 import android.accessibilityservice.AccessibilityService
 import android.content.ComponentName
@@ -7,12 +7,12 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityEvent
-import io.github.givlse.appcycletester.data.SettingsStore
-import io.github.givlse.appcycletester.model.RunEvent
-import io.github.givlse.appcycletester.model.RunPhase
-import io.github.givlse.appcycletester.model.RunSnapshot
-import io.github.givlse.appcycletester.model.TestPlan
-import io.github.givlse.appcycletester.model.TestTarget
+import com.sequmio.givlse.data.SettingsStore
+import com.sequmio.givlse.model.RunEvent
+import com.sequmio.givlse.model.RunPhase
+import com.sequmio.givlse.model.RunSnapshot
+import com.sequmio.givlse.model.TestPlan
+import com.sequmio.givlse.model.TestTarget
 
 /**
  * V1 foreground-app runner.

@@ -1,4 +1,4 @@
-package io.github.givlse.appcycletester.model
+package com.sequmio.givlse.model
 
 data class InstalledApp(val packageName: String, val activityClass: String, val label: String)
 data class TestTarget(

@@ -1,6 +1,6 @@
-package io.github.givlse.appcycletester.runner
+package com.sequmio.givlse.runner
 
-import io.github.givlse.appcycletester.model.RunSnapshot
+import com.sequmio.givlse.model.RunSnapshot
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 

@@ -1,10 +1,10 @@
-package io.github.givlse.appcycletester.data
+package com.sequmio.givlse.data
 
 import android.content.Context
-import io.github.givlse.appcycletester.model.RepeatMode
-import io.github.givlse.appcycletester.model.RunEvent
-import io.github.givlse.appcycletester.model.TestPlan
-import io.github.givlse.appcycletester.model.TestTarget
+import com.sequmio.givlse.model.RepeatMode
+import com.sequmio.givlse.model.RunEvent
+import com.sequmio.givlse.model.TestPlan
+import com.sequmio.givlse.model.TestTarget
 import org.json.JSONArray
 import org.json.JSONObject
 

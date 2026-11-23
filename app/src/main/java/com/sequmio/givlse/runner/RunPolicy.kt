@@ -1,6 +1,6 @@
-package io.github.givlse.appcycletester.runner
+package com.sequmio.givlse.runner
 
-import io.github.givlse.appcycletester.model.RepeatMode
+import com.sequmio.givlse.model.RepeatMode
 
 /** Pure cycle navigation; Android-specific operations are handled by the service. */
 object RunPolicy {

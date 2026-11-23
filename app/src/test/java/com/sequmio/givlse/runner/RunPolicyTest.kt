@@ -1,6 +1,6 @@
-package io.github.givlse.appcycletester.runner
+package com.sequmio.givlse.runner
 
-import io.github.givlse.appcycletester.model.RepeatMode
+import com.sequmio.givlse.model.RepeatMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test

@@ -1,4 +1,4 @@
-package io.github.givlse.appcycletester
+package com.sequmio.givlse
 
 import android.os.Build
 import androidx.compose.foundation.layout.Arrangement
@@ -45,7 +45,7 @@ internal fun AccessSetupDialog(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 if (!consentAccepted) {
-                    Text("App Cycle Tester запрашивает доступ к специальным возможностям Android " +
+                    Text("Sequmio запрашивает доступ к специальным возможностям Android " +
                         "для последовательного запуска выбранных вами приложений и проверки активного окна.")
                     Text("Служба получает название пакета активного приложения и время появления окна. " +
                         "Эти сведения, ваши настройки и результаты тестов сохраняются локально на устройстве.")
@@ -58,7 +58,7 @@ internal fun AccessSetupDialog(
                         Text("Я понимаю назначение доступа и согласен")
                     }
                 } else {
-                    Text("Для переключения между приложениями включите App Cycle Runner в " +
+                    Text("Для переключения между приложениями включите Sequmio Runner в " +
                         "специальных возможностях Android. Система потребует вашего подтверждения.")
                     if (!ready) {
                         Text("Шаг 1. Проверка ограниченных настроек",
@@ -71,7 +71,7 @@ internal fun AccessSetupDialog(
                         OutlinedButton(onClick = onOpenAppDetails, modifier = Modifier.fillMaxWidth()) {
                             Text("Сведения о приложении")
                         }
-                        Text("Шаг 2. Включить App Cycle Runner",
+                        Text("Шаг 2. Включить Sequmio Runner",
                             style = MaterialTheme.typography.titleSmall)
                         OutlinedButton(onClick = onOpenAccessibility, modifier = Modifier.fillMaxWidth()) {
                             Text("Открыть специальные возможности")

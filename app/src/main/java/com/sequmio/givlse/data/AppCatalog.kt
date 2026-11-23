@@ -1,10 +1,10 @@
-package io.github.givlse.appcycletester.data
+package com.sequmio.givlse.data
 
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
-import io.github.givlse.appcycletester.model.InstalledApp
+import com.sequmio.givlse.model.InstalledApp
 
 object AppCatalog {
     fun list(context: Context): List<InstalledApp> {

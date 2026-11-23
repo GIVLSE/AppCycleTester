@@ -1,4 +1,4 @@
-name: Play closed-test AAB
+name: Sequmio Play closed-test AAB
 on:
   workflow_dispatch:
 permissions:
@@ -45,14 +45,14 @@ jobs:
             -storepass:env ACT_UPLOAD_STORE_PASSWORD \
             -keypass:env ACT_UPLOAD_KEY_PASSWORD \
             -sigalg SHA256withRSA -digestalg SHA-256 \
-            -signedjar "$RUNNER_TEMP/AppCycleTester-play-upload.aab" \
+            -signedjar "$RUNNER_TEMP/Sequmio-play-upload.aab" \
             app/build/outputs/bundle/release/app-release.aab "$ACT_UPLOAD_KEY_ALIAS"
-          jarsigner -verify -verbose "$RUNNER_TEMP/AppCycleTester-play-upload.aab" > "$RUNNER_TEMP/verify.txt"
+          jarsigner -verify -verbose "$RUNNER_TEMP/Sequmio-play-upload.aab" > "$RUNNER_TEMP/verify.txt"
           grep -q 'jar verified' "$RUNNER_TEMP/verify.txt"
       - name: Save Play upload AAB
         uses: actions/upload-artifact@v4
         with:
-          name: AppCycleTester-play-upload-aab
-          path: ${{ runner.temp }}/AppCycleTester-play-upload.aab
+          name: Sequmio-play-upload-aab
+          path: ${{ runner.temp }}/Sequmio-play-upload.aab
           retention-days: 7
           if-no-files-found: error

@@ -26,7 +26,7 @@ These are test cases, NOT completed real-device test results.
 | ID | Action | Expected outcome |
 |---|---|---|
 | ONB-01 | Disable Accessibility, select apps, press Start | Setup dialog opens; Start is not blocked and no test starts |
-| ONB-02 | In setup, tap App info | Opens **App Cycle Tester** system app details |
+| ONB-02 | In setup, tap App info | Opens **Sequmio** system app details |
 | ONB-03 | In setup, tap Accessibility | Opens Android Accessibility settings |
 | ONB-04 | Enable service and return | Dialog shows connected state and **Start test** |
 | ONB-05 | Start test after enabling | Cycle begins, without manually restarting the app |
@@ -35,3 +35,10 @@ These are test cases, NOT completed real-device test results.
 | ONB-08 | Android 11/no restricted settings | User can skip App info and directly enable service |
 
 No tests in this section are marked PASS without testing on-device.
+
+## Rebrand verification
+
+- [ ] App label displays `Sequmio`.
+- [ ] `adb shell pm list packages com.sequmio.givlse` finds the installed package.
+- [ ] Accessibility service is shown as `Sequmio Runner`.
+- [ ] The Google Play bundle manifest has applicationId `com.sequmio.givlse`.

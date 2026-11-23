@@ -1,4 +1,4 @@
-package io.github.givlse.appcycletester
+package com.sequmio.givlse
 
 import android.content.Intent
 import android.net.Uri
@@ -44,16 +44,16 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import io.github.givlse.appcycletester.data.AppCatalog
-import io.github.givlse.appcycletester.data.SettingsStore
-import io.github.givlse.appcycletester.model.InstalledApp
-import io.github.givlse.appcycletester.model.RepeatMode
-import io.github.givlse.appcycletester.model.RunEvent
-import io.github.givlse.appcycletester.model.RunPhase
-import io.github.givlse.appcycletester.model.TestPlan
-import io.github.givlse.appcycletester.model.TestTarget
-import io.github.givlse.appcycletester.runner.CycleAccessibilityService
-import io.github.givlse.appcycletester.runner.RunnerRuntime
+import com.sequmio.givlse.data.AppCatalog
+import com.sequmio.givlse.data.SettingsStore
+import com.sequmio.givlse.model.InstalledApp
+import com.sequmio.givlse.model.RepeatMode
+import com.sequmio.givlse.model.RunEvent
+import com.sequmio.givlse.model.RunPhase
+import com.sequmio.givlse.model.TestPlan
+import com.sequmio.givlse.model.TestTarget
+import com.sequmio.givlse.runner.CycleAccessibilityService
+import com.sequmio.givlse.runner.RunnerRuntime
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -108,7 +108,7 @@ private fun CycleScreen(onOpenAccessibility: () -> Unit, onOpenAppDetails: () ->
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            Text("App Cycle Tester", style = MaterialTheme.typography.headlineMedium,
+            Text("Sequmio", style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold)
             Text("V1 · цикл приложений", style = MaterialTheme.typography.bodyMedium)
         }

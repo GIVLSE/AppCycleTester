@@ -5,14 +5,14 @@ plugins {
 }
 
 android {
-    namespace = "io.github.givlse.appcycletester"
+    namespace = "com.sequmio.givlse"
     compileSdk = 36
     defaultConfig {
-        applicationId = "io.github.givlse.appcycletester"
+        applicationId = "com.sequmio.givlse"
         minSdk = 26
         targetSdk = 36
-        versionCode = 3
-        versionName = "0.2.0"
+        versionCode = 4
+        versionName = "0.2.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildTypes { release { isMinifyEnabled = false } }
