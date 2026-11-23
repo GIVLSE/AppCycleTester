@@ -14,7 +14,7 @@ data class TestPlan(
 ) {
     fun validate(): String? = when {
         targets.isEmpty() -> "Добавьте хотя бы одно приложение"
-        targets.any { it.durationSeconds !in 60..7200 } -> "Время приложения: от 1 до 120 минут"
+        targets.any { it.durationSeconds !in 1..7200 } -> "Время приложения: от 1 секунды до 120 минут"
         repeatCount !in 1..999 -> "Количество циклов: от 1 до 999"
         maxDurationMinutes !in 0..10080 -> "Общий лимит: от 0 до 10080 минут"
         else -> null

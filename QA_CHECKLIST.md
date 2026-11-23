@@ -65,3 +65,24 @@ New color tokens: content #F4F6FC; muted #ADBAD0; text links #B99AFF; filled but
 - [ ] Disable Sequmio Runner in Settings and return: system and connected state becomes unchecked; Start requires setup
 - [ ] No bogus permissions or toggles for APIs not declared in AndroidManifest.xml
 - [ ] Existing plan, execution and Play policy disclosure flows continue to work
+
+## V0.4 Reliability device acceptance tests (not yet executed)
+
+| ID | Test | Expected |
+|---|---|---|
+| REL-01 | Start 3 apps 5s / 10s / 5s | Correct ordering and second-level durations; PASS only after foreground confirmations |
+| REL-02 | Open test while notifications are allowed | Persistent notification with Stop action; tap Stop, report status STOPPED |
+| REL-03 | Deny POST_NOTIFICATIONS on Android 13+ | Runner still starts; in-app Stop works; optional permission shown as denied |
+| REL-04 | Background app during run for 5 seconds | Up to 2 relaunch attempts; finite FAIL if target never returns |
+| REL-05 | Target app launch fails / is uninstalled | Retry bounded, failed target logged; no false PASS |
+| REL-06 | Permission Controller UI appears in another app | Wait for user action up to 45 seconds, never auto approve |
+| REL-07 | Screen locks/turns off mid-test | FAIL, FGS stops, wake lock released; no PASS after screen wakes |
+| REL-08 | Interrupt/disable Accessibility | FAIL, notification removed, report persisted |
+| REL-09 | Force-stop/kill app process during run, reopen | Report marked INTERRUPTED (no auto resume) |
+| REL-10 | Pause 5s then resume | Paused time excluded from per-app foreground time |
+| REL-11 | Stop via foreground notification | Report STOPPED and no background cycling |
+| REL-12 | History -> Share JSON/CSV | User-selected app receives only opted-in report; valid JSON and CSV columns |
+| REL-13 | Continuous 30-minute run | Test Android 11, 14 and 16; no false foreground PASS; battery impact measured |
+| REL-14 | Play Console FGS declaration | specialUse use case, permissions and review video completed before upload |
+
+**Known limitation:** FLAG_KEEP_SCREEN_ON does not keep another app awake. Use a dedicated device, appropriate screen timeout or Stay awake while charging. Play Console must review the new specialUse FGS.

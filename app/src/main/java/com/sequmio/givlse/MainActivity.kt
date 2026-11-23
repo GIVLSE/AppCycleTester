@@ -9,6 +9,14 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import android.net.Uri
 import android.os.Bundle
+import android.os.Build
+import android.Manifest
+import android.view.WindowManager
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.SideEffect
+import com.sequmio.givlse.runner.RunnerRuntime
+import com.sequmio.givlse.model.RunPhase
+import com.sequmio.givlse.data.RunReportStore
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -20,6 +28,10 @@ import androidx.compose.ui.Modifier
 
 class MainActivity : ComponentActivity() {
     private val settingsReturnVersion = MutableStateFlow(0)
+    private val notificationPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+            settingsReturnVersion.value += 1
+        }
 
     override fun onResume() {
         super.onResume()
@@ -43,12 +55,22 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (CycleAccessibilityService.instance == null) {
+            RunReportStore(this).recoverInterrupted()
+        }
         window.statusBarColor = android.graphics.Color.rgb(13, 20, 36)
         window.navigationBarColor = android.graphics.Color.rgb(13, 20, 36)
         @Suppress("DEPRECATION")
         window.decorView.systemUiVisibility = 0
         setContent {
             val permissionRefresh by settingsReturnVersion.collectAsState()
+            val run by RunnerRuntime.state.collectAsState()
+            SideEffect {
+                if (run.phase == RunPhase.RUNNING || run.phase == RunPhase.PAUSED)
+                    window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                else
+                    window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            }
             SequmioTheme {
                 // Unlike Box.background(), Surface propagates the foreground text color
                 // to every Compose Text, including content outside custom cards.
@@ -60,6 +82,10 @@ class MainActivity : ComponentActivity() {
                     Box(Modifier.fillMaxSize().background(SeqBackground)) {
                         SequmioApp(
                             permissionRefreshToken = permissionRefresh,
+                            requestNotificationPermission = {
+                                if (Build.VERSION.SDK_INT >= 33)
+                                    notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            },
                             openAccessibility = { showAccessibilityServiceSettings() },
                             openAppDetails = {
                                 startActivity(Intent(

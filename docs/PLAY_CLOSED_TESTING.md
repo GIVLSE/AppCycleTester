@@ -58,6 +58,14 @@ Open GitHub → Actions → **Sequmio Play closed-test AAB** → Run workflow. T
 
 The regular Sequmio CI builds a debug APK and an **unsigned** release AAB for verification. These unsigned artifacts are not Play uploads. Use the manual signing workflow with the registered permanent upload key for subsequent releases.
 
+## V0.4 foreground-service declaration (mandatory for Play review)
+
+The V0.4 manifest declares `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_SPECIAL_USE`, `WAKE_LOCK` and `POST_NOTIFICATIONS`, and uses service type `specialUse`.
+
+Explain in Google Play Console: "Sequmio runs a user-initiated, time-limited Android QA sequence that launches and verifies multiple user-selected third-party apps. A persistent foreground-service notification offers a Stop action, and the process requires continued operation while another app is foreground. There is no location, media, sync or data-transfer use case. Service terminates on completion, failure or user Stop."
+
+Show a video of the user starting a test, the notification and Stop action, and service termination. The FGS declaration is additional to the Accessibility API declaration. Its approval is not guaranteed.
+
 ## Accessibility policy
 
 V1 is **not** a disability-support accessibility tool; the project's `isAccessibilityTool=false` flag is intentional.

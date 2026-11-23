@@ -1,6 +1,12 @@
 package com.sequmio.givlse
 
 import androidx.compose.foundation.Image
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.core.content.ContextCompat
+import com.sequmio.givlse.data.RunReport
+import com.sequmio.givlse.data.RunReportStore
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
@@ -35,6 +41,7 @@ private enum class Page { HOME, PLAN, SCENARIOS, HISTORY, SETUP }
 @Composable
 internal fun SequmioApp(
     permissionRefreshToken: Int,
+    requestNotificationPermission: () -> Unit,
     openAccessibility: () -> Unit,
     openAppDetails: () -> Unit
 ) {
@@ -49,6 +56,10 @@ internal fun SequmioApp(
     var durationTarget by remember { mutableStateOf<TestTarget?>(null) }
     var message by remember { mutableStateOf("") }
     val connected = runner.accessibilityReady && CycleAccessibilityService.instance != null
+    val notificationsGranted = Build.VERSION.SDK_INT < 33 ||
+        ContextCompat.checkSelfPermission(
+            context, Manifest.permission.POST_NOTIFICATIONS
+        ) == PackageManager.PERMISSION_GRANTED
     // Reflect actual Android service enablement, independently from local consent.
     val systemAccessibilityEnabled = remember(permissionRefreshToken, runner.accessibilityReady) {
         isSequmioAccessibilityEnabled(context)
@@ -61,6 +72,9 @@ internal fun SequmioApp(
     val active = runner.phase == RunPhase.RUNNING || runner.phase == RunPhase.PAUSED
     val history = remember(runner.events.lastOrNull()?.timestampMillis, runner.phase, page) {
         store.readHistory().takeLast(120).reversed()
+    }
+    val runReports = remember(runner.phase, page, runner.events.lastOrNull()?.timestampMillis) {
+        RunReportStore(context).recent()
     }
     fun setPlan(p: TestPlan) { plan = p; store.savePlan(p) }
     fun start() {
@@ -108,15 +122,17 @@ internal fun SequmioApp(
                     onSave = { page = Page.HOME }
                 )
                 Page.SCENARIOS -> SequmioScenarios()
-                Page.HISTORY -> SequmioHistory(history)
+                Page.HISTORY -> SequmioHistory(history, runReports)
                 Page.SETUP -> SequmioAccessSetup(
                     ready = connected,
                     systemEnabled = systemAccessibilityEnabled,
+                    notificationsGranted = notificationsGranted,
                     consent = consent,
                     onConsent = { store.saveAccessConsent(); consent = true },
                     onBack = { page = Page.HOME },
                     onAppInfo = openAppDetails,
                     onAccessibility = openAccessibility,
+                    onNotifications = requestNotificationPermission,
                     onPrivacy = openPrivacy,
                     onStart = { start() }
                 )
@@ -152,10 +168,10 @@ internal fun SequmioApp(
         }
     )
     durationTarget?.let { target ->
-        SequmioDurationDialog(target, onDismiss = { durationTarget = null }) { minutes ->
+        SequmioDurationDialog(target, onDismiss = { durationTarget = null }) { seconds ->
             setPlan(plan.copy(targets = plan.targets.map {
                 if (it.packageName == target.packageName)
-                    it.copy(durationSeconds = minutes * 60) else it
+                    it.copy(durationSeconds = seconds) else it
             }))
             durationTarget = null
         }
@@ -200,7 +216,7 @@ private fun SequmioHome(
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 SeqMetric("▦", plan.targets.size.toString(), "Apps", Modifier.weight(1f))
-                SeqMetric("◷", seconds?.let { ((it + 59)/60).toString() + " min" } ?: "∞",
+                SeqMetric("◷", seconds?.let { targetTimeLabel(it.coerceAtMost(720000L).toInt()) } ?: "∞",
                     "Duration", Modifier.weight(1f))
                 SeqMetric("↻", when (plan.repeatMode) {
                     RepeatMode.ONCE -> "1×"
@@ -342,7 +358,7 @@ private fun SequmioPlan(
                     }) {
                         Text(target.label, maxLines = 1, overflow = TextOverflow.Ellipsis,
                             fontWeight = FontWeight.SemiBold)
-                        Text((target.durationSeconds / 60).toString() + " min • edit",
+                        Text(targetTimeLabel(target.durationSeconds) + " • edit",
                             color = SeqColors.Muted, fontSize = 12.sp)
                     }
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -474,16 +490,63 @@ private fun SequmioScenarios() {
 }
 
 @Composable
-private fun SequmioHistory(history: List<RunEvent>) {
+private fun SequmioHistory(history: List<RunEvent>, reports: List<RunReport>) {
+    val context = LocalContext.current
+    fun share(report: RunReport, csv: Boolean) {
+        val data = if (csv) report.csv else report.rawJson
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = if (csv) "text/csv" else "application/json"
+            putExtra(Intent.EXTRA_SUBJECT, "Sequmio QA session " + report.id)
+            putExtra(Intent.EXTRA_TEXT, data)
+        }
+        context.startActivity(Intent.createChooser(intent, "Share local QA report"))
+    }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item { SeqTopBar("Test History") }
-        item { Text("Local run events • " + history.size + " latest",
-            color = SeqColors.Muted, fontSize = 13.sp) }
-        if (history.isEmpty()) item {
+        item {
+            Text("Local test sessions • " + reports.size + " latest",
+                color = SeqColors.Muted, fontSize = 13.sp)
+        }
+        if (reports.isEmpty() && history.isEmpty()) item {
             SeqCard(Modifier.fillMaxWidth()) {
                 Text("No test runs yet.", Modifier.padding(22.dp), color = SeqColors.Muted)
             }
+        }
+        items(reports, key = { it.id }) { report ->
+            SeqCard(Modifier.fillMaxWidth()) {
+                Column(Modifier.fillMaxWidth().padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(report.status, fontWeight = FontWeight.Bold,
+                            color = when (report.status) {
+                                "PASS" -> SeqColors.Success
+                                "STOPPED" -> SeqColors.Muted
+                                else -> SeqColors.Error
+                            })
+                        Spacer(Modifier.weight(1f))
+                        Text(SimpleDateFormat("dd MMM HH:mm", Locale.getDefault())
+                            .format(Date(report.startedAt)),
+                            color = SeqColors.Muted, fontSize = 12.sp)
+                    }
+                    Text("Elapsed " + duration(report.durationSeconds) + " • " +
+                        report.completedCycles + " cycles", color = SeqColors.Text)
+                    Text(report.reason, color = SeqColors.Muted, fontSize = 12.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        SeqTextButton(onClick = { share(report, false) }) {
+                            Text("Share JSON")
+                        }
+                        SeqTextButton(onClick = { share(report, true) }) {
+                            Text("Share CSV")
+                        }
+                    }
+                }
+            }
+        }
+        item {
+            Spacer(Modifier.height(6.dp))
+            Text("Event log • " + history.size + " latest",
+                color = SeqColors.Muted, fontSize = 13.sp)
         }
         items(history) { event ->
             SeqCard(Modifier.fillMaxWidth()) {

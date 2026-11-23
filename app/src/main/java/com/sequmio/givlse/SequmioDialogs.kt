@@ -107,13 +107,20 @@ internal fun SequmioAppPicker(
     )
 }
 
+internal fun targetTimeLabel(seconds: Int): String =
+    if (seconds >= 60)
+        (seconds / 60).toString() + "m " + (seconds % 60).toString() + "s"
+    else seconds.toString() + "s"
+
 @Composable
 internal fun SequmioDurationDialog(
     target: TestTarget, onDismiss: () -> Unit, onSave: (Int) -> Unit
 ) {
-    var minutes by remember(target.packageName) {
-        mutableStateOf(target.durationSeconds / 60)
+    var seconds by remember(target.packageName) {
+        mutableStateOf(target.durationSeconds.coerceIn(1, 7200))
     }
+    fun adjust(delta: Int) { seconds = (seconds + delta).coerceIn(1, 7200) }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(target.label) },
@@ -123,17 +130,31 @@ internal fun SequmioDurationDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("Foreground time for this app")
+                Text(targetTimeLabel(seconds), fontSize = 24.sp, color = SeqColors.Teal)
+                Text("Minutes", color = SeqColors.Muted)
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    SeqTextButton(onClick = { minutes = (minutes - 1).coerceAtLeast(1) },
-                        enabled = minutes > 1) { Text("−", fontSize = 26.sp) }
-                    Text(minutes.toString() + " min", modifier = Modifier.weight(1f))
-                    SeqTextButton(onClick = { minutes = (minutes + 1).coerceAtMost(120) },
-                        enabled = minutes < 120) { Text("+", fontSize = 26.sp) }
+                    SeqTextButton(onClick = { adjust(-60) }, enabled = seconds > 60) {
+                        Text("− 1m")
+                    }
+                    Text((seconds / 60).toString(), modifier = Modifier.weight(1f))
+                    SeqTextButton(onClick = { adjust(60) }, enabled = seconds <= 7140) {
+                        Text("+ 1m")
+                    }
                 }
-                Text("Choose 1–120 minutes", color = SeqColors.Muted, fontSize = 12.sp)
+                Text("Seconds", color = SeqColors.Muted)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    SeqTextButton(onClick = { adjust(-1) }, enabled = seconds > 1) {
+                        Text("− 1s")
+                    }
+                    Text((seconds % 60).toString(), modifier = Modifier.weight(1f))
+                    SeqTextButton(onClick = { adjust(1) }, enabled = seconds < 7200) {
+                        Text("+ 1s")
+                    }
+                }
+                Text("Range: 1 second – 120 minutes", color = SeqColors.Muted, fontSize = 12.sp)
             }
         },
-        confirmButton = { SeqTextButton(onClick = { onSave(minutes) }) { Text("Save") } },
+        confirmButton = { SeqTextButton(onClick = { onSave(seconds) }) { Text("Save") } },
         dismissButton = { SeqTextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }

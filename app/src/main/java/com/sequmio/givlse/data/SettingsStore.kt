@@ -27,7 +27,7 @@ class SettingsStore(context: Context) {
                 val activity = target.optString("activityClass")
                 if (pkg.isBlank() || activity.isBlank()) continue
                 add(TestTarget(pkg, activity, target.optString("label", pkg),
-                    target.optInt("durationSeconds", 300).coerceIn(60, 7200)))
+                    target.optInt("durationSeconds", 300).coerceIn(1, 7200)))
             }
         }
         TestPlan(

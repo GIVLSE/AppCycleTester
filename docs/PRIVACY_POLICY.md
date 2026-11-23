@@ -14,21 +14,24 @@ Sequmio allows users to automate timed switching between selected Android applic
 - Launchable installed applications: display names, package identifiers and launcher activity names for the app picker.
 - Test plans: selection and order of apps, timers, repeat mode and total-duration limit.
 - Active window package identifiers and timestamps, observed through Android Accessibility Service to verify foreground app changes.
-- Execution log records with timestamps, and user consent acknowledgement.
+- Execution log records, structured per-session JSON/CSV reports with app package IDs, timing, retry counts, PASS/FAIL status, and user consent acknowledgement.
 
-These records are stored locally in Android SharedPreferences. They are used only for running the selected test plans and displaying results. The current version does not send them to developer servers or third parties, and has no analytics, ads, or user accounts.
+These records are stored locally in Android SharedPreferences. They are used only for running the selected test plans and displaying results. Sequmio does not send them automatically to servers or third parties, and has no analytics, ads, or user accounts. Export to other apps happens only when the user taps Share JSON/CSV for a specific report.
 
 ## Accessibility permission
 The user must explicitly consent to Sequmio's in-app disclosure and enable the Sequmio Runner service in Android Accessibility settings. The service is used to open apps and detect active app windows. It does not read screen text, record taps, capture screenshots, audio or video in the current version. The user can disable the service at any time.
 
+## Foreground service and display
+Tests use a user-started foreground service (Android specialUse type), optional notification access to show a Stop action, and a temporary partial CPU wake lock. These do not bypass a locked screen or keep third-party apps visible.
+
 ## Data retention and deletion
-Plans remain until modified or local app data is deleted. Run history is a rolling recent-event log. Clear Sequmio's app storage or uninstall it to remove local data.
+Plans remain until modified or local app data is deleted. Run history is a rolling recent-event log, plus up to 40 structured session reports. Clear Sequmio's app storage or uninstall it to remove local data.
 
 ## Children
 Sequmio is intended for developers and testers, not children.
 
 ## Changes
-If new features such as E2E recording, screenshots or sharing are introduced, the policy and in-app disclosure will be updated first.
+If new features such as E2E recording, screenshots or automatic sharing are introduced, the policy and in-app disclosure will be updated first.
 
 ## Privacy contact
 Vladislav Girskii (GIVLSE): https://github.com/GIVLSE/AppCycleTester/issues

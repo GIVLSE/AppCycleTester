@@ -38,10 +38,12 @@ import androidx.compose.ui.unit.sp
 internal fun SequmioAccessSetup(
     ready: Boolean,
     systemEnabled: Boolean,
+    notificationsGranted: Boolean,
     consent: Boolean,
     onConsent: () -> Unit,
     onAppInfo: () -> Unit,
     onAccessibility: () -> Unit,
+    onNotifications: () -> Unit,
     onPrivacy: () -> Unit,
     onBack: () -> Unit,
     onStart: () -> Unit
@@ -172,6 +174,41 @@ internal fun SequmioAccessSetup(
                 }
             }
         }
+        SeqCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("4. Test notifications", fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
+                Row(
+                    Modifier.fillMaxWidth().clickable(enabled = Build.VERSION.SDK_INT >= 33) {
+                        onNotifications()
+                    },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = notificationsGranted,
+                        onCheckedChange = if (Build.VERSION.SDK_INT >= 33)
+                            ({ _: Boolean -> onNotifications() }) else null,
+                        enabled = Build.VERSION.SDK_INT >= 33,
+                        colors = checkColors
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(if (notificationsGranted) "Notifications allowed"
+                            else "Allow notifications", fontWeight = FontWeight.Medium)
+                        Text("Optional, but needed to see the active test's Stop action " +
+                            "in the notification shade.", color = SeqColors.Muted, fontSize = 12.sp)
+                    }
+                }
+                if (!notificationsGranted) {
+                    SeqTextButton(onClick = onAppInfo) {
+                        Text("Manage in Android App Info")
+                    }
+                }
+            }
+        }
+        Text("While Sequmio is visible, it keeps its own screen awake. " +
+            "Android does not allow it to keep other apps' screens awake; " +
+            "configure device screen timeout or Stay awake while charging for long tests.",
+            color = SeqColors.Muted, fontSize = 12.sp)
         if (consent && ready) {
             SeqPrimaryButton("Start test", onStart, Modifier.fillMaxWidth())
         } else if (consent) {

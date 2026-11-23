@@ -9,17 +9,17 @@ Repository: https://github.com/GIVLSE/AppCycleTester
 ## V1 features
 
 - Lists launchable installed apps (no QUERY_ALL_PACKAGES permission).
-- Select apps, reorder, set a per-app timer (1–120 minutes; default 5).
+- Select apps, reorder, set a per-app timer (1 second–120 minutes; default 5 minutes).
 - Repeat once, N times (1–999), or indefinitely.
 - Optional overall duration cap (0 means unlimited).
-- Start, pause, resume, stop.
+- Start, pause, resume, stop; Stop action in the foreground-service notification (visible with notification permission).
 - V1.1 interactive on-demand Accessibility onboarding with direct App info and Accessibility settings links and connected-status feedback; no programmatic permission grant.
-- Persistent plan and local event log.
+- Persistent plan, local event log and per-run structured JSON/CSV session reports (export only on explicit user share).
 - Uses explicitly user-enabled Accessibility Service to request app launches and check foreground window events.
-- Timeout if an app's window is not confirmed within 8 seconds. Reports FAIL after losing the foreground for over 5 seconds.
+- Timeout if an app's window is not confirmed within 8 seconds; retry a lost window up to twice. Other-app windows trigger recovery after 5 seconds; permissioncontroller dialogs receive up to 45 seconds for manual user action, never silent approval.
 - Kotlin + Jetpack Compose, minSdk 26, targetSdk 36.
 
-**Application ID:** `com.sequmio.givlse` · **Version:** `0.3.0` (`versionCode` 5).
+**Application ID:** `com.sequmio.givlse` · **Version:** `0.4.0` (`versionCode` 9).
 
 **Important:** This is a new Android package compared to the prototype `io.github.givlse.appcycletester`; installing Sequmio will not update the previous package in place.
 
@@ -54,13 +54,13 @@ There is no gradle-wrapper.jar in this initial repository: Android Studio must u
 
 ## Android limitations
 
-- No root, forced package stop, background process kill, or wake-lock bypass.
+- No root, forced package stop, background process kill, or screen-lock bypass. A bounded renewable PARTIAL wake lock keeps CPU available during user-started tests; it does not illuminate the display.
 - Android/OEM policies may prevent activity launches from background. Device verification is essential.
 - On Android 13+ sideloaded builds may need an additional manual **Allow restricted settings** confirmation in Settings → App info. Some ROMs hide/relocate this action; the app cannot force it.
 - Android 11–16 behavior varies by OEM; UI guidance cannot guarantee access is granted.
-- Screen lock/automatic display timeout is not solved by this version.
+- Android FLAG_KEEP_SCREEN_ON only applies to Sequmio's own Activity; it cannot keep OTHER apps on-screen. The runner stops with FAIL if screen-off is observed. Configure timeout/Stay awake while charging for reliable long tests.
 - Accessibility is used to detect window changes only. This version does not capture UI content or gestures.
-- The Android process or accessibility service may be stopped by the OS, ending the run.
+- The Android process or Accessibility service may be stopped by the OS, ending the run. A pending report is marked INTERRUPTED on next launch; the app does not silently resume.
 - V1 is a prototype, not a validated commercial release; the debug APK requires CI verification and Android device testing.
 - A plan currently permits one entry per application package.
 
@@ -74,9 +74,13 @@ There is no gradle-wrapper.jar in this initial repository: Android Studio must u
 
 ## Later versions
 
-V1.1: better foreground recovery, profiles, export reports and second-level timers.
+V0.4: foreground-service notification, finite recovery, second-level timers, screen-off safeguards and local JSON/CSV reports. Profiles remain future work.
 V2: E2E recorder/player with accessibility node selectors and tap/swipe assertions.
 
 ## Release verification
 
 Sequmio 0.3.0 includes a native dark-mode UI matching the approved visual design. CI compiles the APK and release bundle and runs the cycle navigation unit tests. UI and long-running accessibility switching still require real-device QA before wider production rollout. Signed Play bundles use the owner's permanent upload key. Never commit this private key or its password.
+
+## V0.4 Play Console requirement
+
+Foreground service uses type `specialUse` for an explicitly user-started QA cycle while other apps are in front. It shows a Stop action and releases CPU wake lock at the end. Android 14+ requires a separate **Foreground service permissions declaration** in Play Console, including the use case. Users can deny POST_NOTIFICATIONS; the FGS can still run but the Stop notification may not appear in the notification shade (Android task manager may show it). The app must not claim it can keep third-party apps' screens on.
