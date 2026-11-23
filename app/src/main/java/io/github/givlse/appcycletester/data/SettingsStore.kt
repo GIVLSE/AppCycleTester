@@ -11,6 +11,12 @@ import org.json.JSONObject
 class SettingsStore(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences("app_cycle_tester", Context.MODE_PRIVATE)
 
+    fun accessConsentGiven(): Boolean = prefs.getBoolean("access_disclosure_consent_v1", false)
+
+    fun saveAccessConsent() {
+        prefs.edit().putBoolean("access_disclosure_consent_v1", true).apply()
+    }
+
     fun loadPlan(): TestPlan = try {
         val json = JSONObject(prefs.getString("plan", "{}") ?: "{}")
         val targetsArray = json.optJSONArray("targets") ?: JSONArray()
