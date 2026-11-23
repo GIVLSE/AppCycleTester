@@ -1,6 +1,6 @@
 <resources>
-    <style name="Theme.AppCycleTester" parent="android:style/Theme.Material.Light.NoActionBar">
-        <item name="android:statusBarColor">#14243A</item>
+    <style name="Theme.Sequmio" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">#0D1424</item>
         <item name="android:navigationBarColor">#14243A</item>
     </style>
 </resources>

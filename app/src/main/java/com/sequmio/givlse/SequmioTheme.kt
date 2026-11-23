@@ -1,0 +1,117 @@
+package com.sequmio.givlse
+
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+
+internal object SeqColors {
+    val Background = Color(0xFF0D1424)
+    val BackgroundEnd = Color(0xFF15152D)
+    val Card = Color(0xFF1B263A)
+    val CardRaised = Color(0xFF263147)
+    val Border = Color(0xFF3B4860)
+    val Primary = Color(0xFF9B73EA)
+    val PrimaryDark = Color(0xFF7154B8)
+    val Teal = Color(0xFF48E2D0)
+    val Sky = Color(0xFF8FDFFF)
+    val Text = Color(0xFFF4F6FC)
+    val Muted = Color(0xFFADBAD0)
+    val Error = Color(0xFFFF879C)
+    val Success = Color(0xFF58D9C3)
+}
+internal val SeqBackground = Brush.verticalGradient(
+    listOf(SeqColors.Background, Color(0xFF111B2D), SeqColors.BackgroundEnd)
+)
+
+@Composable
+internal fun SequmioTheme(content: @Composable () -> Unit) {
+    MaterialTheme(
+        colorScheme = darkColorScheme(
+            primary = SeqColors.Primary,
+            onPrimary = Color.White,
+            secondary = SeqColors.Teal,
+            onSecondary = SeqColors.Background,
+            background = SeqColors.Background,
+            onBackground = SeqColors.Text,
+            surface = SeqColors.Card,
+            onSurface = SeqColors.Text,
+            surfaceVariant = SeqColors.CardRaised,
+            onSurfaceVariant = SeqColors.Muted,
+            outline = SeqColors.Border,
+            error = SeqColors.Error
+        ), content = content
+    )
+}
+
+@Composable
+internal fun SeqCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    Card(modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = SeqColors.Card),
+        border = androidx.compose.foundation.BorderStroke(1.dp, SeqColors.Border.copy(alpha = 0.65f)),
+        shape = RoundedCornerShape(20.dp)
+    ) { Column(content = content) }
+}
+
+@Composable
+internal fun SeqPrimaryButton(title: String, onClick: () -> Unit,
+    modifier: Modifier = Modifier, enabled: Boolean = true) {
+    Button(onClick = onClick, enabled = enabled, modifier = modifier,
+        shape = RoundedCornerShape(16.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = SeqColors.Primary, contentColor = Color.White,
+            disabledContainerColor = SeqColors.CardRaised),
+        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 14.dp)
+    ) { Text(title, fontWeight = FontWeight.SemiBold) }
+}
+
+/** Native vector rendering based on the approved Sequmio logo concept. */
+@Composable
+internal fun SequmioMark(size: Dp = 76.dp, modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier.size(size)) {
+        val u = this.size.width / 100f
+        drawRoundRect(
+            brush = Brush.linearGradient(listOf(Color(0xFF213858), Color(0xFF14162C)),
+                start = Offset.Zero, end = Offset(this.size.width, this.size.height)),
+            cornerRadius = CornerRadius(23*u)
+        )
+        drawRoundRect(SeqColors.Teal, Offset(18*u, 42*u), Size(22*u, 22*u),
+            cornerRadius = CornerRadius(6*u))
+        drawRoundRect(SeqColors.Sky.copy(alpha = 0.87f), Offset(41*u, 64*u),
+            Size(22*u, 20*u), cornerRadius = CornerRadius(5*u))
+        drawRoundRect(SeqColors.Primary, Offset(65*u, 42*u), Size(22*u, 22*u),
+            cornerRadius = CornerRadius(6*u))
+        drawArc(color = SeqColors.Sky, startAngle = 196f, sweepAngle = 173f,
+            useCenter = false, topLeft = Offset(24*u, 16*u), size = Size(53*u, 52*u),
+            style = Stroke(width=5*u, cap=StrokeCap.Round))
+        val arrow = Path().apply {
+            moveTo(78*u,36*u)
+            lineTo(77*u,22*u)
+            lineTo(65*u,30*u)
+            close()
+        }
+        drawPath(arrow, SeqColors.Sky)
+    }
+}

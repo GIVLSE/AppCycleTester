@@ -23,6 +23,12 @@ Repository: https://github.com/GIVLSE/AppCycleTester
 
 **Important:** This is a new Android package compared to the prototype `io.github.givlse.appcycletester`; installing Sequmio will not update the previous package in place.
 
+## Sequmio UI v0.3.0
+
+The approved dark UI is implemented in Jetpack Compose with a Sequmio vector mark and launcher icon. Tabs: Tests dashboard, Test Plan editor, Scenarios (V2 roadmap only), and local History. The Accessibility onboarding is a first-class screen with explicit disclosure and consent. All test-plan and runner operations remain connected to the V1 engine. Source: `SequmioApp.kt`, `SequmioTheme.kt`, `SequmioDialogs.kt`, and `SequmioAccessSetup.kt`.
+
+The CI produces both `Sequmio-debug` and `Sequmio-release-unsigned-AAB`. **The unsigned AAB is not upload-ready for Google Play.** Production/closed-track Play upload requires a signed AAB created with the app owner's permanent upload key via the manual Play workflow; do not use a disposable key for your first release.
+
 ## Build
 
 Import into Android Studio (JDK 17, Android SDK 36). The GitHub Actions workflow runs Gradle 8.13 and executes:
