@@ -89,6 +89,7 @@ private fun CycleScreen(onOpenAccessibility: () -> Unit, onOpenAppDetails: () ->
     var plan by remember { mutableStateOf(store.loadPlan()) }
     var showChooser by remember { mutableStateOf(false) }
     var showAccessSetup by remember { mutableStateOf(false) }
+    var accessConsent by remember { mutableStateOf(store.accessConsentGiven()) }
     var error by remember { mutableStateOf("") }
     val runtime by RunnerRuntime.state.collectAsState()
     val busy = runtime.phase == RunPhase.RUNNING || runtime.phase == RunPhase.PAUSED
@@ -217,7 +218,7 @@ private fun CycleScreen(onOpenAccessibility: () -> Unit, onOpenAppDetails: () ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (!busy) {
                     Button(enabled = plan.targets.isNotEmpty(), onClick = {
-                        if (runtime.accessibilityReady && CycleAccessibilityService.instance != null) {
+                        if (accessConsent && runtime.accessibilityReady && CycleAccessibilityService.instance != null) {
                             error = CycleAccessibilityService.instance?.let { it.start(plan).orEmpty() }
                                 ?: "Служба Accessibility не подключена"
                         } else {
@@ -252,6 +253,11 @@ private fun CycleScreen(onOpenAccessibility: () -> Unit, onOpenAppDetails: () ->
     if (showAccessSetup) {
         AccessSetupDialog(
             ready = runtime.accessibilityReady && CycleAccessibilityService.instance != null,
+            consentAccepted = accessConsent,
+            onConsent = {
+                store.saveAccessConsent()
+                accessConsent = true
+            },
             onOpenAppDetails = onOpenAppDetails,
             onOpenAccessibility = onOpenAccessibility,
             onDismiss = { showAccessSetup = false },
