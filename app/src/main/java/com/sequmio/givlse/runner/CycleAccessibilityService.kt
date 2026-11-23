@@ -1,6 +1,7 @@
 package com.sequmio.givlse.runner
 
 import android.accessibilityservice.AccessibilityService
+import android.app.KeyguardManager
 import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
@@ -88,7 +89,7 @@ class CycleAccessibilityService : AccessibilityService() {
                 reports.confirmed(index)
                 addEvent("Foreground confirmed: " + expected)
             }
-        } else if (launchConfirmed && foreground != otherWindowPackage) {
+        } else if (foreground != otherWindowPackage) {
             otherWindowAt = SystemClock.elapsedRealtime()
             otherWindowPackage = foreground
             if (RunRecoveryPolicy.isPermissionDialog(foreground)) {
@@ -188,8 +189,9 @@ class CycleAccessibilityService : AccessibilityService() {
     private fun tick() {
         if (phase != RunPhase.RUNNING) return
         val power = getSystemService(POWER_SERVICE) as PowerManager
-        if (!power.isInteractive) {
-            finish("FAIL: screen off, foreground test cannot continue", false)
+        val keyguard = getSystemService(KEYGUARD_SERVICE) as KeyguardManager
+        if (!power.isInteractive || keyguard.isKeyguardLocked) {
+            finish("FAIL: screen off or locked, foreground test cannot continue", false)
             return
         }
         accumulateTime()
@@ -200,7 +202,11 @@ class CycleAccessibilityService : AccessibilityService() {
         }
         val target = p.targets[index]
         val now = SystemClock.elapsedRealtime()
-        if (!launchConfirmed &&
+        if (!launchConfirmed && otherWindowAt > 0L &&
+            RunRecoveryPolicy.isPermissionDialog(otherWindowPackage)) {
+            if (now - otherWindowAt >= RunRecoveryPolicy.PERMISSION_DIALOG_TIMEOUT_MS)
+                retryCurrent("Permission dialog prevented initial window confirmation")
+        } else if (!launchConfirmed &&
             now - requestedLaunchAt >= RunRecoveryPolicy.WINDOW_CONFIRM_TIMEOUT_MS) {
             retryCurrent("Window not confirmed within 8 seconds")
         } else if (launchConfirmed && otherWindowAt > 0L &&
