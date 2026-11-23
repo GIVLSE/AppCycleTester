@@ -1,0 +1,6 @@
+<resources>
+    <style name="Theme.AppCycleTester" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">#14243A</item>
+        <item name="android:navigationBarColor">#14243A</item>
+    </style>
+</resources>

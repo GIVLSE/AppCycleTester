@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">App Cycle Tester</string>
+    <string name="accessibility_service_name">App Cycle Runner</string>
+    <string name="accessibility_service_description">Запускает выбранные пользователем приложения по очереди. Отслеживает только переключение окон, не читает и не записывает действия или содержимое экрана.</string>
+</resources>
