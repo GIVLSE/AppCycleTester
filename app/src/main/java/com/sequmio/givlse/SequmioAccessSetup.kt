@@ -61,7 +61,8 @@ internal fun SequmioAccessSetup(
             "test information to the developer or third parties.",
             color = SeqColors.Muted, fontSize = 14.sp)
         AccessStep(1, "Review access", "Read the disclosure and choose whether to continue.",
-            onClick = {})
+            onClick = null)
+        if (consent) {
         if (Build.VERSION.SDK_INT >= 33 && !ready) {
             AccessStep(2, "Open App Info",
                 "If Android blocks a sideloaded APK, allow restricted settings manually. " +
@@ -70,6 +71,7 @@ internal fun SequmioAccessSetup(
         AccessStep(3, "Enable Sequmio Runner",
             "Open Android Accessibility settings and explicitly enable Sequmio Runner.",
             onAccessibility)
+        }
         if (!consent) {
             SeqCard(Modifier.fillMaxWidth()) {
                 Row(Modifier.fillMaxWidth().clickable { approved = !approved }
@@ -97,9 +99,10 @@ internal fun SequmioAccessSetup(
 
 @Composable
 private fun AccessStep(
-    number: Int, title: String, description: String, onClick: () -> Unit
+    number: Int, title: String, description: String, onClick: (() -> Unit)?
 ) {
-    SeqCard(Modifier.fillMaxWidth().clickable { onClick() }) {
+    SeqCard(if (onClick != null) Modifier.fillMaxWidth().clickable { onClick() }
+        else Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth().padding(16.dp),
             verticalAlignment = Alignment.CenterVertically) {
             Text(number.toString(), color = SeqColors.Teal, fontSize = 22.sp,
