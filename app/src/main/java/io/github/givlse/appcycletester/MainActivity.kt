@@ -218,7 +218,7 @@ private fun CycleScreen(onOpenAccessibility: () -> Unit, onOpenAppDetails: () ->
                 if (!busy) {
                     Button(enabled = plan.targets.isNotEmpty(), onClick = {
                         if (runtime.accessibilityReady && CycleAccessibilityService.instance != null) {
-                            error = CycleAccessibilityService.instance?.start(plan)
+                            error = CycleAccessibilityService.instance?.let { it.start(plan).orEmpty() }
                                 ?: "Служба Accessibility не подключена"
                         } else {
                             error = ""
@@ -257,7 +257,7 @@ private fun CycleScreen(onOpenAccessibility: () -> Unit, onOpenAppDetails: () ->
             onDismiss = { showAccessSetup = false },
             onStart = {
                 showAccessSetup = false
-                error = CycleAccessibilityService.instance?.start(plan)
+                error = CycleAccessibilityService.instance?.let { it.start(plan).orEmpty() }
                     ?: "Служба Accessibility не подключена"
             }
         )

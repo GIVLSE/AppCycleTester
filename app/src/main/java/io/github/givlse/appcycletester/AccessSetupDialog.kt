@@ -2,6 +2,8 @@ package io.github.givlse.appcycletester
 
 import android.os.Build
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.AlertDialog
@@ -32,7 +34,10 @@ internal fun AccessSetupDialog(
             Text(if (ready) "Доступ подключён" else "Подключение службы")
         },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 Text(
                     "Для переключения между приложениями нужен доступ к специальным возможностям Android. " +
                         "Он даёт службе широкие возможности управления экраном. V1 использует его для запуска " +
