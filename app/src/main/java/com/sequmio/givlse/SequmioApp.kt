@@ -33,7 +33,11 @@ import java.util.Locale
 private enum class Page { HOME, PLAN, SCENARIOS, HISTORY, SETUP }
 
 @Composable
-internal fun SequmioApp(openAccessibility: () -> Unit, openAppDetails: () -> Unit) {
+internal fun SequmioApp(
+    permissionRefreshToken: Int,
+    openAccessibility: () -> Unit,
+    openAppDetails: () -> Unit
+) {
     val context = LocalContext.current
     val store = remember { SettingsStore(context) }
     val apps = remember { AppCatalog.list(context) }
@@ -45,6 +49,10 @@ internal fun SequmioApp(openAccessibility: () -> Unit, openAppDetails: () -> Uni
     var durationTarget by remember { mutableStateOf<TestTarget?>(null) }
     var message by remember { mutableStateOf("") }
     val connected = runner.accessibilityReady && CycleAccessibilityService.instance != null
+    // Reflect actual Android service enablement, independently from local consent.
+    val systemAccessibilityEnabled = remember(permissionRefreshToken, runner.accessibilityReady) {
+        isSequmioAccessibilityEnabled(context)
+    } || connected
     val openPrivacy = {
         context.startActivity(
             Intent(Intent.ACTION_VIEW, Uri.parse("https://givlse.github.io/AppCycleTester/privacy.html"))
@@ -102,7 +110,9 @@ internal fun SequmioApp(openAccessibility: () -> Unit, openAppDetails: () -> Uni
                 Page.SCENARIOS -> SequmioScenarios()
                 Page.HISTORY -> SequmioHistory(history)
                 Page.SETUP -> SequmioAccessSetup(
-                    ready = connected, consent = consent,
+                    ready = connected,
+                    systemEnabled = systemAccessibilityEnabled,
+                    consent = consent,
                     onConsent = { store.saveAccessConsent(); consent = true },
                     onBack = { page = Page.HOME },
                     onAppInfo = openAppDetails,
@@ -257,7 +267,7 @@ private fun SequmioHome(
                     if (!connected) {
                         Text("Accessibility access is needed to switch between apps.",
                             color = SeqColors.Muted, fontSize = 12.sp)
-                        SeqTextButton(onClick = onSetup) { Text("Set up runner →") }
+                        SeqTextButton(onClick = onSetup) { Text("Manage permissions →") }
                     } else if (runner.phase == RunPhase.FINISHED) {
                         Text(if (runner.success == true) "Last run: PASS" else "Last run: FAIL / STOP",
                             color = if (runner.success == true) SeqColors.Success else SeqColors.Error)
@@ -266,6 +276,9 @@ private fun SequmioHome(
                             color = SeqColors.Muted, fontSize = 12.sp)
                     } else Text(if (active) "Running • " + duration(runner.elapsedSeconds)
                         else "Ready for testing", color = SeqColors.Muted)
+                    if (connected) {
+                        SeqTextButton(onClick = onSetup) { Text("Permissions & access →") }
+                    }
                     if (message.isNotEmpty()) Text(message, color = SeqColors.Error)
                 }
             }

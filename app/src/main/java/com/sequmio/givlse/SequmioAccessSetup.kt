@@ -14,9 +14,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
-import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -24,13 +22,22 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+/**
+ * Unified settings checklist.
+ *
+ * The first checkmark records explicit consent. The other two are READ-ONLY
+ * reflections of the real Android accessibility state and live service.
+ * Tapping an unchecked system permission opens the appropriate Android screen.
+ */
 @Composable
 internal fun SequmioAccessSetup(
     ready: Boolean,
+    systemEnabled: Boolean,
     consent: Boolean,
     onConsent: () -> Unit,
     onAppInfo: () -> Unit,
@@ -39,92 +46,141 @@ internal fun SequmioAccessSetup(
     onBack: () -> Unit,
     onStart: () -> Unit
 ) {
-    var approved by remember { mutableStateOf(false) }
+    var consentChecked by remember { mutableStateOf(false) }
+    val checkColors = CheckboxDefaults.colors(
+        checkedColor = SeqColors.PrimaryAction,
+        uncheckedColor = SeqColors.Muted,
+        checkmarkColor = Color.White,
+        disabledCheckedColor = SeqColors.Teal,
+        disabledUncheckedColor = SeqColors.Border
+    )
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        SeqTopBar("Accessibility Setup", onBack)
-        SeqCard(Modifier.fillMaxWidth()) {
-            Text(if (ready) "✓ Runner connected" else "○ Runner not connected",
-                Modifier.padding(17.dp),
-                color = if (ready) SeqColors.Success else SeqColors.Error,
-                fontWeight = FontWeight.SemiBold)
-        }
-        Text("Why Sequmio needs this access", fontWeight = FontWeight.Bold)
+        SeqTopBar("Permissions", onBack)
         Text(
-            "Sequmio uses Android Accessibility Service to launch the apps you select " +
-                "and detect which app is in the foreground. It reads the active app's " +
-                "package identifier and timestamps of window changes. App selections, " +
-                "settings and test logs are stored locally on your phone.",
+            "One place to review access. Sequmio reads permission status from Android " +
+                "when you return from Settings; it cannot turn on system accessibility itself.",
             color = SeqColors.Muted, fontSize = 14.sp
         )
-        Text("V1 does not read screen text, record taps or screenshots, or send " +
-            "test information to the developer or third parties.",
-            color = SeqColors.Muted, fontSize = 14.sp)
-        AccessStep(1, "Review access", "Read the disclosure and choose whether to continue.",
-            onClick = null)
-        if (consent) {
-        if (Build.VERSION.SDK_INT >= 33 && !ready) {
-            AccessStep(2, "Open App Info",
-                "If Android blocks a sideloaded APK, allow restricted settings manually. " +
-                    "Google Play installs normally do not require this step.", onAppInfo)
-        }
-        AccessStep(3, "Enable Sequmio Runner",
-            "Open Android Accessibility settings and explicitly enable Sequmio Runner.",
-            onAccessibility)
-        }
-        if (!consent) {
-            SeqCard(Modifier.fillMaxWidth()) {
-                Row(Modifier.fillMaxWidth().clickable { approved = !approved }
-                    .padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        SeqCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                Text("1. Your consent", fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
+                Text(
+                    "Sequmio uses Android Accessibility Service to open apps you choose and " +
+                        "observe which app is in the foreground. The service accesses the " +
+                        "active app package name and window-change timestamps. Plans, " +
+                        "consent and run history stay on your device.",
+                    color = SeqColors.Muted, fontSize = 14.sp
+                )
+                Text(
+                    "Sequmio does not read screen text, record taps or screenshots, " +
+                        "or send test data to the developer or third parties.",
+                    color = SeqColors.Muted, fontSize = 14.sp
+                )
+                Row(
+                    Modifier.fillMaxWidth().clickable(enabled = !consent) {
+                        consentChecked = !consentChecked
+                    },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Checkbox(
-                        checked = approved,
-                        onCheckedChange = { approved = it },
-                        colors = CheckboxDefaults.colors(
-                            checkedColor = SeqColors.PrimaryAction,
-                            uncheckedColor = SeqColors.Muted,
-                            checkmarkColor = Color.White
-                        )
+                        checked = consent || consentChecked,
+                        onCheckedChange = if (consent) null else { consentChecked = it },
+                        enabled = !consent,
+                        colors = checkColors
                     )
                     Spacer(Modifier.width(8.dp))
-                    Text("I understand this access and consent to its use for app testing.",
-                        fontWeight = FontWeight.Medium)
+                    Text(
+                        if (consent) "Consent provided" else
+                            "I understand this access and agree to its use for testing.",
+                        color = SeqColors.Text, fontWeight = FontWeight.Medium,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                if (!consent) {
+                    SeqPrimaryButton(
+                        "Agree & continue",
+                        onClick = onConsent,
+                        enabled = consentChecked,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
-            SeqPrimaryButton("Agree & Continue",
-                onClick = onConsent,
-                enabled = approved,
-                modifier = Modifier.fillMaxWidth())
-        } else if (ready) {
-            SeqPrimaryButton("Continue to Test", onStart,
-                Modifier.fillMaxWidth())
-        } else {
-            Text("Waiting for system permission. Return here after enabling the service.",
-                color = SeqColors.Muted)
+        }
+        SeqCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("2. Android Accessibility", fontWeight = FontWeight.SemiBold,
+                    fontSize = 17.sp)
+                Row(
+                    Modifier.fillMaxWidth().clickable(enabled = consent) { onAccessibility() },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = systemEnabled,
+                        onCheckedChange = if (consent) ({ onAccessibility() }) else null,
+                        enabled = consent,
+                        colors = checkColors
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            if (systemEnabled) "Sequmio Runner enabled"
+                            else "Enable Sequmio Runner",
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            if (systemEnabled) "Confirmed by Android. Tap to review the setting."
+                            else "Tap to open the Android permission screen and confirm there.",
+                            color = SeqColors.Muted, fontSize = 12.sp
+                        )
+                    }
+                    Text("›", color = SeqColors.Primary, fontSize = 28.sp)
+                }
+                if (!systemEnabled && consent && Build.VERSION.SDK_INT >= 33) {
+                    Text(
+                        "If Android blocks a manually installed APK, you may need " +
+                            "Allow restricted settings in App Info. " +
+                            "This security setting cannot be changed automatically.",
+                        color = SeqColors.Muted, fontSize = 12.sp
+                    )
+                    SeqTextButton(onClick = onAppInfo) { Text("Open App Info") }
+                }
+            }
+        }
+        SeqCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                Text("3. Service connection", fontWeight = FontWeight.SemiBold,
+                    fontSize = 17.sp)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(
+                        checked = ready,
+                        onCheckedChange = null,
+                        enabled = false,
+                        colors = checkColors
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        if (ready) "Runner connected — ready to start"
+                        else if (systemEnabled) "Enabled; waiting for service connection"
+                        else "Waiting for Android permission",
+                        color = if (ready) SeqColors.Success else SeqColors.Muted,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+        if (consent && ready) {
+            SeqPrimaryButton("Start test", onStart, Modifier.fillMaxWidth())
+        } else if (consent) {
+            Text(
+                "Return from Android Settings to refresh the checkmarks.",
+                color = SeqColors.Muted, fontSize = 13.sp
+            )
         }
         SeqTextButton(onClick = onPrivacy) { Text("Privacy Policy") }
-        SeqTextButton(onClick = onBack) { Text("Not now") }
-    }
-}
-
-@Composable
-private fun AccessStep(
-    number: Int, title: String, description: String, onClick: (() -> Unit)?
-) {
-    SeqCard(if (onClick != null) Modifier.fillMaxWidth().clickable { onClick() }
-        else Modifier.fillMaxWidth()) {
-        Row(Modifier.fillMaxWidth().padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically) {
-            Text(number.toString(), color = SeqColors.Teal, fontSize = 22.sp,
-                fontWeight = FontWeight.Bold)
-            Spacer(Modifier.width(16.dp))
-            Column(Modifier.weight(1f)) {
-                Text(title, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
-                Text(description, color = SeqColors.Muted, fontSize = 12.sp)
-            }
-            Text("›", fontSize = 25.sp, color = SeqColors.Muted)
-        }
+        SeqTextButton(onClick = onBack) { Text("Back to Sequmio") }
     }
 }

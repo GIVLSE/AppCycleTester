@@ -54,3 +54,14 @@ No tests in this section are marked PASS without testing on-device.
 - [ ] Confirm system status/navigation bar icons are light on dark backgrounds.
 
 New color tokens: content #F4F6FC; muted #ADBAD0; text links #B99AFF; filled buttons #7048B9 with white text. Normal-text contrast ratios against #1B263A Cards: content 14.03:1, muted 7.73:1, links 6.59:1; white on filled buttons 6.33:1 (WCAG AA ≥4.5:1).
+
+## V0.3.3 synchronized Android permissions
+
+- [ ] First launch: consent checkbox unchecked, system permission reflects Android state; tapping system permission cannot open Android settings until user accepts disclosure
+- [ ] Agree & continue: consent checkmark becomes checked but Android access stays unchecked until separately enabled in Settings
+- [ ] Android 13+ sideload restriction: optional App Info link is shown only when service isn't enabled; app does not silently bypass restricted settings
+- [ ] Permission row opens Sequmio Runner details when ROM supports direct settings; otherwise falls back to Accessibility settings
+- [ ] After returning from settings, system checkbox refreshes automatically; connected checkbox follows live Accessibility service connection
+- [ ] Disable Sequmio Runner in Settings and return: system and connected state becomes unchecked; Start requires setup
+- [ ] No bogus permissions or toggles for APIs not declared in AndroidManifest.xml
+- [ ] Existing plan, execution and Play policy disclosure flows continue to work
