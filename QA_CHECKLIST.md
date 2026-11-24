@@ -186,3 +186,30 @@ New color tokens: content #F4F6FC; muted #ADBAD0; text links #B99AFF; filled but
 | RC-08 | Real Firebase backend + Android | Auth, App List, publishing, Join, sync, deletion tested |
 | RC-09 | Real device matrix Android 11/14/16 | Accessibility, Recorder, FGS, History verified |
 | RC-10 | Play Console Accessibility/FGS/Data Safety declarations | Updated and approved |
+
+## V1.1 automated & device acceptance (all device/cloud checks pending)
+
+| ID | Check | Expected |
+|---|---|---|
+| QA11-01 | CLICK + ASSERT_TEXT expected string | PASS only on exact text, without exporting the text |
+| QA11-02 | ASSERT_NOT_EXISTS against present element | FAIL after timeout; absent element PASS only in target app |
+| QA11-03 | ASSERT_ENABLED disabled button | FAIL, enabled element PASS |
+| QA11-04 | ASSERT_SCREEN known screen indicator | PASS for target package and selector |
+| QA11-05 | WAIT/CLICK-only scenario | Validation fails; an assertion is required |
+| QA11-06 | Two scenarios in one app, Smoke and Feature | Both execute sequentially, each gets a structured result |
+| QA11-07 | Optional assertion not found | SKIPPED, not FAIL |
+| QA11-08 | Local step results and JSON export | Step name, action, status and timing visible; no typed text |
+| QA11-09 | Suite editor add/edit/reorder/remove cases | Up to 12 cases persist across restart |
+| QA11-10 | Promote Feature to Regression without a PASS | Promotion disabled |
+| QA11-11 | Promote after valid local PASS | Regression approved and available |
+| QA11-12 | Update published scenario | Immutable scenarioVersions snapshot created, version incremented |
+| QA11-13 | Cloud result sharing OFF | Absolutely no automatic upload |
+| QA11-14 | Enable upload after consent | Real user ID/device model/build and step statuses uploaded to app owner |
+| QA11-15 | Offline upload | WorkManager retries after network returns |
+| QA11-16 | Different signed-in tester | Cannot upload to nonjoined app |
+| QA11-17 | Owner loads dashboard | Only owner-visible runs; PASS/FAIL and steps for each test |
+| QA11-18 | Compare two app builds | Separate real run counts and results per version |
+| QA11-19 | Scheduled daily function | Previous complete UTC day summary appears once in dailyReports |
+| QA11-20 | Optional configured mail transport | Developer dailyDigest opt-in receives email; OFF receives none |
+| QA11-21 | Delete cloud account | Owned listings, versions, memberships, testRuns, digests removed |
+| QA11-22 | Android 11/14/16 | Player, recorder, FGS, permissions, no UI freezes |

@@ -143,12 +143,9 @@ class RunUploadWorker(context: Context, params: WorkerParameters) :
                     val upload = db.collection("testRuns")
                         .document(report.id + "_" + index + "_" + caseIndex)
                     if (!upload.get().await().exists()) {
-                        try { upload.create(record).await() }
-                        catch (error: com.google.firebase.firestore.FirebaseFirestoreException) {
-                            if (error.code !=
-                                com.google.firebase.firestore.FirebaseFirestoreException.Code.ALREADY_EXISTS)
-                                throw error
-                        }
+                        // Same deterministic ID prevents duplicate reports after retries.
+                        // Firestore rules accept an identical-payload retry only.
+                        upload.set(record).await()
                     }
                 }
             }

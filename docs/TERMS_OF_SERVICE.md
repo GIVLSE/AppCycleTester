@@ -15,3 +15,5 @@
 **Support.** Contact the developer through https://github.com/GIVLSE/AppCycleTester/issues.
 
 **Automated E2E playback.** Developers must publish only deterministic, authorized test scenarios. Do not include account passwords, payment steps, personal information or instructions to consent to system permissions without human action. Other testers initiate test execution themselves and may stop it.
+
+**Distributed QA reports (v1.1).** A tester may opt into technical QA metadata sharing. The app owner receives only run status, scenario/step metadata, device/Android and app build information, and a pseudonymous tester ID. Do not include private account information or payment credentials in test steps. A passing run is evidence only for its specified assertions and device/build, never blanket proof of software quality or Google Play eligibility.

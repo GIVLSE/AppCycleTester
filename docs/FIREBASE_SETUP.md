@@ -56,3 +56,17 @@ Verify deployed Firestore rules allow an owner to query their own listings (incl
 ## V1.0 reality check
 
 Until all four GitHub Actions variables are configured and the server rules deployed, the app deliberately disables Google sign-in and real cloud catalog features. The developer must register the Play app-signing SHA-1 and validate account deletion, including the off-app request pathway, before declaring production readiness.
+
+## V1.1 required cloud setup and deployment
+
+The application can build locally without any cloud configuration. To use real sign-in, public listings and distributed QA, first configure all four GitHub Actions variables above, enable Google Authentication, register Play signing SHA-1 fingerprints, and deploy firestore.rules.
+
+1. Install the Firebase CLI and select your own project; use `firebase deploy --only firestore:rules`. **Do not deploy before testing rules** with at least two distinct Firebase users and the Firebase Emulator Suite.
+2. The Android app stores each consenting run under `testRuns/{runId}_{targetIndex}_{caseIndex}`. A record contains only technical metadata and StepResult statuses. Validate owner access, non-owner rejection and joined-member upload.
+3. To schedule yesterday's UTC digest, enable billing as required by Cloud Functions v2/Cloud Scheduler. Install dependencies in `functions/` with `npm install`, and deploy `firebase deploy --only functions:dailyQaSummary`. The Cloud Function runs at 03:15 UTC. The app reads owner-specific `dailyReports` in My App → QA Dashboard.
+4. Optional email summaries use Resend. Configure a verified sender in the private Firebase Functions environment as `SEQ_REPORT_SENDER` and set secret `SEQ_REPORT_EMAIL_API_KEY` with `firebase functions:secrets:set SEQ_REPORT_EMAIL_API_KEY`. This secret is bound to the scheduled function and is required for deployment in the current implementation. If email is not wanted, leave the sender unset and set an inert placeholder secret; the in-app summary still runs. Developers separately enable "Daily email QA digest" in Settings; default OFF.
+5. Confirm scheduled runs, error logs, Firestore rules and delivery with real Android devices before inviting external users. Firebase resources **have not been provisioned by this code change**.
+
+Watch costs: Cloud Scheduler, Firebase Function invocation, reads/writes, and optional mail provider charges may apply. Do not commit .env files, keystores, private service accounts or provider API keys.
+
+Account deletion now also attempts to remove testRuns, dailyReports and published scenario version snapshots; the operator must validate this using two accounts. Full cloud deletion is separate from clearing local phone storage.

@@ -96,3 +96,9 @@ The service now also observes click, scroll and text-field-change accessibility 
 ## V1.0 release acceptance
 
 Use a signed AAB with versionName 1.0.0 and versionCode 15. Complete Accessibility V3 disclosure and a new video showing UI-node access, deterministic actions and opt-in Recorder; FGS specialUse; Data Safety for Google/Firebase identity, published scenarios and memberships; and account deletion URL https://givlse.github.io/AppCycleTester/delete-account.html. Run Android 11/14/16 QA and deployed Firestore rules tests. Do not interpret CI PASS as Google Play approval.
+
+## V1.1 updated Data Safety and Accessibility disclosure
+
+App versionName 1.1.0 / versionCode 16 adds an optional tester-consented cloud uploader and a developer-facing QA Dashboard. Revisit Google Play Data Safety for the Firebase tester UID, device model/manufacturer, Android OS/API, tested app version, timing, test results, Google identity and optional developer email digest. No screen content, typed text or passwords are uploaded; the app can operate entirely offline with cloud reporting disabled. An Accessibility demonstration must now include assertion steps and the editable recorder.
+
+The nightly report requires separate Cloud Functions deployment and (optionally) an email service; an AAB alone cannot enable daily summaries. Owner must review and validate published Firestore security rules and account deletion.

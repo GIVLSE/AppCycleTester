@@ -69,19 +69,24 @@
   <p>While you run a test, Sequmio uses a user-initiated Android foreground service and an optional system notification with a Stop action. The service uses a partial CPU wake lock to keep timers responsive, but cannot prevent other apps' screens from locking. Android notification access is optional and can be changed in Settings.</p>
 
   <h2>6. Storage, data sharing and security</h2>
-  <p>Test plans, consent setting, My App drafts and execution history are stored <strong>locally on your device</strong> using Android SharedPreferences. Sequmio does not automatically transmit local test records to the developer or third parties, and it has no analytics or advertising. Optional signed-in account profiles are an exception as detailed in Section 4. Users can explicitly select Share JSON or Share CSV in History to send a chosen report to another app; the selected recipient's privacy policy then applies. No personal information is sold.</p>
+  <p>Test plans, consent setting, My App drafts and execution history are stored <strong>locally on your device</strong> using Android SharedPreferences. Sequmio does not automatically transmit local test records unless you explicitly enable QA report sharing in Settings. Sharing is OFF by default and requires a Google account. When enabled, sanitized metadata is uploaded to Firebase for the owner of the tested app: your account tester ID, device model/manufacturer, Android API version, tested app version, scenario name/category/version, step PASS/FAIL/SKIPPED, and timing. Sequmio does not transmit screen contents, typed text, credentials or screenshots in these reports. The app has no advertising or behavioral analytics. Users can explicitly select Share JSON or Share CSV in History to send a chosen report to another app; the selected recipient's privacy policy then applies. No personal information is sold.</p>
   <p>Because this information is stored locally, anyone with access to your unlocked device may be able to view the test log in the app. Protect your device with Android's normal screen-lock security.</p>
 
-  <h2>7. Retention and deletion</h2>
+  <h2>7. Distributed QA reports and daily digests</h2>
+  <p>In Sequmio v1.1, report sharing is disabled by default. If you consent, WorkManager uploads technical run results when connected and retries interrupted uploads. Reports are visible to the submitting tester and the developer who owns the tested app. Test steps are reported as metadata only. The developer can see device and app version coverage as well as comparison of PASS/FAIL between builds.</p>
+  <p>A scheduled Firebase server function can create daily summaries of the previous UTC day. Developers may optionally enable email summaries to their Google account email when the developer configures a mail provider. Without such deployment, no daily email is sent. No false claim of automatic daily delivery is made.</p>
+  <p>Cloud QA reports and daily digests remain until account deletion or administrative cleanup. Local plans and reports remain on the device until cleared. Google/Firebase and any configured email service process information necessary for the selected service.</p>
+
+  <h2>8. Retention and deletion</h2>
   <p>The app keeps selected test settings until you change or delete the app's local data. Its execution log keeps recent events, and local structured reports are limited to the most recent 40 sessions. You can delete locally held Sequmio data by clearing its storage in Android Settings or uninstalling the app. You can delete your Sequmio cloud profile, published listings and tester memberships from Settings → Profile → Delete my Sequmio account. Signing out alone does not delete cloud data. For deletion requests outside the app, see <a href="delete-account.html">Account Deletion</a>. Firebase may require you to sign in again before deletion completes.</p>
 
-  <h2>8. Children</h2>
+  <h2>9. Children</h2>
   <p>Sequmio is designed for developers and app testers and is not directed at children.</p>
 
-  <h2>9. Changes to this policy</h2>
-  <p>If future versions add screenshots, full gesture capture, automatic sharing or new data processing, this policy and the related in-app disclosure will be updated before those features are introduced.</p>
+  <h2>10. Changes to this policy</h2>
+  <p>If future versions add screenshots, full gesture capture, automatic upload of screen content or new data processing, this policy and the related in-app disclosure will be updated before those features are introduced.</p>
 
-  <h2>10. Developer and privacy contact</h2>
+  <h2>11. Developer and privacy contact</h2>
   <p>Developer: Vladislav Girskii (GIVLSE). For questions or requests relating to this policy, please use <a href="https://github.com/GIVLSE/AppCycleTester/issues">Sequmio's public project issue tracker</a>.</p>
 </article>
 <footer>Sequmio · Privacy Policy · No cookies, trackers or third-party scripts on this page.</footer>

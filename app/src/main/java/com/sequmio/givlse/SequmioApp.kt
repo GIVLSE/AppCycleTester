@@ -39,6 +39,8 @@ import com.sequmio.givlse.runner.RunnerRuntime
 import com.sequmio.givlse.runner.RecorderRuntime
 import java.text.SimpleDateFormat
 import java.util.Date
+import org.json.JSONObject
+import org.json.JSONArray
 import java.util.Locale
 
 private enum class Page { RUNNER, APP_LIST, MY_APP, HISTORY, PLAN, SETUP,
@@ -668,6 +670,7 @@ internal fun SeqTopBar(title: String, onBack: (() -> Unit)? = null) {
 @Composable
 private fun SequmioHistory(history: List<RunEvent>, reports: List<RunReport>) {
     val context = LocalContext.current
+    var expandedReportId by remember { mutableStateOf<String?>(null) }
     fun share(report: RunReport, csv: Boolean) {
         val data = if (csv) report.csv else report.rawJson
         val intent = Intent(Intent.ACTION_SEND).apply {
@@ -708,6 +711,45 @@ private fun SequmioHistory(history: List<RunEvent>, reports: List<RunReport>) {
                     Text("Elapsed " + duration(report.durationSeconds) + " • " +
                         report.completedCycles + " cycles", color = SeqColors.Text)
                     Text(report.reason, color = SeqColors.Muted, fontSize = 12.sp)
+                    SeqTextButton(onClick = {
+                        expandedReportId = if (expandedReportId == report.id) null else report.id
+                    }) { Text(if (expandedReportId == report.id) "Hide test cases" else
+                        "Show test cases & step results") }
+                    if (expandedReportId == report.id) {
+                        val parsed = remember(report.id) {
+                            runCatching { JSONObject(report.rawJson) }.getOrNull()
+                        }
+                        val targets = parsed?.optJSONArray("targets") ?: JSONArray()
+                        for (i in 0 until targets.length()) {
+                            val target = targets.optJSONObject(i) ?: continue
+                            Text(target.optString("label"),
+                                fontWeight = FontWeight.SemiBold)
+                            val scenarios = target.optJSONArray("scenarios") ?: JSONArray()
+                            for (j in 0 until scenarios.length()) {
+                                val test = scenarios.optJSONObject(j) ?: continue
+                                Text(test.optString("suite") + " · " +
+                                    test.optString("name") + " v" +
+                                    test.optInt("version") + " · " +
+                                    test.optString("status"),
+                                    fontSize = 12.sp, color = SeqColors.Teal)
+                                val rows = test.optJSONArray("steps") ?: JSONArray()
+                                for (k in 0 until minOf(rows.length(), 75)) {
+                                    val step = rows.optJSONObject(k) ?: continue
+                                    Text("#" + step.optInt("stepIndex") + " " +
+                                        step.optString("action") + " " +
+                                        step.optString("status") + " (" +
+                                        step.optLong("durationMs") + "ms)",
+                                        fontSize = 12.sp,
+                                        color = if (step.optString("status") == "FAIL")
+                                            SeqColors.Error else SeqColors.Muted)
+                                    if (step.optString("status") == "FAIL") {
+                                        Text(step.optString("message"),
+                                            fontSize = 11.sp, color = SeqColors.Muted)
+                                    }
+                                }
+                            }
+                        }
+                    }
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         SeqTextButton(onClick = { share(report, false) }) {
                             Text("Share JSON")

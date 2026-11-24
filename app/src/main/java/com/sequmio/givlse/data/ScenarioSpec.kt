@@ -16,7 +16,10 @@ data class ScenarioSpec(
     val name: String,
     val totalDurationSec: Int,
     val loopSteps: Boolean,
-    val steps: List<ScenarioStep>
+    val steps: List<ScenarioStep>,
+    val suite: String = "SMOKE",
+    val version: Int = 1,
+    val regressionApproved: Boolean = false
 )
 
 /**
@@ -24,7 +27,11 @@ data class ScenarioSpec(
  * Only known deterministic Android UI actions are accepted.
  */
 object ScenarioCodec {
-    private val actions = setOf("WAIT","CLICK","SWIPE","INPUT_TEXT","SYSTEM_BACK","ASSERT_EXISTS")
+    val allowedSuites = setOf("SMOKE", "REGRESSION", "FEATURE")
+    val assertionActions = setOf("ASSERT_EXISTS", "ASSERT_NOT_EXISTS",
+        "ASSERT_TEXT", "ASSERT_ENABLED", "ASSERT_SCREEN")
+    private val actions = setOf("WAIT","CLICK","SWIPE","INPUT_TEXT","SYSTEM_BACK") +
+        assertionActions
 
     /** One JSON scenario or a bundle of independent smoke/regression/feature scenarios. */
     fun split(raw: String): List<String> {
@@ -82,9 +89,18 @@ object ScenarioCodec {
                 "CLICK" -> require(validSelector(selector) || validCoordinates(fallback)) {
                     "CLICK requires selector or normalized coordinates"
                 }
-                "ASSERT_EXISTS" -> require(validSelector(selector) &&
-                    selector?.optString("text") != "REPLACE_WITH_VISIBLE_TEXT") {
-                    "ASSERT_EXISTS requires a real UI selector, not the template placeholder"
+                in assertionActions -> {
+                    require(validSelector(selector) &&
+                        selector?.optString("text") != "REPLACE_WITH_VISIBLE_TEXT") {
+                        "$action requires a real UI selector, not a template placeholder"
+                    }
+                    if (action == "ASSERT_TEXT") {
+                        val expected = params.optString("expected")
+                        require(expected.isNotBlank() && expected.length <= 200 &&
+                            expected != "EXPECTED_TEXT") {
+                            "ASSERT_TEXT needs an expected UI value"
+                        }
+                    }
                 }
                 "INPUT_TEXT" -> {
                     require(validSelector(selector)) { "Text input needs a selector" }
@@ -101,13 +117,22 @@ object ScenarioCodec {
             steps.add(ScenarioStep(action, delay, params, selector, fallback,
                 step.optBoolean("optional", false)))
         }
-        // A WAIT-only script does not count as an actual UI test.
-        require(steps.any { it.action != "WAIT" }) {
-            "A publishable scenario must test or interact with the UI"
+        require(steps.any { it.action in assertionActions }) {
+            "Add an expected-result assertion; actions alone are not a QA test"
         }
-        val name = data.optJSONObject("meta")?.optString("name", "Smoke test") ?: "Smoke test"
-        return ScenarioSpec(packageName, name.take(120), duration,
-            execution.optBoolean("loop_steps", false), steps)
+        val meta = data.optJSONObject("meta") ?: JSONObject()
+        val name = meta.optString("name", "Smoke test").take(120)
+        val suite = meta.optString("suite", "SMOKE").uppercase()
+        val version = meta.optInt("version", 1)
+        require(suite in allowedSuites) { "Unsupported test suite" }
+        require(version in 1..1000000) { "Scenario version must be positive" }
+        val approved = meta.optBoolean("regression_approved", false)
+        require(suite != "REGRESSION" || approved) {
+            "Regression suite needs explicit approval after a real local PASS"
+        }
+        return ScenarioSpec(packageName, name, duration,
+            execution.optBoolean("loop_steps", false), steps,
+            suite, version, approved)
     }
 
     private fun validSelector(s: JSONObject?): Boolean =
@@ -122,7 +147,9 @@ object ScenarioCodec {
     fun starter(packageName: String): String {
         val data = JSONObject()
             .put("schema_version", 1)
-            .put("meta", JSONObject().put("name", "My first UI test"))
+            .put("meta", JSONObject().put("name", "My first UI test")
+                .put("suite", "SMOKE").put("version", 1)
+                .put("regression_approved", false))
             .put("target", JSONObject().put("package_name", packageName))
             .put("execution", JSONObject()
                 .put("total_duration_sec", 300)

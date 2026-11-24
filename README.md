@@ -19,11 +19,11 @@ Repository: https://github.com/GIVLSE/AppCycleTester
 - Timeout if an app's window is not confirmed within 8 seconds; retry a lost window up to twice. Other-app windows trigger recovery after 5 seconds; permissioncontroller dialogs receive up to 45 seconds for manual user action, never silent approval.
 - Kotlin + Jetpack Compose, minSdk 26, targetSdk 36.
 
-**Application ID:** `com.sequmio.givlse` · **Version:** `1.0.0` (`versionCode` 15).
+**Application ID:** `com.sequmio.givlse` · **Version:** `1.1.0` (`versionCode` 16).
 
 **Important:** This is a new Android package compared to the prototype `io.github.givlse.appcycletester`; installing Sequmio will not update the previous package in place.
 
-## Sequmio UI v1.0.0
+## Sequmio UI v1.1.0
 
 The approved dark UI is implemented in Jetpack Compose with a Sequmio vector mark and launcher icon. Tabs: Runner, App List, My App, and History. The former Scenarios placeholder is moved under My App. A top-right gear opens Settings (Profile, permissions, About, Privacy, Terms, Support). The Accessibility onboarding is a first-class screen with explicit disclosure and consent. All test-plan and runner operations remain connected to the V1 engine. Source: `SequmioApp.kt`, `SequmioTheme.kt`, `SequmioDialogs.kt`, and `SequmioAccessSetup.kt`.
 
@@ -127,3 +127,16 @@ Limitations: Accessibility events are not a universal tap/swipe recorder. Secure
 My App includes a visual scenario editor with step creation, reordering, field editing, optional flags, selectors and normalized coordinates, plus Advanced JSON. The Recorder's scenarios can be reviewed without hand-editing JSON. Developers can add their own validated scenario to the local Runner without publishing. The Player retries delayed UI elements before failing.
 
 **Important:** This is a 1.0 code milestone for user acceptance, not proof of production readiness. Offline Runner works without an account. Google Sign-In/App List require the owner's actual Firebase configuration, OAuth fingerprint setup, deployed Firestore rules, security validation and Google Play review. Device QA has not yet been performed.
+
+## V1.1: distributed QA and quality-focused test suites
+
+- Mandatory meaningful assertions for each scenario; ASSERT_EXISTS, ASSERT_NOT_EXISTS, ASSERT_ENABLED, ASSERT_TEXT, ASSERT_SCREEN. The runner records per-step PASS/FAIL/SKIPPED, duration and scenario version without storing on-screen text or typed values.
+- My App → Test Suites: up to 12 test cases per app, category SMOKE / FEATURE / REGRESSION, guided creation, locally verified PASS prerequisite for promotion into REGRESSION. A multi-case bundle runs all cases sequentially in the selected app.
+- Versioned scenario bundles are stored as immutable Firestore scenarioVersions snapshots when published.
+- Settings → QA report sharing is OFF by default, requiring explicit opt-in. With Google sign-in, after each run WorkManager attempts to upload sanitized app/device/version metadata and step outcomes; offline retries are bounded and ID-based to avoid duplicates.
+- My App → QA Dashboard loads genuine owner-scoped Firestore runs, step-level details, build comparison, suite summaries and previous UTC-day digests. There are no fabricated analytics figures.
+- Cloud Functions 2nd gen schedule aggregates yesterday's UTC runs at 03:15 UTC and writes owner-specific dailyReports. Optional email is sent only when configured with a valid provider key/sender and the developer opts in to the daily digest.
+
+**Critical external dependencies:** No Firebase project, deployed Firestore rules, deployed scheduled function or email service is provisioned by this repository commit. Local Runner and suite editing work without cloud; uploads, online Dashboard and daily digests work only after those services are configured. Device acceptance, Play Accessibility/FGS/Data Safety declarations and cloud security tests remain pending.
+
+See docs/RELEASE_1_1.md and docs/FIREBASE_SETUP.md.
