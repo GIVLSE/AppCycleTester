@@ -1,6 +1,11 @@
 package com.sequmio.givlse
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.border
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.*
+import androidx.compose.ui.graphics.vector.ImageVector
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
@@ -150,15 +155,17 @@ internal fun SequmioApp(
     Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
         if (page in mainTabs) {
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 2.dp),
+                Modifier.fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("SEQUMIO", color = SeqColors.Muted, fontSize = 12.sp,
-                    letterSpacing = 2.sp)
+                Text("SEQUMIO", color = SeqColors.Muted, fontSize = 11.sp,
+                    letterSpacing = 2.4.sp, fontWeight = FontWeight.Medium)
                 Spacer(Modifier.weight(1f))
-                IconButton(onClick = { openSettings() }) {
-                    Text("⚙", color = SeqColors.Primary, fontSize = 25.sp)
-                }
+                SeqIconAction(
+                    Icons.Outlined.Settings, "Settings", onClick = { openSettings() },
+                    tint = SeqColors.Primary
+                )
             }
         }
         Box(Modifier.weight(1f)) {
@@ -342,23 +349,47 @@ internal fun SequmioApp(
             }
         }
         if (page in mainTabs) {
-            Row(Modifier.fillMaxWidth().background(SeqColors.Background)
-                .padding(horizontal = 14.dp, vertical = 7.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf(
-                    Triple(Page.RUNNER, "▶", "Runner"),
-                    Triple(Page.APP_LIST, "▦", "App List"),
-                    Triple(Page.MY_APP, "◇", "My App"),
-                    Triple(Page.HISTORY, "◴", "History")
-                ).forEach { (tab, icon, label) ->
-                    Column(Modifier.weight(1f).background(
-                        if (tab == page) SeqColors.CardRaised else Color.Transparent,
-                        RoundedCornerShape(14.dp)).clickable { page = tab }
-                        .padding(vertical = 8.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(icon, fontSize = 22.sp,
-                            color = if (page == tab) SeqColors.Primary else SeqColors.Muted)
-                        Text(label, fontSize = 12.sp, color = SeqColors.Text)
+            val tabs = listOf(
+                Triple(Page.RUNNER, Icons.Outlined.PlayArrow, "Runner"),
+                Triple(Page.APP_LIST, Icons.Outlined.Layers, "App List"),
+                Triple(Page.MY_APP, Icons.Outlined.Code, "My App"),
+                Triple(Page.HISTORY, Icons.Outlined.History, "History")
+            )
+            Row(
+                Modifier.fillMaxWidth()
+                    .background(SeqColors.Background.copy(alpha = 0.97f))
+                    .padding(horizontal = 12.dp, vertical = 7.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                tabs.forEach { (tab, symbol, label) ->
+                    val selected = page == tab
+                    val shape = RoundedCornerShape(17.dp)
+                    Column(
+                        Modifier.weight(1f)
+                            .background(
+                                if (selected) SeqColors.CardRaised else Color.Transparent,
+                                shape
+                            )
+                            .then(
+                                if (selected) Modifier.border(
+                                    1.dp, SeqColors.Primary.copy(alpha = 0.25f), shape)
+                                else Modifier
+                            )
+                            .clickable { page = tab }
+                            .padding(vertical = 9.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        Icon(
+                            symbol, contentDescription = label,
+                            modifier = Modifier.size(24.dp),
+                            tint = if (selected) SeqColors.Primary else SeqColors.Muted
+                        )
+                        Text(
+                            label, fontSize = 11.sp,
+                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                            color = if (selected) SeqColors.Text else SeqColors.Muted
+                        )
                     }
                 }
             }
@@ -392,6 +423,7 @@ private fun SequmioHome(
     onPause: () -> Unit, onResume: () -> Unit, onStop: () -> Unit
 ) {
     val active = runner.phase == RunPhase.RUNNING || runner.phase == RunPhase.PAUSED
+    var appsCollapsed by rememberSaveable { mutableStateOf(false) }
     val cycleSeconds = plan.targets.sumOf { it.durationSeconds }.toLong()
     val planned = when (plan.repeatMode) {
         RepeatMode.ONCE -> cycleSeconds
@@ -402,114 +434,223 @@ private fun SequmioHome(
         planned?.coerceAtMost(plan.maxDurationMinutes * 60L) ?: plan.maxDurationMinutes * 60L
     } else planned
     LazyColumn(
-        Modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 18.dp, end = 18.dp, bottom = 26.dp, top = 3.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
-            Spacer(Modifier.height(8.dp))
-            SequmioMark(88.dp)
-            Spacer(Modifier.height(6.dp))
-            Text("Sequmio", fontSize = 34.sp, fontWeight = FontWeight.Bold)
-            Text("Mobile Test Runner", color = SeqColors.Muted)
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 2.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                SequmioMark(82.dp)
+                Text("Sequmio", fontSize = 31.sp, fontWeight = FontWeight.Bold)
+                Text("Mobile Test Runner", color = SeqColors.Muted, fontSize = 14.sp)
+            }
         }
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                SeqMetric("▦", plan.targets.size.toString(), "Apps", Modifier.weight(1f))
-                SeqMetric("◷", seconds?.let { targetTimeLabel(it.coerceAtMost(720000L).toInt()) } ?: "∞",
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                SeqMetric(Icons.Outlined.Layers, plan.targets.size.toString(),
+                    "Apps", Modifier.weight(1f))
+                SeqMetric(Icons.Outlined.Schedule,
+                    seconds?.let { targetTimeLabel(it.coerceAtMost(720000L).toInt()) }
+                        ?: "∞",
                     "Duration", Modifier.weight(1f))
-                SeqMetric("↻", when (plan.repeatMode) {
-                    RepeatMode.ONCE -> "1×"
-                    RepeatMode.COUNT -> plan.repeatCount.toString() + "×"
-                    RepeatMode.ENDLESS -> "∞"
-                }, "Cycles", Modifier.weight(1f))
+                SeqMetric(Icons.Outlined.Repeat,
+                    when (plan.repeatMode) {
+                        RepeatMode.ONCE -> "1×"
+                        RepeatMode.COUNT -> plan.repeatCount.toString() + "×"
+                        RepeatMode.ENDLESS -> "∞"
+                    }, "Cycles", Modifier.weight(1f))
             }
         }
         item {
             SeqCard(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(17.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("▤", fontSize = 24.sp, color = SeqColors.Sky)
-                        Spacer(Modifier.width(9.dp))
-                        Text("Test Plan", fontWeight = FontWeight.Bold, fontSize = 21.sp)
-                        Spacer(Modifier.weight(1f))
-                        SeqTextButton(onClick = onEdit, enabled = !active) { Text("Edit") }
-                    }
-                    Text(if (plan.targets.isEmpty()) "Add apps to create a test sequence."
-                        else "Run the selected apps automatically in order.",
-                        color = SeqColors.Muted)
-                    if (plan.targets.isNotEmpty()) {
-                        Text(plan.targets.joinToString("  →  ") { it.label },
-                            maxLines = 2, overflow = TextOverflow.Ellipsis,
-                            color = SeqColors.Sky, fontSize = 12.sp)
-                    }
+                Column(Modifier.fillMaxWidth().padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    SeqSectionTitle(
+                        title = "Test Plan", icon = Icons.Outlined.Assignment,
+                        trailing = {
+                            SeqTextButton(onClick = onEdit, enabled = !active) {
+                                Icon(Icons.Outlined.Edit, contentDescription = null,
+                                    modifier = Modifier.size(17.dp))
+                                Spacer(Modifier.width(3.dp))
+                                Text("Edit", fontSize = 13.sp)
+                            }
+                        }
+                    )
                     if (active) {
-                        Text((runner.activeApp ?: "Current app") + " • " +
+                        Text((runner.activeApp ?: "Current app") + "  •  " +
                             duration(runner.remainingSeconds) + " remaining",
-                            color = SeqColors.Teal)
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            color = SeqColors.Teal, fontSize = 12.sp)
+                        Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
                             SeqPrimaryButton(
-                                if (runner.phase == RunPhase.RUNNING) "Pause" else "Resume",
-                                if (runner.phase == RunPhase.RUNNING) onPause else onResume,
-                                Modifier.weight(1f))
-                            OutlinedButton(
-                                onClick = onStop,
+                                title = if (runner.phase == RunPhase.RUNNING) "Pause" else "Resume",
+                                onClick = if (runner.phase == RunPhase.RUNNING) onPause else onResume,
                                 modifier = Modifier.weight(1f),
+                                icon = if (runner.phase == RunPhase.RUNNING)
+                                    Icons.Outlined.Pause else Icons.Outlined.PlayArrow
+                            )
+                            OutlinedButton(
+                                onClick = onStop, modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(15.dp),
                                 colors = ButtonDefaults.outlinedButtonColors(
-                                    contentColor = SeqColors.Primary,
-                                    disabledContentColor = SeqColors.Muted
+                                    contentColor = SeqColors.Error
                                 )
                             ) {
+                                Icon(Icons.Outlined.Stop, contentDescription = null,
+                                    modifier = Modifier.size(19.dp))
+                                Spacer(Modifier.width(5.dp))
                                 Text("Stop")
                             }
                         }
-                    } else SeqPrimaryButton(
-                        if (plan.targets.isEmpty()) "+ Create Test Plan" else "▶  Start Test",
-                        onStart, Modifier.fillMaxWidth()
-                    )
+                    } else {
+                        SeqPrimaryButton(
+                            title = if (plan.targets.isEmpty()) "Create Test Plan" else "Start Plan",
+                            onClick = onStart,
+                            modifier = Modifier.fillMaxWidth(),
+                            icon = if (plan.targets.isEmpty())
+                                Icons.Outlined.Add else Icons.Outlined.PlayArrow
+                        )
+                    }
+                    if (plan.targets.isEmpty()) {
+                        Text("Add applications to define your test plan.",
+                            color = SeqColors.Muted, fontSize = 12.sp)
+                    } else {
+                        if (!appsCollapsed) {
+                            Column(
+                                Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(0.dp)
+                            ) {
+                                plan.targets.forEachIndexed { index, target ->
+                                    Row(
+                                        Modifier.fillMaxWidth()
+                                            .clickable(enabled = !active) { onEdit() }
+                                            .padding(vertical = 9.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        SeqAppLetter(target.packageName, target.label)
+                                        Spacer(Modifier.width(10.dp))
+                                        Column(Modifier.weight(1f)) {
+                                            Text(target.label,
+                                                fontSize = 14.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                            Text(
+                                                targetTimeLabel(target.durationSeconds) +
+                                                    if (target.origin == "community")
+                                                        " · Community" else " · Local plan",
+                                                fontSize = 11.sp, color = SeqColors.Muted
+                                            )
+                                        }
+                                        if (active && runner.currentIndex == index) {
+                                            SeqChip("Running", SeqColors.Teal)
+                                        } else {
+                                            SeqChip("Included", SeqColors.Success,
+                                                icon = Icons.Outlined.Check)
+                                        }
+                                        if (!active) {
+                                            Icon(
+                                                Icons.Outlined.ChevronRight,
+                                                contentDescription = "Edit " + target.label,
+                                                tint = SeqColors.Muted,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
+                                    }
+                                    if (index != plan.targets.lastIndex) {
+                                        HorizontalDivider(
+                                            color = SeqColors.Border.copy(alpha = 0.45f),
+                                            thickness = 0.6.dp
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        Row(Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center) {
+                            SeqTextButton(onClick = { appsCollapsed = !appsCollapsed }) {
+                                Text(if (appsCollapsed) "Show apps (" + plan.targets.size + ")"
+                                    else "Hide apps", fontSize = 12.sp, color = SeqColors.Muted)
+                                Spacer(Modifier.width(4.dp))
+                                Icon(
+                                    if (appsCollapsed) Icons.Outlined.KeyboardArrowDown
+                                        else Icons.Outlined.KeyboardArrowUp,
+                                    contentDescription = null,
+                                    tint = SeqColors.Muted, modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
         item {
             SeqCard(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Runner Status", fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.weight(1f))
-                        Text(if (connected) "● Connected" else "● Setup required",
-                            color = if (connected) SeqColors.Success else SeqColors.Error,
-                            fontSize = 12.sp)
-                    }
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    SeqSectionTitle(
+                        "Runner Status", Icons.Outlined.Timeline,
+                        trailing = {
+                            SeqChip(
+                                if (connected) "Connected" else "Setup required",
+                                if (connected) SeqColors.Success else SeqColors.Error
+                            )
+                        }
+                    )
                     if (!connected) {
-                        Text("Accessibility access is needed to switch between apps.",
+                        Text("Accessibility access is needed to run test plans.",
                             color = SeqColors.Muted, fontSize = 12.sp)
-                        SeqTextButton(onClick = onSetup) { Text("Manage permissions →") }
+                        SeqTextButton(onClick = onSetup) { Text("Manage permissions") }
                     } else if (runner.phase == RunPhase.FINISHED) {
-                        Text(if (runner.success == true) "Last run: PASS" else "Last run: FAIL / STOP",
-                            color = if (runner.success == true) SeqColors.Success else SeqColors.Error)
-                        Text("Elapsed " + duration(runner.elapsedSeconds) + " • " +
-                            runner.completedCycles + " completed cycles",
-                            color = SeqColors.Muted, fontSize = 12.sp)
-                    } else Text(if (active) "Running • " + duration(runner.elapsedSeconds)
-                        else "Ready for testing", color = SeqColors.Muted)
-                    if (connected) {
-                        SeqTextButton(onClick = onSetup) { Text("Permissions & access →") }
+                        Text(
+                            if (runner.success == true) "Last run: PASS"
+                            else "Last run: FAIL / STOP",
+                            color = if (runner.success == true) SeqColors.Success
+                            else SeqColors.Error,
+                            fontSize = 17.sp, fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            "Elapsed " + duration(runner.elapsedSeconds) + "  •  " +
+                                runner.completedCycles + " completed cycles",
+                            color = SeqColors.Muted, fontSize = 12.sp
+                        )
+                    } else {
+                        Text(
+                            if (active) "Running • " + duration(runner.elapsedSeconds)
+                            else "Ready for testing",
+                            color = SeqColors.Muted, fontSize = 14.sp
+                        )
                     }
-                    if (message.isNotEmpty()) Text(message, color = SeqColors.Error)
+                    if (message.isNotEmpty()) {
+                        Text(message, color = SeqColors.Error, fontSize = 12.sp)
+                    }
+                    if (connected) {
+                        SeqTextButton(onClick = onSetup) {
+                            Icon(Icons.Outlined.Tune, contentDescription = null,
+                                modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Permissions & access", fontSize = 12.sp)
+                        }
+                    }
                 }
             }
         }
-        item { Spacer(Modifier.height(8.dp)) }
     }
 }
 
 @Composable
-private fun SeqMetric(icon: String, amount: String, label: String, modifier: Modifier) {
+private fun SeqMetric(
+    icon: ImageVector, amount: String, label: String, modifier: Modifier
+) {
     SeqCard(modifier) {
-        Column(Modifier.fillMaxWidth().padding(vertical = 15.dp, horizontal = 3.dp),
+        Column(
+            Modifier.fillMaxWidth().padding(vertical = 14.dp, horizontal = 4.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Text(icon, color = SeqColors.Teal, fontSize = 23.sp)
+            verticalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
+            Icon(icon, contentDescription = null, tint = SeqColors.Teal,
+                modifier = Modifier.size(23.dp))
             Text(amount, fontWeight = FontWeight.Bold, fontSize = 18.sp, maxLines = 1)
             Text(label, color = SeqColors.Muted, fontSize = 11.sp)
         }

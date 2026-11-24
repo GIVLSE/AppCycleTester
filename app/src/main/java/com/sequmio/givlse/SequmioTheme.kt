@@ -1,11 +1,21 @@
 package com.sequmio.givlse
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.material3.Icon
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -30,24 +40,24 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 internal object SeqColors {
-    val Background = Color(0xFF0D1424)
-    val BackgroundEnd = Color(0xFF15152D)
-    val Card = Color(0xFF1B263A)
-    val CardRaised = Color(0xFF263147)
-    val Border = Color(0xFF3B4860)
+    val Background = Color(0xFF0A1022)
+    val BackgroundEnd = Color(0xFF15102D)
+    val Card = Color(0xFF18233A)
+    val CardRaised = Color(0xFF27304B)
+    val Border = Color(0xFF465575)
     // Accessible lavender text links and distinctly darker filled controls.
-    val Primary = Color(0xFFB99AFF)
-    val PrimaryAction = Color(0xFF7048B9)
-    val PrimaryDark = Color(0xFF593A9C)
-    val Teal = Color(0xFF48E2D0)
-    val Sky = Color(0xFF8FDFFF)
+    val Primary = Color(0xFFC39BFF)
+    val PrimaryAction = Color(0xFF8E54E9)
+    val PrimaryDark = Color(0xFF59379B)
+    val Teal = Color(0xFF40E8DC)
+    val Sky = Color(0xFF80D8FF)
     val Text = Color(0xFFF4F6FC)
     val Muted = Color(0xFFADBAD0)
     val Error = Color(0xFFFF879C)
     val Success = Color(0xFF58D9C3)
 }
 internal val SeqBackground = Brush.verticalGradient(
-    listOf(SeqColors.Background, Color(0xFF111B2D), SeqColors.BackgroundEnd)
+    listOf(SeqColors.Background, Color(0xFF111A31), SeqColors.BackgroundEnd)
 )
 
 @Composable
@@ -92,22 +102,39 @@ internal fun SeqCard(modifier: Modifier = Modifier, content: @Composable ColumnS
             disabledContainerColor = SeqColors.CardRaised,
             disabledContentColor = SeqColors.Muted
         ),
-        border = androidx.compose.foundation.BorderStroke(1.dp, SeqColors.Border.copy(alpha = 0.65f)),
-        shape = RoundedCornerShape(20.dp)
+        border = BorderStroke(1.dp, Brush.linearGradient(listOf(
+            SeqColors.Teal.copy(alpha = 0.29f),
+            SeqColors.Border.copy(alpha = 0.88f),
+            SeqColors.Primary.copy(alpha = 0.28f)))),
+        shape = RoundedCornerShape(22.dp)
     ) { Column(content = content) }
 }
 
 @Composable
 internal fun SeqPrimaryButton(title: String, onClick: () -> Unit,
-    modifier: Modifier = Modifier, enabled: Boolean = true) {
-    Button(onClick = onClick, enabled = enabled, modifier = modifier,
-        shape = RoundedCornerShape(16.dp),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = SeqColors.PrimaryAction, contentColor = Color.White,
-            disabledContainerColor = SeqColors.CardRaised,
-            disabledContentColor = SeqColors.Muted),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 14.dp)
-    ) { Text(title, fontWeight = FontWeight.SemiBold) }
+    modifier: Modifier = Modifier, enabled: Boolean = true,
+    icon: ImageVector? = null) {
+    val shape = RoundedCornerShape(16.dp)
+    Box(modifier = modifier.clip(shape).background(
+        if (enabled) Brush.horizontalGradient(listOf(
+            SeqColors.PrimaryDark, SeqColors.PrimaryAction, Color(0xFFA364DE)))
+        else Brush.horizontalGradient(listOf(SeqColors.CardRaised, SeqColors.CardRaised))
+    )) {
+        Button(onClick = onClick, enabled = enabled, modifier = Modifier.fillMaxWidth(),
+            shape = shape,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color.Transparent, contentColor = Color.White,
+                disabledContainerColor = Color.Transparent,
+                disabledContentColor = SeqColors.Muted),
+            contentPadding = PaddingValues(horizontal = 18.dp, vertical = 14.dp)
+        ) {
+            if (icon != null) {
+                Icon(icon, contentDescription = null, modifier = Modifier.size(19.dp))
+                Spacer(Modifier.width(8.dp))
+            }
+            Text(title, fontWeight = FontWeight.SemiBold)
+        }
+    }
 }
 
 /** Keep text actions legible on every dark screen, including disabled states. */

@@ -23,8 +23,8 @@ android {
         applicationId = "com.sequmio.givlse"
         minSdk = 26
         targetSdk = 36
-        versionCode = 16
-        versionName = "1.1.0"
+        versionCode = 17
+        versionName = "1.1.5"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", androidString(cloudWebClientId))
         buildConfigField("String", "FIREBASE_API_KEY", androidString(cloudApiKey))
@@ -44,6 +44,7 @@ dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2025.10.00")
     implementation(composeBom)
     implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
     debugImplementation("androidx.compose.ui:ui-tooling")
