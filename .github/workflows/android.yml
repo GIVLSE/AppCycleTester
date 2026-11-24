@@ -8,6 +8,11 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      SEQ_GOOGLE_WEB_CLIENT_ID: ${{ vars.SEQ_GOOGLE_WEB_CLIENT_ID }}
+      SEQ_FIREBASE_API_KEY: ${{ vars.SEQ_FIREBASE_API_KEY }}
+      SEQ_FIREBASE_APP_ID: ${{ vars.SEQ_FIREBASE_APP_ID }}
+      SEQ_FIREBASE_PROJECT_ID: ${{ vars.SEQ_FIREBASE_PROJECT_ID }}
     permissions:
       contents: read
     steps:

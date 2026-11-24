@@ -14,9 +14,10 @@ Sequmio allows users to automate timed switching between selected Android applic
 - Launchable installed applications: display names, package identifiers and launcher activity names for the app picker.
 - Test plans: selection and order of apps, timers, repeat mode and total-duration limit.
 - Active window package identifiers and timestamps, observed through Android Accessibility Service to verify foreground app changes.
+- Optional Google account: Firebase user ID, display name, email, profile photo URL and last login (only after account sign-in); My App draft fields remain local.
 - Execution log records, structured per-session JSON/CSV reports with app package IDs, timing, retry counts, PASS/FAIL status, and user consent acknowledgement.
 
-These records are stored locally in Android SharedPreferences. They are used only for running the selected test plans and displaying results. Sequmio does not send them automatically to servers or third parties, and has no analytics, ads, or user accounts. Export to other apps happens only when the user taps Share JSON/CSV for a specific report.
+These records are stored locally in Android SharedPreferences. They are used only for running the selected test plans and displaying results. Sequmio does not automatically send local testing data to servers or third parties, and has no analytics or ads. Optional Google sign-in uses Firebase Authentication and stores the user's basic account profile in Firebase Cloud Firestore; Google/Firebase process identity information. Sign-in is not required for local Runner. Export to other apps happens only when the user taps Share JSON/CSV for a specific report.
 
 ## Accessibility permission
 The user must explicitly consent to Sequmio's in-app disclosure and enable the Sequmio Runner service in Android Accessibility settings. The service is used to open apps and detect active app windows. It does not read screen text, record taps, capture screenshots, audio or video in the current version. The user can disable the service at any time.
@@ -35,3 +36,6 @@ If new features such as E2E recording, screenshots or automatic sharing are intr
 
 ## Privacy contact
 Vladislav Girskii (GIVLSE): https://github.com/GIVLSE/AppCycleTester/issues
+
+## Optional account management
+Sign out in Settings to clear the session on the device. Cloud profile removal may be requested through the project support tracker. Public listings, joining tests and sharing scenarios are not implemented in V0.5. My App draft data is local only.

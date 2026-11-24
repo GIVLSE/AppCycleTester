@@ -19,13 +19,13 @@ Repository: https://github.com/GIVLSE/AppCycleTester
 - Timeout if an app's window is not confirmed within 8 seconds; retry a lost window up to twice. Other-app windows trigger recovery after 5 seconds; permissioncontroller dialogs receive up to 45 seconds for manual user action, never silent approval.
 - Kotlin + Jetpack Compose, minSdk 26, targetSdk 36.
 
-**Application ID:** `com.sequmio.givlse` · **Version:** `0.4.0` (`versionCode` 9).
+**Application ID:** `com.sequmio.givlse` · **Version:** `0.5.0` (`versionCode` 10).
 
 **Important:** This is a new Android package compared to the prototype `io.github.givlse.appcycletester`; installing Sequmio will not update the previous package in place.
 
-## Sequmio UI v0.3.0
+## Sequmio UI v0.5.0
 
-The approved dark UI is implemented in Jetpack Compose with a Sequmio vector mark and launcher icon. Tabs: Tests dashboard, Test Plan editor, Scenarios (V2 roadmap only), and local History. The Accessibility onboarding is a first-class screen with explicit disclosure and consent. All test-plan and runner operations remain connected to the V1 engine. Source: `SequmioApp.kt`, `SequmioTheme.kt`, `SequmioDialogs.kt`, and `SequmioAccessSetup.kt`.
+The approved dark UI is implemented in Jetpack Compose with a Sequmio vector mark and launcher icon. Tabs: Runner, App List, My App, and History. The former Scenarios placeholder is moved under My App. A top-right gear opens Settings (Profile, permissions, About, Privacy, Terms, Support). The Accessibility onboarding is a first-class screen with explicit disclosure and consent. All test-plan and runner operations remain connected to the V1 engine. Source: `SequmioApp.kt`, `SequmioTheme.kt`, `SequmioDialogs.kt`, and `SequmioAccessSetup.kt`.
 
 The CI produces both `Sequmio-debug` and `Sequmio-release-unsigned-AAB`. **The unsigned AAB is not upload-ready for Google Play.** Production/closed-track Play upload requires a signed AAB created with the app owner's permanent upload key via the manual Play workflow; do not use a disposable key for your first release.
 
@@ -74,13 +74,22 @@ There is no gradle-wrapper.jar in this initial repository: Android Studio must u
 
 ## Later versions
 
-V0.4: foreground-service notification, finite recovery, second-level timers, screen-off safeguards and local JSON/CSV reports. Profiles remain future work.
+V0.4: foreground-service notification, finite recovery, second-level timers, screen-off safeguards and local JSON/CSV reports.
+V0.5: four-tab navigation, My App local draft, empty App List (no mock listings), Settings and optional Google/Firebase account integration. Public catalog, Join and scenario playback are not yet implemented.
 V2: E2E recorder/player with accessibility node selectors and tap/swipe assertions.
 
 ## Release verification
 
-Sequmio 0.3.0 includes a native dark-mode UI matching the approved visual design. CI compiles the APK and release bundle and runs the cycle navigation unit tests. UI and long-running accessibility switching still require real-device QA before wider production rollout. Signed Play bundles use the owner's permanent upload key. Never commit this private key or its password.
+Sequmio 0.5.0 preserves the native dark-mode UI and V0.4 runner. CI compiles the APK and release bundle and runs the cycle navigation unit tests. UI and long-running accessibility switching still require real-device QA before wider production rollout. Signed Play bundles use the owner's permanent upload key. Never commit this private key or its password.
 
 ## V0.4 Play Console requirement
 
 Foreground service uses type `specialUse` for an explicitly user-started QA cycle while other apps are in front. It shows a Stop action and releases CPU wake lock at the end. Android 14+ requires a separate **Foreground service permissions declaration** in Play Console, including the use case. Users can deny POST_NOTIFICATIONS; the FGS can still run but the Stop notification may not appear in the notification shade (Android task manager may show it). The app must not claim it can keep third-party apps' screens on.
+
+## V0.5 Google account and community foundation
+
+Local Runner and History continue to work without sign-in. The new App List is intentionally empty until V0.6 introduces real published entries and a Join flow. My App saves a device-local draft (name, package, description, Google Group URL, tester opt-in URL, Google Play URL); publishing remains disabled until a public catalog and at least one runnable scenario exist. This prevents false claims of live listings or working test recordings.
+
+Google sign-in is implemented with Android Credential Manager, Firebase Authentication and Cloud Firestore. **No Firebase project or OAuth client is checked into this repo.** Until the owner configures Firebase, the sign-in screen reports "not configured" instead of creating a mock user. When configured and used, Firebase Authentication validates Google credentials and an owner-scoped Firestore `users/{uid}` document stores display name, email, avatar URL and last login. Local test data is not uploaded. Security rules are supplied in `firestore.rules` but need deployment by the Firebase project owner.
+
+Follow `docs/FIREBASE_SETUP.md` to configure the project, OAuth SHA-1 fingerprints, GitHub Actions variables, security rules and Play Console Data safety before enabling sign-in. The cloud configuration is injected into each Android build via `SEQ_*` environment variables; no private signing key or OAuth secret is embedded in repository code.

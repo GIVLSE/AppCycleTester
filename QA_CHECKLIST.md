@@ -86,3 +86,23 @@ New color tokens: content #F4F6FC; muted #ADBAD0; text links #B99AFF; filled but
 | REL-14 | Play Console FGS declaration | specialUse use case, permissions and review video completed before upload |
 
 **Known limitation:** FLAG_KEEP_SCREEN_ON does not keep another app awake. Use a dedicated device, appropriate screen timeout or Stay awake while charging. Play Console must review the new specialUse FGS.
+
+## V0.5 navigation, profile and draft acceptance (not yet executed)
+
+| ID | Test | Expected |
+|---|---|---|
+| NAV-01 | Open Sequmio | Four bottom tabs: Runner, App List, My App, History |
+| NAV-02 | Navigate to App List and My App during a test | Existing runner keeps cycling; no plan reset |
+| NAV-03 | Switch to Runner -> Edit -> Save | Existing V0.4 plan remains intact |
+| NAV-04 | Open gear from each main tab | Settings opens, Back returns to originating tab |
+| NAV-05 | Settings -> Permissions -> Back | Returns to Settings, not a random tab |
+| NAV-06 | Settings -> About links | Version 0.5.0, Privacy Policy, Terms, Support links open |
+| APP-01 | Fill My App fields and Save | Draft persists after force-close/restart; no accidental publication |
+| APP-02 | No Google configuration supplied | Sign-in clearly displays Not Configured, no simulated user |
+| APP-03 | No community catalog backend | App List shows empty state, no fake apps or functional Join button |
+| AUTH-01 | Configure real Firebase + Google OAuth and sign in | Real credential picker and Firebase-authenticated user; Firestore owner-only user document |
+| AUTH-02 | Sign out and sign in with a different account | Firebase session cleared; new identity shown |
+| AUTH-03 | Firestore rules unauthorized access | User A cannot read/write user B's profile |
+| AUTH-04 | Play app-signing SHA-1 not yet added | Sign-in failure is surfaced; no false logged-in state |
+| AUTH-05 | Signed Play AAB and debug app | Both OAuth signing certificate fingerprints accounted for when required |
+| REG-01 | Repeat V0.4 3-app run, stop notification, History export | No functional regression in existing Runner/History |

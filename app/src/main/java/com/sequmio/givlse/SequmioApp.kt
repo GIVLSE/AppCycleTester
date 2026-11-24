@@ -29,6 +29,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.sequmio.givlse.data.AppCatalog
 import com.sequmio.givlse.data.SettingsStore
+import com.sequmio.givlse.data.MyAppDraftStore
+import com.sequmio.givlse.account.SequmioAccount
 import com.sequmio.givlse.model.*
 import com.sequmio.givlse.runner.CycleAccessibilityService
 import com.sequmio.givlse.runner.RunnerRuntime
@@ -36,7 +38,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-private enum class Page { HOME, PLAN, SCENARIOS, HISTORY, SETUP }
+private enum class Page { RUNNER, APP_LIST, MY_APP, HISTORY, PLAN, SETUP, SETTINGS }
 
 @Composable
 internal fun SequmioApp(
@@ -52,7 +54,12 @@ internal fun SequmioApp(
     val runner by RunnerRuntime.state.collectAsState()
     var plan by remember { mutableStateOf(store.loadPlan()) }
     var consent by remember { mutableStateOf(store.accessConsentGiven()) }
-    var page by remember { mutableStateOf(Page.HOME) }
+    var page by remember { mutableStateOf(Page.RUNNER) }
+    var settingsReturnPage by remember { mutableStateOf(Page.RUNNER) }
+    var setupReturnPage by remember { mutableStateOf(Page.RUNNER) }
+    val account = remember { SequmioAccount(context) }
+    val draftStore = remember { MyAppDraftStore(context) }
+    var ownAppDraft by remember { mutableStateOf(draftStore.load()) }
     var picker by remember { mutableStateOf(false) }
     var durationTarget by remember { mutableStateOf<TestTarget?>(null) }
     var message by remember { mutableStateOf("") }
@@ -78,32 +85,56 @@ internal fun SequmioApp(
         RunReportStore(context).recent()
     }
     fun setPlan(p: TestPlan) { plan = p; store.savePlan(p) }
+    fun openSettings() {
+        settingsReturnPage = when (page) {
+            Page.SETUP, Page.PLAN, Page.SETTINGS -> Page.RUNNER
+            else -> page
+        }
+        page = Page.SETTINGS
+    }
+    fun openPermissions(returnTo: Page) {
+        setupReturnPage = returnTo
+        page = Page.SETUP
+    }
     fun start() {
         message = CycleAccessibilityService.instance?.let { it.start(plan).orEmpty() }
             ?: "Sequmio Runner is not connected"
-        if (message.isEmpty()) page = Page.HOME
+        if (message.isEmpty()) page = Page.RUNNER
     }
     fun requestStart() {
         if (plan.targets.isEmpty()) page = Page.PLAN
-        else if (!consent || !connected) page = Page.SETUP
+        else if (!consent || !connected) openPermissions(Page.RUNNER)
         else start()
     }
+    val mainTabs = listOf(Page.RUNNER, Page.APP_LIST, Page.MY_APP, Page.HISTORY)
     Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
+        if (page in mainTabs) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("SEQUMIO", color = SeqColors.Muted, fontSize = 12.sp,
+                    letterSpacing = 2.sp)
+                Spacer(Modifier.weight(1f))
+                IconButton(onClick = { openSettings() }) {
+                    Text("⚙", color = SeqColors.Primary, fontSize = 25.sp)
+                }
+            }
+        }
         Box(Modifier.weight(1f)) {
             when (page) {
-                Page.HOME -> SequmioHome(
+                Page.RUNNER -> SequmioHome(
                     plan, runner, connected, message,
                     onStart = { requestStart() },
                     onEdit = { page = Page.PLAN },
-                    onSetup = { page = Page.SETUP },
-                    onPrivacy = openPrivacy,
+                    onSetup = { openPermissions(Page.RUNNER) },
                     onPause = { CycleAccessibilityService.instance?.pause() },
                     onResume = { CycleAccessibilityService.instance?.resume() },
                     onStop = { CycleAccessibilityService.instance?.stop() }
                 )
                 Page.PLAN -> SequmioPlan(
                     plan = plan, enabled = !active,
-                    onBack = { page = Page.HOME },
+                    onBack = { page = Page.RUNNER },
                     onAdd = { picker = true },
                     onDuration = { durationTarget = it },
                     onUp = { index, delta ->
@@ -120,17 +151,35 @@ internal fun SequmioApp(
                     onRepeat = { setPlan(plan.copy(repeatMode = it)) },
                     onCount = { setPlan(plan.copy(repeatCount = it)) },
                     onLimit = { setPlan(plan.copy(maxDurationMinutes = it)) },
-                    onSave = { page = Page.HOME }
+                    onSave = { page = Page.RUNNER }
                 )
-                Page.SCENARIOS -> SequmioScenarios()
+                Page.APP_LIST -> SequmioAppList(
+                    onOpenSettings = { openSettings() },
+                    profile = account.profile
+                )
+                Page.MY_APP -> SequmioMyApp(
+                    initial = ownAppDraft,
+                    profile = account.profile,
+                    onSave = { updated ->
+                        draftStore.save(updated)
+                        ownAppDraft = updated
+                    },
+                    onOpenSettings = { openSettings() }
+                )
                 Page.HISTORY -> SequmioHistory(history, runReports)
+                Page.SETTINGS -> SequmioSettings(
+                    account = account,
+                    onBack = { page = settingsReturnPage },
+                    onPermissions = { openPermissions(Page.SETTINGS) },
+                    onDisplaySettings = openDisplaySettings
+                )
                 Page.SETUP -> SequmioAccessSetup(
                     ready = connected,
                     systemEnabled = systemAccessibilityEnabled,
                     notificationsGranted = notificationsGranted,
                     consent = consent,
                     onConsent = { store.saveAccessConsent(); consent = true },
-                    onBack = { page = Page.HOME },
+                    onBack = { page = setupReturnPage },
                     onAppInfo = openAppDetails,
                     onAccessibility = openAccessibility,
                     onNotifications = requestNotificationPermission,
@@ -140,12 +189,16 @@ internal fun SequmioApp(
                 )
             }
         }
-        if (page == Page.HOME || page == Page.SCENARIOS || page == Page.HISTORY) {
+        if (page in mainTabs) {
             Row(Modifier.fillMaxWidth().background(SeqColors.Background)
                 .padding(horizontal = 14.dp, vertical = 7.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf(Triple(Page.HOME, "▶", "Tests"), Triple(Page.SCENARIOS, "◇", "Scenarios"),
-                    Triple(Page.HISTORY, "◴", "History")).forEach { (tab, icon, label) ->
+                listOf(
+                    Triple(Page.RUNNER, "▶", "Runner"),
+                    Triple(Page.APP_LIST, "▦", "App List"),
+                    Triple(Page.MY_APP, "◇", "My App"),
+                    Triple(Page.HISTORY, "◴", "History")
+                ).forEach { (tab, icon, label) ->
                     Column(Modifier.weight(1f).background(
                         if (tab == page) SeqColors.CardRaised else Color.Transparent,
                         RoundedCornerShape(14.dp)).clickable { page = tab }
@@ -184,7 +237,6 @@ internal fun SequmioApp(
 private fun SequmioHome(
     plan: TestPlan, runner: RunSnapshot, connected: Boolean, message: String,
     onStart: () -> Unit, onEdit: () -> Unit, onSetup: () -> Unit,
-    onPrivacy: () -> Unit,
     onPause: () -> Unit, onResume: () -> Unit, onStop: () -> Unit
 ) {
     val active = runner.phase == RunPhase.RUNNING || runner.phase == RunPhase.PAUSED
@@ -203,17 +255,11 @@ private fun SequmioHome(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         item {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("SEQUMIO", color = SeqColors.Muted, fontSize = 12.sp, letterSpacing = 2.sp)
-                Text("QA AUTOMATION", color = SeqColors.Teal, fontSize = 12.sp)
-            }
-        }
-        item {
             Spacer(Modifier.height(8.dp))
             SequmioMark(88.dp)
             Spacer(Modifier.height(6.dp))
             Text("Sequmio", fontSize = 34.sp, fontWeight = FontWeight.Bold)
-            Text("QA Automation", color = SeqColors.Muted)
+            Text("Mobile Test Runner", color = SeqColors.Muted)
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -299,11 +345,6 @@ private fun SequmioHome(
                     }
                     if (message.isNotEmpty()) Text(message, color = SeqColors.Error)
                 }
-            }
-        }
-        item {
-            SeqTextButton(onClick = onPrivacy) {
-                Text("Privacy Policy", color = SeqColors.Muted)
             }
         }
         item { Spacer(Modifier.height(8.dp)) }
@@ -470,24 +511,6 @@ internal fun SeqTopBar(title: String, onBack: (() -> Unit)? = null) {
             }
         }
         Text(title, fontWeight = FontWeight.Bold, fontSize = 23.sp)
-    }
-}
-
-@Composable
-private fun SequmioScenarios() {
-    Column(Modifier.fillMaxSize().padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp)) {
-        SeqTopBar("Scenarios")
-        SeqCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("◇", fontSize = 35.sp, color = SeqColors.Sky)
-                Text("E2E Recorder", fontSize = 23.sp, fontWeight = FontWeight.Bold)
-                Text("Coming in V2", color = SeqColors.Teal)
-                Text("Record, edit and replay app-specific steps during a test run. " +
-                    "This feature is not implemented in the current release.",
-                    color = SeqColors.Muted)
-            }
-        }
     }
 }
 
