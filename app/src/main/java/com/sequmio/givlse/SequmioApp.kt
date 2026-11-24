@@ -36,6 +36,7 @@ import com.sequmio.givlse.account.SequmioAccount
 import com.sequmio.givlse.model.*
 import com.sequmio.givlse.runner.CycleAccessibilityService
 import com.sequmio.givlse.runner.RunnerRuntime
+import com.sequmio.givlse.runner.RecorderRuntime
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -65,6 +66,14 @@ internal fun SequmioApp(
     var picker by remember { mutableStateOf(false) }
     var durationTarget by remember { mutableStateOf<TestTarget?>(null) }
     var message by remember { mutableStateOf("") }
+    var recorderNotice by remember { mutableStateOf("") }
+    val recorder by RecorderRuntime.state.collectAsState()
+    LaunchedEffect(permissionRefreshToken) {
+        if (!RecorderRuntime.state.value.recording &&
+            RecorderRuntime.state.value.message.startsWith("Saved ")) {
+            ownAppDraft = draftStore.load()
+        }
+    }
     val connected = runner.accessibilityReady && CycleAccessibilityService.instance != null
     val notificationsGranted = Build.VERSION.SDK_INT < 33 ||
         ContextCompat.checkSelfPermission(
@@ -188,6 +197,32 @@ internal fun SequmioApp(
                         draftStore.save(draft)
                         ownAppDraft = draft
                         page = Page.SCENARIO_EDITOR
+                    },
+                    recorderState = recorder,
+                    recorderNotice = recorderNotice,
+                    onRecord = { draft ->
+                        recorderNotice = ""
+                        draftStore.save(draft)
+                        ownAppDraft = draft
+                        val selected = apps.firstOrNull { it.packageName == draft.packageName }
+                        when {
+                            !consent -> {
+                                recorderNotice = "Review the updated recording disclosure first."
+                                openPermissions(Page.MY_APP)
+                            }
+                            !connected -> {
+                                recorderNotice = "Enable Sequmio Accessibility first."
+                                openPermissions(Page.MY_APP)
+                            }
+                            selected == null -> recorderNotice =
+                                "Install your app on this device before recording."
+                            else -> {
+                                recorderNotice = CycleAccessibilityService.instance
+                                    ?.startRecording(selected).orEmpty()
+                                if (recorderNotice.isBlank())
+                                    recorderNotice = "Recording started in " + selected.label
+                            }
+                        }
                     }
                 )
                 Page.SCENARIO_EDITOR -> SequmioScenarioEditor(

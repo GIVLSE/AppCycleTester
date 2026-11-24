@@ -80,11 +80,12 @@ internal fun SequmioAccessSetup(
                     color = SeqColors.Muted, fontSize = 14.sp
                 )
                 Text(
-                    "UI content is inspected on this device during a test. Password " +
-                        "fields cannot be targeted by text entry. Sequmio does not " +
-                        "record raw touches, take screenshots or upload screen content. " +
-                        "Public scenarios are stored in Firebase; execution reports " +
-                        "remain local unless you explicitly share them.",
+                    "You can also explicitly start a local UI recorder for your own " +
+                        "app. It captures event selectors and approximate scroll actions " +
+                        "as editable scenario steps; text input is saved as a placeholder " +
+                        "instead of collecting the characters typed. Password fields are " +
+                        "excluded. No raw touches, screenshots or screen video are stored. " +
+                        "You decide whether to publish the edited scenario to Firebase.",
                     color = SeqColors.Muted, fontSize = 14.sp
                 )
                 Row(

@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.sp
 import com.sequmio.givlse.account.SequmioAccount
 import com.sequmio.givlse.data.*
 import com.sequmio.givlse.model.InstalledApp
+import com.sequmio.givlse.runner.RecorderState
 import kotlinx.coroutines.launch
 
 private fun openSafeLink(context: Context, url: String) {
@@ -233,7 +234,10 @@ internal fun SequmioDeveloperApp(
     account: SequmioAccount,
     onSave: (MyAppDraft) -> Unit,
     onOpenSettings: () -> Unit,
-    onOpenScenarios: (MyAppDraft) -> Unit
+    onOpenScenarios: (MyAppDraft) -> Unit,
+    recorderState: RecorderState,
+    recorderNotice: String,
+    onRecord: (MyAppDraft) -> Unit
 ) {
     val scope = rememberCoroutineScope()
     val repo = remember(account) { CommunityRepository(account) }
@@ -291,6 +295,17 @@ internal fun SequmioDeveloperApp(
                 SeqTextButton(onClick = { onOpenScenarios(form) }) {
                     Text("Edit scenario JSON →")
                 }
+                SeqPrimaryButton("Record UI actions", onClick = { onRecord(form) },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !busy && !recorderState.recording && form.packageName.isNotBlank())
+                Text("Record clicks, scrolls and editable-field events in your own installed " +
+                    "app. A floating panel provides Pause/Stop. Typed content is not captured; " +
+                    "replace any text placeholders before publishing.",
+                    color = SeqColors.Muted, fontSize = 12.sp)
+                if (recorderState.message.isNotBlank())
+                    Text(recorderState.message, color = SeqColors.Muted, fontSize = 12.sp)
+                if (recorderNotice.isNotBlank())
+                    Text(recorderNotice, color = SeqColors.Muted, fontSize = 12.sp)
             }
         }
         SeqPrimaryButton("Save local draft", onClick = { save() },

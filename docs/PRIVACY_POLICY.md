@@ -20,7 +20,7 @@ Sequmio allows users to automate timed switching between selected Android applic
 These records are stored locally in Android SharedPreferences. They are used only for running the selected test plans and displaying results. Sequmio does not automatically send local testing data to servers or third parties, and has no analytics or ads. Optional Google sign-in uses Firebase Authentication and stores the user's basic account profile in Firebase Cloud Firestore; Google/Firebase process identity information. Sign-in is not required for local Runner. Export to other apps happens only when the user taps Share JSON/CSV for a specific report.
 
 ## Accessibility permission
-The user must explicitly consent to Sequmio's in-app disclosure and enable the Sequmio Runner service in Android Accessibility settings. The service is used to open apps, detect active windows, inspect visible UI node IDs/text/descriptions while a user-selected E2E scenario runs, and perform scripted taps, swipes, Back and predefined text input. It does not record raw taps, capture screenshots/audio/video, or automatically approve system permission dialogs. Password fields are excluded from text input. The user can disable the service at any time.
+The user must explicitly consent to Sequmio's in-app disclosure and enable the Sequmio Runner service in Android Accessibility settings. The service is used to open apps, detect active windows, inspect visible UI node IDs/text/descriptions while a user-selected E2E scenario runs, and perform scripted taps, swipes, Back and predefined text input. V0.8 can optionally record UI accessibility events in the developer's selected app to create an editable scenario. Only selectors/approximate gestures and placeholders for typed text are stored locally; typed characters and password fields are excluded. It does not record raw touch streams, capture screenshots/audio/video, or automatically approve system permission dialogs. The user can disable the service at any time.
 
 ## Foreground service and display
 Tests use a user-started foreground service (Android specialUse type), optional notification access to show a Stop action, and a temporary partial CPU wake lock. These do not bypass a locked screen or keep third-party apps visible.
@@ -46,3 +46,6 @@ If enabled by the owner, Firebase Firestore stores developer-submitted app names
 
 ## Scenario security and storage
 Published scenario definitions may contain predefined UI action parameters and selectors stored in Firestore; other testers can download them. Avoid placing secrets, passwords or personal data in published scenarios. Scenario execution runs locally, only inside the selected package, and does not upload the screen contents to a server.
+
+## Local UI event recorder (V0.8)
+Recording starts only after the developer explicitly selects Record UI actions in My App and ends with the floating Stop control. Captured action metadata is stored in the local My App draft and is not uploaded unless the developer subsequently publishes the scenario. The recorder cannot capture all gestures or custom-drawn UI, and typed contents are never copied into scenario fields.

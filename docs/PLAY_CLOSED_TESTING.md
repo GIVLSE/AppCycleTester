@@ -89,3 +89,6 @@ The final selected Google Play package ID is `com.sequmio.givlse` (not the proto
 ## Important
 
 This repository currently has no connected Google Play Console integration. The signed AAB is **not automatically uploaded to Play**; the owner must create the app and submit the bundle.
+
+## V0.8 Accessibility recorder disclosure
+The service now also observes click, scroll and text-field-change accessibility event types while the user explicitly records their own app. It stores UI selectors, approximate scrolls and safe text-input placeholders locally, not actual typed content. The service uses a visible Accessibility overlay with Pause/Stop. Re-record the Play Console Accessibility demonstration covering explicit V3 disclosure, Recorder controls, local save, and opt-in publishing. Review policy and user data answers before upload.

@@ -141,3 +141,18 @@ New color tokens: content #F4F6FC; muted #ADBAD0; text links #B99AFF; filled but
 | E2E-11 | Pause/resume during scenario | In-flight actions stop; replay restarts safely on resume |
 | E2E-12 | Existing consent from v0.6 | V2 disclosure required before starting |
 | E2E-13 | Play Accessibility declaration video | Shows consent, UI content access, taps and test execution |
+
+## V0.8 recorder (device tests not executed)
+| ID | Test | Expected |
+|---|---|---|
+| REC-01 | Open own app in My App and press Record | Own installed app launches, floating REC/Pause/Stop visible |
+| REC-02 | Tap a visible accessible button | CLICK step with selector and normalized fallback |
+| REC-03 | Scroll list | SWIPE step with direction and normalized coordinates |
+| REC-04 | Type text in non-password field | INPUT_TEXT with placeholder only, actual typed text not stored |
+| REC-05 | Type password | No recorded text or password event |
+| REC-06 | Pause/Resume overlay | Events omitted while paused |
+| REC-07 | Stop overlay | Scenario draft saved locally and Sequmio opens |
+| REC-08 | Unedited INPUT_TEXT placeholder | Publishing disabled until replacement |
+| REC-09 | Screen lock/service disabled | Recorder stops and removes overlay |
+| REC-10 | Accessibility V2 consent from older version | V3 consent required before recorder |
+| REC-11 | Accessibility event unavailable/custom canvas | No false claim all touches recorded |

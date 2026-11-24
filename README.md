@@ -19,7 +19,7 @@ Repository: https://github.com/GIVLSE/AppCycleTester
 - Timeout if an app's window is not confirmed within 8 seconds; retry a lost window up to twice. Other-app windows trigger recovery after 5 seconds; permissioncontroller dialogs receive up to 45 seconds for manual user action, never silent approval.
 - Kotlin + Jetpack Compose, minSdk 26, targetSdk 36.
 
-**Application ID:** `com.sequmio.givlse` · **Version:** `0.7.0` (`versionCode` 12).
+**Application ID:** `com.sequmio.givlse` · **Version:** `0.8.0` (`versionCode` 13).
 
 **Important:** This is a new Android package compared to the prototype `io.github.givlse.appcycletester`; installing Sequmio will not update the previous package in place.
 
@@ -108,3 +108,9 @@ Follow `docs/FIREBASE_SETUP.md` to configure the project, OAuth SHA-1 fingerprin
 The V1 JSON schema supports `WAIT`, `CLICK`, `SWIPE`, `INPUT_TEXT`, `SYSTEM_BACK`, `ASSERT_EXISTS` and `optional` steps. The player uses Accessibility node selectors before normalized coordinates, runs only against the expected package, rejects password-field text input and requires the user to start the run. It fails a scenario on a missing required UI element. The original timed runner still works without scenarios.
 
 Because Android permission scope changed, explicit Accessibility consent was versioned to V2 and now explains UI text inspection and simulated gestures. Review the latest Play Console Accessibility declaration and record a new demo video before submitting. The on-device code has CI coverage only; device verification and OEM compatibility remain open. Recorder remains out of scope.
+
+## V0.8: optional in-app UI event recorder
+
+My App can start a local recorder for the exact installed package owned by the developer. A visible Accessibility overlay shows REC, Pause and Stop. Only UI click events, scroll events and editable-field events are converted into JSON steps; no raw touches or screenshots are recorded, no password fields are recorded, and actual typed text is **never copied**. Text fields become `REPLACE_WITH_TEST_TEXT` placeholders that the author must edit before publication. Editor validates actions before enabling publishing. The recorder saves locally only and returns to My App at Stop.
+
+Limitations: Accessibility events are not a universal tap/swipe recorder. Secure windows, games, canvas-based UI and some Compose/Flutter views may not expose useful events or selectors. In those cases, edit the JSON manually and choose normalized coordinates. This is not a substitute for real-device QA.

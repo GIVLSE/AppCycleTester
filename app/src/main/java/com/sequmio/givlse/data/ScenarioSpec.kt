@@ -61,7 +61,9 @@ object ScenarioCodec {
                 "INPUT_TEXT" -> {
                     require(validSelector(selector)) { "Text input needs a selector" }
                     val value = params.optString("text")
-                    require(value.length in 1..1000) { "Text input must be 1–1,000 chars" }
+                    require(value.length in 1..1000 && value != "REPLACE_WITH_TEST_TEXT") {
+                        "Replace recorded text placeholder with safe test data"
+                    }
                 }
                 "SWIPE" -> require(
                     listOf("start_x_percent","start_y_percent","end_x_percent","end_y_percent")

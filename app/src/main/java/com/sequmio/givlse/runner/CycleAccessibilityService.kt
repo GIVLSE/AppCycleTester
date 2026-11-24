@@ -14,6 +14,9 @@ import android.os.SystemClock
 import android.view.accessibility.AccessibilityEvent
 import com.sequmio.givlse.data.RunReportStore
 import com.sequmio.givlse.data.ScenarioCodec
+import com.sequmio.givlse.data.MyAppDraftStore
+import com.sequmio.givlse.model.InstalledApp
+import com.sequmio.givlse.MainActivity
 import com.sequmio.givlse.data.SettingsStore
 import com.sequmio.givlse.model.RunEvent
 import com.sequmio.givlse.model.RunPhase
@@ -54,6 +57,7 @@ class CycleAccessibilityService : AccessibilityService() {
     private var receiverRegistered = false
     private var scenarioPlayer: ScenarioPlayer? = null
     private var scenarioFailed = false
+    private var recorder: AccessibilityEventRecorder? = null
 
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -80,6 +84,7 @@ class CycleAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        if (event != null) recorder?.onEvent(event)
         if (phase != RunPhase.RUNNING || event == null ||
             event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         val expected = plan?.targets?.getOrNull(index)?.packageName ?: return
@@ -103,11 +108,13 @@ class CycleAccessibilityService : AccessibilityService() {
     }
 
     override fun onInterrupt() {
+        recorder?.stop()
         if (phase == RunPhase.RUNNING || phase == RunPhase.PAUSED)
             finish("FAIL: Accessibility service interrupted", false)
     }
 
     override fun onDestroy() {
+        recorder?.stop()
         handler.removeCallbacks(ticker)
         scenarioPlayer?.stop()
         if (phase == RunPhase.RUNNING || phase == RunPhase.PAUSED)
@@ -116,6 +123,39 @@ class CycleAccessibilityService : AccessibilityService() {
         instance = null
         publish()
         super.onDestroy()
+    }
+
+    /**
+     * A local recorder starts only on explicit user request from My App.
+     * It cannot run concurrently with the timed runner or target other packages.
+     */
+    fun startRecording(target: InstalledApp): String? {
+        check(Looper.myLooper() == Looper.getMainLooper())
+        if (!store.accessConsentGiven()) return "Review and accept the updated Accessibility disclosure"
+        if (phase == RunPhase.RUNNING || phase == RunPhase.PAUSED)
+            return "Stop the running test before recording"
+        if (recorder != null) return "Recorder is already active"
+        val draftStore = MyAppDraftStore(this)
+        val draft = draftStore.load()
+        if (target.packageName != draft.packageName)
+            return "Save your My App package name before recording"
+        val instance = AccessibilityEventRecorder(this, target) { json ->
+            recorder = null
+            if (json != null) {
+                val current = draftStore.load()
+                if (current.packageName == target.packageName) {
+                    draftStore.save(current.copy(scenarioJson = json))
+                }
+            }
+            // Show the resulting scenario in My App after the user stops recording.
+            val back = Intent(this, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            runCatching { startActivity(back) }
+        }
+        recorder = instance
+        val error = instance.start()
+        if (error != null) recorder = null
+        return error
     }
 
     fun start(newPlan: TestPlan): String? {
