@@ -30,6 +30,8 @@ import androidx.compose.ui.unit.sp
 import com.sequmio.givlse.data.AppCatalog
 import com.sequmio.givlse.data.SettingsStore
 import com.sequmio.givlse.data.MyAppDraftStore
+import com.sequmio.givlse.data.ScenarioCodec
+import com.sequmio.givlse.data.PublishedApp
 import com.sequmio.givlse.account.SequmioAccount
 import com.sequmio.givlse.model.*
 import com.sequmio.givlse.runner.CycleAccessibilityService
@@ -38,7 +40,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-private enum class Page { RUNNER, APP_LIST, MY_APP, HISTORY, PLAN, SETUP, SETTINGS }
+private enum class Page { RUNNER, APP_LIST, MY_APP, HISTORY, PLAN, SETUP, SETTINGS, SCENARIO_EDITOR }
 
 @Composable
 internal fun SequmioApp(
@@ -50,7 +52,7 @@ internal fun SequmioApp(
 ) {
     val context = LocalContext.current
     val store = remember { SettingsStore(context) }
-    val apps = remember { AppCatalog.list(context) }
+    val apps = remember(permissionRefreshToken) { AppCatalog.list(context) }
     val runner by RunnerRuntime.state.collectAsState()
     var plan by remember { mutableStateOf(store.loadPlan()) }
     var consent by remember { mutableStateOf(store.accessConsentGiven()) }
@@ -153,18 +155,48 @@ internal fun SequmioApp(
                     onLimit = { setPlan(plan.copy(maxDurationMinutes = it)) },
                     onSave = { page = Page.RUNNER }
                 )
-                Page.APP_LIST -> SequmioAppList(
+                Page.APP_LIST -> SequmioCommunityCatalog(
+                    account = account,
+                    installed = apps,
+                    refreshToken = permissionRefreshToken,
                     onOpenSettings = { openSettings() },
-                    profile = account.profile
+                    onJoined = { published, installed ->
+                        val parsed = runCatching {
+                            ScenarioCodec.parse(published.scenarioJson, published.packageName)
+                        }.getOrNull()
+                        if (parsed != null) {
+                            val existing = plan.targets.filterNot {
+                                it.packageName == installed.packageName
+                            }
+                            setPlan(plan.copy(targets = existing + TestTarget(
+                                installed.packageName, installed.activityClass,
+                                published.name, parsed.totalDurationSec,
+                                scenarioJson = published.scenarioJson
+                            )))
+                        }
+                    }
                 )
-                Page.MY_APP -> SequmioMyApp(
+                Page.MY_APP -> SequmioDeveloperApp(
                     initial = ownAppDraft,
-                    profile = account.profile,
+                    account = account,
                     onSave = { updated ->
                         draftStore.save(updated)
                         ownAppDraft = updated
                     },
-                    onOpenSettings = { openSettings() }
+                    onOpenSettings = { openSettings() },
+                    onOpenScenarios = { draft ->
+                        draftStore.save(draft)
+                        ownAppDraft = draft
+                        page = Page.SCENARIO_EDITOR
+                    }
+                )
+                Page.SCENARIO_EDITOR -> SequmioScenarioEditor(
+                    initial = ownAppDraft,
+                    onSave = { updated ->
+                        draftStore.save(updated)
+                        ownAppDraft = updated
+                    },
+                    onBack = { page = Page.MY_APP }
                 )
                 Page.HISTORY -> SequmioHistory(history, runReports)
                 Page.SETTINGS -> SequmioSettings(

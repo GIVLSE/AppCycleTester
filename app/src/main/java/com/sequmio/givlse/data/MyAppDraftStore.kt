@@ -9,7 +9,8 @@ data class MyAppDraft(
     val description: String = "",
     val googleGroupUrl: String = "",
     val optInUrl: String = "",
-    val playStoreUrl: String = ""
+    val playStoreUrl: String = "",
+    val scenarioJson: String = ""
 ) {
     fun validateForPublish(): List<String> = buildList {
         if (appName.isBlank()) add("App name is required")
@@ -18,8 +19,16 @@ data class MyAppDraft(
         if (!googleGroupUrl.isHttps()) add("Google Group link must use HTTPS")
         if (!optInUrl.isHttps()) add("Become a Tester link must use HTTPS")
         if (!playStoreUrl.isHttps()) add("Google Play link must use HTTPS")
-        // No scenario engine yet. Publishing cannot be enabled in V0.5.
-        add("At least one runnable scenario is required (V0.7)")
+        if (googleGroupUrl.isNotBlank() && android.net.Uri.parse(googleGroupUrl).host != "groups.google.com")
+            add("Google Group must use groups.google.com")
+        if (optInUrl.isNotBlank() && android.net.Uri.parse(optInUrl).host != "play.google.com")
+            add("Become a Tester must use play.google.com")
+        if (playStoreUrl.isNotBlank() && android.net.Uri.parse(playStoreUrl).host != "play.google.com")
+            add("Google Play URL must use play.google.com")
+        val scenarioError = runCatching {
+            ScenarioCodec.parse(scenarioJson, packageName)
+        }.exceptionOrNull()
+        if (scenarioError != null) add("Scenario: " + (scenarioError.message ?: "Invalid JSON"))
     }
 }
 
@@ -42,7 +51,8 @@ class MyAppDraftStore(context: Context) {
             description = json.optString("description"),
             googleGroupUrl = json.optString("googleGroupUrl"),
             optInUrl = json.optString("optInUrl"),
-            playStoreUrl = json.optString("playStoreUrl")
+            playStoreUrl = json.optString("playStoreUrl"),
+            scenarioJson = json.optString("scenarioJson")
         )
     }
 
@@ -54,6 +64,7 @@ class MyAppDraftStore(context: Context) {
             .put("googleGroupUrl", draft.googleGroupUrl)
             .put("optInUrl", draft.optInUrl)
             .put("playStoreUrl", draft.playStoreUrl)
+            .put("scenarioJson", draft.scenarioJson)
         prefs.edit().putString("draft", json.toString()).apply()
     }
 }

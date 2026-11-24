@@ -1,13 +1,70 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /users/{userId} {
-      allow read: if request.auth != null && request.auth.uid == userId;
-      allow create, update: if request.auth != null && request.auth.uid == userId
-        && request.resource.data.keys().hasOnly(['displayName','email','photoUrl','lastLogin']);
-      allow delete: if request.auth != null && request.auth.uid == userId;
+    function signedIn() {
+      return request.auth != null;
     }
-    // Publishing and reading public app entries is deliberately disabled until V0.6.
+    function owner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+    function validApp(data, appId) {
+      return data.keys().hasOnly([
+          'packageName', 'name', 'description', 'ownerUid', 'ownerName',
+          'googleGroupUrl', 'optInUrl', 'playStoreUrl', 'scenarioJson',
+          'status', 'updatedAt'
+        ])
+        && data.keys().hasAll(['packageName', 'name', 'ownerUid', 'status',
+          'googleGroupUrl', 'optInUrl', 'playStoreUrl', 'scenarioJson'])
+        && data.packageName == appId
+        && data.name is string && data.name.size() > 0 && data.name.size() < 100
+        && data.description is string && data.description.size() <= 1000
+        && data.ownerUid is string && data.ownerName is string
+        && data.ownerName.size() <= 120
+        && data.googleGroupUrl is string
+        && data.googleGroupUrl.matches('https://groups\\.google\\.com/.*')
+        && data.optInUrl is string
+        && data.optInUrl.matches('https://play\\.google\\.com/apps/testing/.*')
+        && data.playStoreUrl is string
+        && data.playStoreUrl.matches('https://play\\.google\\.com/store/apps/details.*')
+        && data.scenarioJson is string
+        && data.scenarioJson.size() > 40 && data.scenarioJson.size() <= 48000
+        && data.status in ['draft', 'published']
+        && data.updatedAt is timestamp;
+    }
+    match /users/{userId} {
+      allow read: if owner(userId);
+      allow create, update: if owner(userId)
+        && request.resource.data.keys().hasOnly(['displayName','email','photoUrl','lastLogin']);
+      allow delete: if owner(userId);
+    }
+    match /apps/{appId} {
+      allow get: if resource.data.status == 'published' || owner(resource.data.ownerUid);
+      // Firestore rules are not filters: the client must query status == published.
+      allow list: if resource.data.status == 'published';
+      allow create: if signedIn() && validApp(request.resource.data, appId)
+        && owner(request.resource.data.ownerUid);
+      allow update: if owner(resource.data.ownerUid)
+        && request.resource.data.ownerUid == resource.data.ownerUid
+        && validApp(request.resource.data, appId);
+      allow delete: if owner(resource.data.ownerUid);
+    }
+    match /memberships/{membershipId} {
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly([
+          'userUid', 'packageName', 'selfConfirmed', 'joinedAt'
+        ])
+        && request.resource.data.userUid == request.auth.uid
+        && membershipId == request.auth.uid + '_' + request.resource.data.packageName
+        && request.resource.data.selfConfirmed == true
+        && request.resource.data.joinedAt is timestamp
+        && get(/databases/$(database)/documents/apps/$(request.resource.data.packageName))
+          .data.status == 'published'
+        && get(/databases/$(database)/documents/apps/$(request.resource.data.packageName))
+          .data.ownerUid != request.auth.uid;
+      allow get, list: if owner(resource.data.userUid);
+      allow delete: if owner(resource.data.userUid);
+      allow update: if false;
+    }
     match /{document=**} {
       allow read, write: if false;
     }

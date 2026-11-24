@@ -106,3 +106,20 @@ New color tokens: content #F4F6FC; muted #ADBAD0; text links #B99AFF; filled but
 | AUTH-04 | Play app-signing SHA-1 not yet added | Sign-in failure is surfaced; no false logged-in state |
 | AUTH-05 | Signed Play AAB and debug app | Both OAuth signing certificate fingerprints accounted for when required |
 | REG-01 | Repeat V0.4 3-app run, stop notification, History export | No functional regression in existing Runner/History |
+
+## V0.6 community acceptance (not executed)
+
+| ID | Check | Expected |
+|---|---|---|
+| CAT-01 | No Firebase config | App List shows honest unavailable status |
+| CAT-02 | Authenticated developer creates My App | Required fields, links, valid scenario, Save Draft |
+| CAT-03 | Developer publishes | Entry appears in `apps/{packageName}` with owner UID and published status |
+| CAT-04 | Two users edit same package | Non-owner cannot override original listing |
+| CAT-05 | Another user opens App List | Real published entry appears; no fake samples |
+| CAT-06 | Join Group and Play opt-in only | No claim of verified participation |
+| CAT-07 | Device has not installed app | Confirm Join disabled; install first |
+| CAT-08 | Tester confirms all 3 stages | Firestore membership saved and app added to local Runner |
+| CAT-09 | Developer unpublishes | Listing disappears from public query |
+| CAT-10 | Android 11,14,16 | All external intents open safely; app list refreshing on return |
+| CAT-11 | Account switches user | Cloud membership scoped by authenticated UID |
+| CAT-12 | Without scenario | Publish disabled (no WAIT-only scripts) |

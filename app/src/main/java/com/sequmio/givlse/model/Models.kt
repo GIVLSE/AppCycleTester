@@ -3,7 +3,8 @@ package com.sequmio.givlse.model
 data class InstalledApp(val packageName: String, val activityClass: String, val label: String)
 data class TestTarget(
     val packageName: String, val activityClass: String, val label: String,
-    val durationSeconds: Int = 300
+    val durationSeconds: Int = 300,
+    val scenarioJson: String? = null
 )
 enum class RepeatMode { ONCE, COUNT, ENDLESS }
 data class TestPlan(

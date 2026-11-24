@@ -39,3 +39,7 @@ Vladislav Girskii (GIVLSE): https://github.com/GIVLSE/AppCycleTester/issues
 
 ## Optional account management
 Sign out in Settings to clear the session on the device. Cloud profile removal may be requested through the project support tracker. Public listings, joining tests and sharing scenarios are not implemented in V0.5. My App draft data is local only.
+
+## Community app listings and memberships (V0.6)
+
+If enabled by the owner, Firebase Firestore stores developer-submitted app names, package identifiers, public testing links, scenario JSON, owner user IDs and display names. Users can publish or unpublish from My App. Signed-in testers may self-confirm joining third-party tests. Sequmio stores a tester UID, app package name, join time and self-confirmed participation in Firestore; it does not independently verify Google Group membership, Play opt-in or actual testing. Local test execution logs remain on the device unless intentionally shared.

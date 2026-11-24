@@ -27,7 +27,8 @@ class SettingsStore(context: Context) {
                 val activity = target.optString("activityClass")
                 if (pkg.isBlank() || activity.isBlank()) continue
                 add(TestTarget(pkg, activity, target.optString("label", pkg),
-                    target.optInt("durationSeconds", 300).coerceIn(1, 7200)))
+                    target.optInt("durationSeconds", 300).coerceIn(1, 7200),
+                    target.optString("scenarioJson", "").takeIf { it.isNotBlank() })))
             }
         }
         TestPlan(
@@ -47,7 +48,8 @@ class SettingsStore(context: Context) {
         plan.targets.forEach {
             targets.put(JSONObject().put("packageName", it.packageName)
                 .put("activityClass", it.activityClass)
-                .put("label", it.label).put("durationSeconds", it.durationSeconds))
+                .put("label", it.label).put("durationSeconds", it.durationSeconds)
+                .put("scenarioJson", it.scenarioJson ?: ""))
         }
         json.put("targets", targets)
         prefs.edit().putString("plan", json.toString()).apply()

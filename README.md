@@ -19,7 +19,7 @@ Repository: https://github.com/GIVLSE/AppCycleTester
 - Timeout if an app's window is not confirmed within 8 seconds; retry a lost window up to twice. Other-app windows trigger recovery after 5 seconds; permissioncontroller dialogs receive up to 45 seconds for manual user action, never silent approval.
 - Kotlin + Jetpack Compose, minSdk 26, targetSdk 36.
 
-**Application ID:** `com.sequmio.givlse` · **Version:** `0.5.0` (`versionCode` 10).
+**Application ID:** `com.sequmio.givlse` · **Version:** `0.6.0` (`versionCode` 11).
 
 **Important:** This is a new Android package compared to the prototype `io.github.givlse.appcycletester`; installing Sequmio will not update the previous package in place.
 
@@ -93,3 +93,12 @@ Local Runner and History continue to work without sign-in. The new App List is i
 Google sign-in is implemented with Android Credential Manager, Firebase Authentication and Cloud Firestore. **No Firebase project or OAuth client is checked into this repo.** Until the owner configures Firebase, the sign-in screen reports "not configured" instead of creating a mock user. When configured and used, Firebase Authentication validates Google credentials and an owner-scoped Firestore `users/{uid}` document stores display name, email, avatar URL and last login. Local test data is not uploaded. Security rules are supplied in `firestore.rules` but need deployment by the Firebase project owner.
 
 Follow `docs/FIREBASE_SETUP.md` to configure the project, OAuth SHA-1 fingerprints, GitHub Actions variables, security rules and Play Console Data safety before enabling sign-in. The cloud configuration is injected into each Android build via `SEQ_*` environment variables; no private signing key or OAuth secret is embedded in repository code.
+
+## V0.6: Cloud app catalog and self-attested join
+
+- Public App List reads *real* published Firestore `apps` entries; no sample listings or fake join successes.
+- My App stores its draft locally and publishes only with a signed-in owner, valid package name, 3 official HTTPS URLs and a valid deterministic scenario JSON containing a real action/assertion.
+- Each user can edit or unpublish their own app. Other users cannot overwrite its entry (see `firestore.rules`).
+- Join shows Group → Become a Tester → Install. Membership in Google Group or Play testing cannot be externally verified by Sequmio; the user explicitly self-confirms the first two steps. Install is checked against launchable apps installed on device.
+- On Join, the selected app and its owner's scenario JSON are added to the local Runner plan. Executing UI actions from those JSON scenarios requires V0.7; current runner still performs timed foreground verification.
+- This feature is *not operational* without Firebase/OAuth settings plus deployed Firestore security rules. Never treat CI PASS as cloud integration proof.

@@ -41,3 +41,11 @@ No \`google-services.json\` file is required for this integration: a named \`Fir
 ## 4. Scope exclusions
 
 App List intentionally has no remote entries and no fake Join actions in V0.5. My App saves a local draft only. Public app publishing, joining closed tests, and runnable E2E scenarios are separate V0.6–V0.8 features.
+
+## V0.6: deploy catalog and memberships rules
+
+Deploy the updated `firestore.rules` before exposing App List. It permits read-only queries of *published* apps and authenticated owner writes; membership entries are readable only by their own tester. Firestore reads are not filtered automatically, so the client queries `whereEqualTo("status", "published")` (see Firebase documentation). Test rules in Firebase Emulator with two distinct signed-in identities before enabling production data.
+
+App document IDs are Android package names, memberships are `{uid}_{packageName}`. My App requires a valid scenario JSON and three HTTPS links. The "Join" status is **self-confirmed**: Google Groups and Google Play do not give Sequmio membership attestations. The app checks device installation, not actual opt-in.
+
+When Firebase is not configured, catalog writes and login are disabled. No production cloud service was created by the app code alone.
