@@ -49,3 +49,6 @@ Published scenario definitions may contain predefined UI action parameters and s
 
 ## Local UI event recorder (V0.8)
 Recording starts only after the developer explicitly selects Record UI actions in My App and ends with the floating Stop control. Captured action metadata is stored in the local My App draft and is not uploaded unless the developer subsequently publishes the scenario. The recorder cannot capture all gestures or custom-drawn UI, and typed contents are never copied into scenario fields.
+
+## Account deletion (V0.9)
+Use Settings → Profile → Delete my Sequmio account to request removal of your Firestore profile, published listings, self-confirmed memberships and Firebase authentication record. Cloud account deletion requires a valid sign-in and may require recent reauthentication. Local test reports and My App drafts are removed by clearing app storage or uninstalling Sequmio. To request deletion outside the app, visit https://givlse.github.io/AppCycleTester/delete-account.html.

@@ -192,6 +192,7 @@ internal fun SequmioSettings(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val profile = account.profile
+    var confirmDeletion by remember { mutableStateOf(false) }
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState())
             .padding(20.dp),
@@ -208,6 +209,9 @@ internal fun SequmioSettings(
                     Text("Google account connected", color = SeqColors.Success, fontSize = 13.sp)
                     SeqTextButton(onClick = { scope.launch { account.signOut() } }) {
                         Text("Sign out")
+                    }
+                    SeqTextButton(onClick = { confirmDeletion = true }) {
+                        Text("Delete my Sequmio account", color = SeqColors.Error)
                     }
                 } else {
                     Text("Sign in with Google", fontSize = 18.sp,
@@ -257,6 +261,9 @@ internal fun SequmioSettings(
                     openExternal(context, "https://givlse.github.io/AppCycleTester/terms.html")
                 }) { Text("Terms of Service") }
                 SeqTextButton(onClick = {
+                    openExternal(context, "https://givlse.github.io/AppCycleTester/delete-account.html")
+                }) { Text("Account and data deletion") }
+                SeqTextButton(onClick = {
                     openExternal(context, "https://github.com/GIVLSE/AppCycleTester/issues")
                 }) { Text("Support / Report a problem") }
                 SeqTextButton(onClick = {
@@ -265,4 +272,28 @@ internal fun SequmioSettings(
             }
         }
     }
+    if (confirmDeletion) {
+        AlertDialog(
+            onDismissRequest = { if (!account.busy) confirmDeletion = false },
+            containerColor = SeqColors.CardRaised,
+            titleContentColor = SeqColors.Text,
+            textContentColor = SeqColors.Text,
+            title = { Text("Delete Sequmio account?") },
+            text = { Text("This removes your Firebase account, published apps, " +
+                "profile and joined test memberships. It does not delete the " +
+                "Google account itself. Local test plans remain on this device.") },
+            confirmButton = {
+                SeqTextButton(onClick = {
+                    confirmDeletion = false
+                    scope.launch { account.deleteAccount() }
+                }, enabled = !account.busy) {
+                    Text("Delete account", color = SeqColors.Error)
+                }
+            },
+            dismissButton = {
+                SeqTextButton(onClick = { confirmDeletion = false }) { Text("Cancel") }
+            }
+        )
+    }
+
 }

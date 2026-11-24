@@ -47,6 +47,12 @@ class CommunityRepository(private val account: SequmioAccount) {
         }.sortedBy { it.name.lowercase() }
     }
 
+    suspend fun publishedApp(packageName: String): PublishedApp? {
+        val doc = db().collection("apps").document(packageName).get().await()
+        val result = fromDocument(doc.data.orEmpty())
+        return result?.takeIf { it.status == "published" }
+    }
+
     suspend fun myPublishedApp(packageName: String): PublishedApp? {
         val doc = db().collection("apps").document(packageName).get().await()
         val app = fromDocument(doc.data.orEmpty())

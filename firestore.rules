@@ -40,7 +40,7 @@ service cloud.firestore {
     match /apps/{appId} {
       allow get: if resource.data.status == 'published' || owner(resource.data.ownerUid);
       // Firestore rules are not filters: the client must query status == published.
-      allow list: if resource.data.status == 'published';
+      allow list: if resource.data.status == 'published' || owner(resource.data.ownerUid);
       allow create: if signedIn() && validApp(request.resource.data, appId)
         && owner(request.resource.data.ownerUid);
       allow update: if owner(resource.data.ownerUid)

@@ -96,6 +96,30 @@ internal fun SequmioApp(
         RunReportStore(context).recent()
     }
     fun setPlan(p: TestPlan) { plan = p; store.savePlan(p) }
+    fun mergeCommunity(
+        changes: List<Pair<PublishedApp, InstalledApp>>,
+        explicitJoin: Boolean
+    ) {
+        val imported = changes.mapNotNull { (published, installed) ->
+            val spec = runCatching {
+                ScenarioCodec.parse(published.scenarioJson, published.packageName)
+            }.getOrNull() ?: return@mapNotNull null
+            installed.packageName to TestTarget(
+                installed.packageName, installed.activityClass, published.name,
+                spec.totalDurationSec, published.scenarioJson, "community"
+            )
+        }.toMap()
+        if (imported.isEmpty()) return
+        val next = plan.targets.map { existing ->
+            val remote = imported[existing.packageName]
+            if (remote != null && (explicitJoin || existing.origin == "community"))
+                remote else existing
+        }.toMutableList()
+        imported.values.forEach { remote ->
+            if (next.none { it.packageName == remote.packageName }) next.add(remote)
+        }
+        if (next != plan.targets) setPlan(plan.copy(targets = next))
+    }
     fun openSettings() {
         settingsReturnPage = when (page) {
             Page.SETUP, Page.PLAN, Page.SETTINGS -> Page.RUNNER
@@ -170,20 +194,9 @@ internal fun SequmioApp(
                     refreshToken = permissionRefreshToken,
                     onOpenSettings = { openSettings() },
                     onJoined = { published, installed ->
-                        val parsed = runCatching {
-                            ScenarioCodec.parse(published.scenarioJson, published.packageName)
-                        }.getOrNull()
-                        if (parsed != null) {
-                            val existing = plan.targets.filterNot {
-                                it.packageName == installed.packageName
-                            }
-                            setPlan(plan.copy(targets = existing + TestTarget(
-                                installed.packageName, installed.activityClass,
-                                published.name, parsed.totalDurationSec,
-                                scenarioJson = published.scenarioJson
-                            )))
-                        }
-                    }
+                        mergeCommunity(listOf(published to installed), true)
+                    },
+                    onSync = { list -> mergeCommunity(list, false) }
                 )
                 Page.MY_APP -> SequmioDeveloperApp(
                     initial = ownAppDraft,
@@ -468,7 +481,8 @@ private fun SequmioPlan(
                     }) {
                         Text(target.label, maxLines = 1, overflow = TextOverflow.Ellipsis,
                             fontWeight = FontWeight.SemiBold)
-                        Text(targetTimeLabel(target.durationSeconds) + " • edit",
+                        Text(targetTimeLabel(target.durationSeconds) +
+                            (if (target.origin == "community") " • Community" else " • edit"),
                             color = SeqColors.Muted, fontSize = 12.sp)
                     }
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {

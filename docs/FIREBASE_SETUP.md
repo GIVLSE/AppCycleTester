@@ -49,3 +49,6 @@ Deploy the updated `firestore.rules` before exposing App List. It permits read-o
 App document IDs are Android package names, memberships are `{uid}_{packageName}`. My App requires a valid scenario JSON and three HTTPS links. The "Join" status is **self-confirmed**: Google Groups and Google Play do not give Sequmio membership attestations. The app checks device installation, not actual opt-in.
 
 When Firebase is not configured, catalog writes and login are disabled. No production cloud service was created by the app code alone.
+
+## V0.9 online validation
+Verify deployed Firestore rules allow an owner to query their own listings (including drafts), delete their account and memberships while preventing edits to another user's listings. The Android app still needs actual Firebase identifiers in GitHub Actions Variables. Cloud integration tests with two Google users and separate devices have not been executed.

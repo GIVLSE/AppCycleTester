@@ -131,6 +131,45 @@ class SequmioAccount(context: Context) {
         }
     }
 
+    /**
+     * Deletes the authenticated user's Firestore profile, owned listings and
+     * self-confirmed memberships before deleting the Firebase Auth identity.
+     * If Firebase requires recent login the error is surfaced; retry after sign-in.
+     */
+    suspend fun deleteAccount() {
+        val current = requireNotNull(auth?.currentUser) { "Sign in first" }
+        val uid = current.uid
+        val database = requireNotNull(db) { "Cloud database unavailable" }
+        if (busy) return
+        busy = true
+        status = null
+        try {
+            while (true) {
+                val docs = database.collection("apps").whereEqualTo("ownerUid", uid)
+                    .limit(100).get().await().documents
+                if (docs.isEmpty()) break
+                docs.forEach { it.reference.delete().await() }
+            }
+            while (true) {
+                val docs = database.collection("memberships").whereEqualTo("userUid", uid)
+                    .limit(100).get().await().documents
+                if (docs.isEmpty()) break
+                docs.forEach { it.reference.delete().await() }
+            }
+            database.collection("users").document(uid).delete().await()
+            current.delete().await()
+            profile = null
+            status = "Cloud account and owned data deleted."
+            try {
+                CredentialManager.create(appContext)
+                    .clearCredentialState(ClearCredentialStateRequest())
+            } catch (_: Exception) { }
+        } catch (error: Exception) {
+            status = "Account deletion could not finish: " + error.javaClass.simpleName +
+                ". Re-authenticate or contact support."
+        } finally { busy = false }
+    }
+
     suspend fun signOut() {
         auth?.signOut()
         profile = null

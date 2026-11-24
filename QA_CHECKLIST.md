@@ -156,3 +156,19 @@ New color tokens: content #F4F6FC; muted #ADBAD0; text links #B99AFF; filled but
 | REC-09 | Screen lock/service disabled | Recorder stops and removes overlay |
 | REC-10 | Accessibility V2 consent from older version | V3 consent required before recorder |
 | REC-11 | Accessibility event unavailable/custom canvas | No false claim all touches recorded |
+
+## V0.9 integration tests (not yet executed)
+
+| ID | Scenario | Expected |
+|---|---|---|
+| INT-01 | Join 2 published apps | Both appear in Runner, original local apps remain |
+| INT-02 | Reorder imported apps and reopen App List | Runner order unchanged |
+| INT-03 | Owner edits published scenario; tester refreshes App List | Imported target definition updates |
+| INT-04 | Tester offline | Existing locally cached test plan remains functional |
+| INT-05 | Complete PASS run for imported app | One local QA day recorded |
+| INT-06 | Repeat on same local date | Still one local QA day |
+| INT-07 | FAIL/STOPPED run | No local QA day added |
+| INT-08 | Sign out and switch accounts | Other account cannot read private memberships |
+| INT-09 | Delete cloud account and confirm dialog | Owned listings, memberships, user profile and Auth identity removed |
+| INT-10 | Firebase requires recent login for delete | Visible error, no silent success |
+| INT-11 | Access external deletion page | Public link loads and directs users to request deletion |

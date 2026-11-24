@@ -19,7 +19,7 @@ data class RunReport(
 )
 
 /** Bounded local structured reports. Sessions interrupted by a process kill never become PASS. */
-class RunReportStore(context: Context) {
+class RunReportStore(private val context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences("sequmio_run_reports_v1", Context.MODE_PRIVATE)
     private fun pending() = prefs.getString("active", null)?.let { runCatching { JSONObject(it) }.getOrNull() }
     private fun save(json: JSONObject) { prefs.edit().putString("active", json.toString()).apply() }
@@ -93,6 +93,11 @@ class RunReportStore(context: Context) {
         json.put("status", status).put("reason", reason)
             .put("endedAt", System.currentTimeMillis())
             .put("elapsedSeconds", seconds).put("completedCycles", cycles)
+        if (status == "PASS") {
+            RunProgressStore(context).recordPassedApps(
+                json.optJSONArray("targets") ?: JSONArray()
+            )
+        }
         archive(json)
     }
 

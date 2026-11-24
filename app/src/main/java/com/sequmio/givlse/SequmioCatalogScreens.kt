@@ -36,11 +36,13 @@ internal fun SequmioCommunityCatalog(
     installed: List<InstalledApp>,
     refreshToken: Int,
     onOpenSettings: () -> Unit,
-    onJoined: (PublishedApp, InstalledApp) -> Unit
+    onJoined: (PublishedApp, InstalledApp) -> Unit,
+    onSync: (List<Pair<PublishedApp, InstalledApp>>) -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val repo = remember(account) { CommunityRepository(account) }
+    val progress = remember(context) { RunProgressStore(context) }
     var published by remember { mutableStateOf<List<PublishedApp>>(emptyList()) }
     var joined by remember { mutableStateOf<Set<String>>(emptySet()) }
     var selected by remember { mutableStateOf<PublishedApp?>(null) }
@@ -58,9 +60,21 @@ internal fun SequmioCommunityCatalog(
             busy = true
             try {
                 published = repo.published()
-                joined = if (account.profile != null)
-                    repo.joined().filter { it.selfConfirmed }.map { it.packageName }.toSet()
-                    else emptySet()
+                val membershipList = if (account.profile != null)
+                    repo.joined().filter { it.selfConfirmed } else emptyList()
+                joined = membershipList.map { it.packageName }.toSet()
+                val known = published.associateBy { it.packageName }
+                val synced = membershipList.mapNotNull { membership ->
+                    val remote = known[membership.packageName] ?: runCatching {
+                        repo.publishedApp(membership.packageName)
+                    }.getOrNull()
+                    val installedApp = installed.firstOrNull {
+                        it.packageName == membership.packageName
+                    }
+                    if (remote != null && installedApp != null)
+                        remote to installedApp else null
+                }
+                if (synced.isNotEmpty()) onSync(synced)
                 notice = ""
             } catch (error: Exception) {
                 published = emptyList()
@@ -110,6 +124,9 @@ internal fun SequmioCommunityCatalog(
                         Text("By " + app.ownerName, color = SeqColors.Muted, fontSize = 12.sp)
                         if (app.packageName in joined) {
                             Text("Joined (self-confirmed)", color = SeqColors.Success)
+                            Text(progress.days(app.packageName).toString() +
+                                " local QA days logged (not Google-verified)",
+                                color = SeqColors.Muted, fontSize = 12.sp)
                             SeqTextButton(onClick = { selected = app }) { Text("View test links") }
                         } else if (account.profile?.uid == app.ownerUid) {
                             Text("Your application", color = SeqColors.Teal)

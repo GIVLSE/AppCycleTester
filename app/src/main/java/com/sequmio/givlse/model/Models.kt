@@ -4,7 +4,8 @@ data class InstalledApp(val packageName: String, val activityClass: String, val 
 data class TestTarget(
     val packageName: String, val activityClass: String, val label: String,
     val durationSeconds: Int = 300,
-    val scenarioJson: String? = null
+    val scenarioJson: String? = null,
+    val origin: String = "local"
 )
 enum class RepeatMode { ONCE, COUNT, ENDLESS }
 data class TestPlan(
