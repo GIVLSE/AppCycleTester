@@ -53,7 +53,7 @@ import org.json.JSONArray
 import java.util.Locale
 
 private enum class Page { RUNNER, APP_LIST, MY_APP, HISTORY, PLAN, SETUP,
-    SETTINGS, SUITE_MANAGER, SCENARIO_EDITOR, QA_DASHBOARD }
+    SETTINGS, ABOUT, SUITE_MANAGER, SCENARIO_EDITOR, QA_DASHBOARD }
 
 @Composable
 internal fun SequmioApp(
@@ -346,8 +346,13 @@ internal fun SequmioApp(
                     account = account,
                     onBack = { page = settingsReturnPage },
                     onPermissions = { openPermissions(Page.SETTINGS) },
-                    onDisplaySettings = openDisplaySettings
+                    onDisplaySettings = openDisplaySettings,
+                    onAbout = { page = Page.ABOUT }
                 )
+                Page.ABOUT -> {
+                    androidx.activity.compose.BackHandler { page = Page.SETTINGS }
+                    SequmioAbout(onBack = { page = Page.SETTINGS })
+                }
                 Page.SETUP -> SequmioAccessSetup(
                     ready = connected,
                     systemEnabled = systemAccessibilityEnabled,

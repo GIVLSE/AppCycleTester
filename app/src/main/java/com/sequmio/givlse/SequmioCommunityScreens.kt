@@ -1,6 +1,21 @@
 package com.sequmio.givlse
 
 import android.app.Activity
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.*
+import androidx.compose.material3.Icon
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Surface
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
@@ -188,11 +203,48 @@ internal fun SequmioMyApp(
 }
 
 @Composable
+private fun SettingsMenuRow(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+    trailing: (@Composable () -> Unit)? = null
+) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick)
+            .heightIn(min = 72.dp).padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Surface(shape = RoundedCornerShape(12.dp),
+            color = SeqColors.Primary.copy(alpha = 0.10f)) {
+            Icon(icon, contentDescription = null, tint = SeqColors.Primary,
+                modifier = Modifier.padding(10.dp).size(25.dp))
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(title, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+            if (subtitle.isNotBlank()) Text(subtitle, color = SeqColors.Muted, fontSize = 12.sp)
+        }
+        Spacer(Modifier.width(8.dp))
+        if (trailing == null) Icon(Icons.Outlined.ChevronRight, null,
+            tint = SeqColors.Muted, modifier = Modifier.size(24.dp))
+        else trailing()
+    }
+}
+
+@Composable
+private fun SettingsRowDivider() {
+    HorizontalDivider(Modifier.padding(start = 70.dp, end = 14.dp),
+        color = SeqColors.Border.copy(alpha = 0.65f))
+}
+
+@Composable
 internal fun SequmioSettings(
     account: SequmioAccount,
     onBack: () -> Unit,
     onPermissions: () -> Unit,
-    onDisplaySettings: () -> Unit
+    onDisplaySettings: () -> Unit,
+    onAbout: () -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -201,137 +253,133 @@ internal fun SequmioSettings(
     var shareResults by remember { mutableStateOf(uploadPrefs.enabled) }
     var confirmSharing by remember { mutableStateOf(false) }
     var confirmDeletion by remember { mutableStateOf(false) }
+    var showReports by remember { mutableStateOf(false) }
+    var showSupport by remember { mutableStateOf(false) }
+    val canShare = profile != null && account.configured
     LaunchedEffect(profile?.uid) {
+        shareResults = uploadPrefs.enabled
         if (profile != null) account.refreshDailyDigest()
+    }
+    fun changeSharing(desired: Boolean) {
+        if (!canShare) return
+        if (desired) confirmSharing = true else {
+            shareResults = false
+            uploadPrefs.enabled = false
+        }
     }
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState())
-            .padding(20.dp),
+            .padding(horizontal = 18.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         SeqTopBar("Settings", onBack)
         Text("Profile", fontSize = 19.sp, fontWeight = FontWeight.Bold)
         SeqCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                if (profile != null) {
-                    Text(profile.name.ifBlank { "Google account" }, fontSize = 18.sp,
-                        fontWeight = FontWeight.SemiBold)
-                    Text(profile.email, color = SeqColors.Muted)
-                    Text("Google account connected", color = SeqColors.Success, fontSize = 13.sp)
-                    SeqTextButton(onClick = { scope.launch { account.signOut() } }) {
-                        Text("Sign out")
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(shape = CircleShape, color = SeqColors.Primary.copy(alpha = 0.16f)) {
+                        Icon(Icons.Outlined.Person, null, tint = SeqColors.Primary,
+                            modifier = Modifier.padding(12.dp).size(28.dp))
                     }
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(profile?.name?.ifBlank { "Google account" } ?: "Sign in with Google",
+                            fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                        if (profile != null) Text(profile.email, color = SeqColors.Muted, fontSize = 12.sp)
+                    }
+                }
+                if (profile != null) {
+                    SeqTextButton(onClick = { scope.launch { account.signOut() } }) { Text("Sign out") }
                     SeqTextButton(onClick = { confirmDeletion = true }) {
                         Text("Delete my Sequmio account", color = SeqColors.Error)
                     }
                 } else {
-                    Text("Sign in with Google", fontSize = 18.sp,
-                        fontWeight = FontWeight.SemiBold)
-                    Text("Connect your identity to a future My App listing and " +
-                        "community testing participation. The app stores your public " +
-                        "display name, email, and profile image URL in Firebase " +
-                        "when you sign in.", color = SeqColors.Muted, fontSize = 13.sp)
-                    if (account.configured) {
-                        SeqPrimaryButton("Continue with Google", onClick = {
-                            val activity = context as? Activity
-                            if (activity != null) scope.launch { account.signIn(activity) }
-                        }, modifier = Modifier.fillMaxWidth(), enabled = !account.busy)
-                    } else {
-                        Text(
-                            "Google sign-in is not configured for this build. " +
-                                "Firebase project and OAuth client IDs must be connected " +
-                                "by the app developer. No demo account is used.",
-                            color = SeqColors.Error, fontSize = 13.sp
-                        )
+                    Surface(
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)
+                            .clickable(enabled = !account.busy) {
+                                if (account.configured) {
+                                    val activity = context as? Activity
+                                    if (activity != null) scope.launch { account.signIn(activity) }
+                                } else {
+                                    android.widget.Toast.makeText(context, "Coming soon",
+                                        android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                        shape = RoundedCornerShape(16.dp), color = Color.White,
+                        contentColor = Color(0xFF1F1F1F)
+                    ) {
+                        Row(Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically) {
+                            Image(painterResource(R.drawable.google_sign_in_mark), null,
+                                modifier = Modifier.size(22.dp))
+                            Spacer(Modifier.width(12.dp))
+                            Text(if (account.busy) "Signing in..." else "Continue with Google",
+                                fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                        }
                     }
                 }
-                if (account.busy) Text("Signing in...", color = SeqColors.Muted)
-                account.status?.let { Text(it, color = SeqColors.Muted, fontSize = 13.sp) }
+                if (account.configured) account.status?.let {
+                    Text(it, color = SeqColors.Muted, fontSize = 12.sp)
+                }
             }
         }
-        Text("QA report sharing", fontSize = 19.sp, fontWeight = FontWeight.Bold)
         SeqCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Automatically share QA results", fontWeight = FontWeight.SemiBold)
-                        Text("Default OFF. After a run, send your tester ID, " +
-                            "device model, Android version, tested app version, " +
-                            "scenario/suite and PASS/FAIL step metadata to that " +
-                            "app's developer. No screen contents, input text or " +
-                            "passwords are uploaded.",
-                            color = SeqColors.Muted, fontSize = 12.sp)
-                    }
-                    Switch(checked = shareResults, enabled = profile != null &&
-                        account.configured, onCheckedChange = { desired ->
-                        if (desired) confirmSharing = true else {
-                            shareResults = false
-                            uploadPrefs.enabled = false
-                        }
-                    })
-                }
-                if (profile == null) Text("Sign in with Google before enabling " +
-                    "automatic sharing.", color = SeqColors.Muted, fontSize = 12.sp)
-                Text(uploadPrefs.lastStatus, color = SeqColors.Muted, fontSize = 12.sp)
-                Text("Your local Runner and reports work with sharing disabled.",
-                    color = SeqColors.Muted, fontSize = 12.sp)
-            }
+            SettingsMenuRow(Icons.Outlined.Layers, "QA Reports", "Automatically share test results",
+                onClick = { showReports = true }, trailing = {
+                    Switch(checked = shareResults && canShare, enabled = canShare,
+                        onCheckedChange = { changeSharing(it) })
+                })
+            SettingsRowDivider()
+            SettingsMenuRow(Icons.Outlined.VerifiedUser, "Permissions & Accessibility",
+                "Required for recording and automation", onClick = onPermissions)
+            SettingsRowDivider()
+            SettingsMenuRow(Icons.Outlined.Timer, "Android screen timeout",
+                "Configure screen timeout for test runs", onClick = onDisplaySettings)
+            SettingsRowDivider()
+            SettingsMenuRow(Icons.Outlined.HeadsetMic, "Support", "Help, reporting issues, and feedback",
+                onClick = { showSupport = true })
+            SettingsRowDivider()
+            SettingsMenuRow(Icons.Outlined.Info, "About", "App version, build info, and legal",
+                onClick = onAbout)
         }
-        if (profile != null) {
-            SeqCard(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(9.dp)) {
+    }
+    if (showSupport) {
+        AlertDialog(onDismissRequest = { showSupport = false },
+            title = { Text("Support") },
+            text = { Text("Coming soon") },
+            confirmButton = { TextButton(onClick = { showSupport = false }) { Text("Close") } })
+    }
+    if (showReports) {
+        AlertDialog(onDismissRequest = { showReports = false },
+            title = { Text("QA Reports") },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Share test metadata with the tested app's developer. No screen contents, input text or passwords are uploaded.",
+                        color = SeqColors.Muted, fontSize = 13.sp)
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text("Daily email QA digest",
-                                fontWeight = FontWeight.SemiBold)
-                            Text("Optional. Email your previous UTC day's QA " +
-                                "summary when the cloud scheduler and email " +
-                                "provider are configured. Reports are also shown " +
-                                "in My App → QA Dashboard.",
-                                color = SeqColors.Muted, fontSize = 12.sp)
-                        }
-                        Switch(checked = account.dailyDigest,
-                            onCheckedChange = { requested ->
-                                scope.launch { account.setDailyDigest(requested) }
+                        Text("Automatic sharing", Modifier.weight(1f))
+                        Switch(checked = shareResults && canShare, enabled = canShare,
+                            onCheckedChange = { desired ->
+                                showReports = false
+                                changeSharing(desired)
                             })
                     }
+                    if (!canShare) Text("Sign in to enable sharing.", color = SeqColors.Muted, fontSize = 12.sp)
+                    Text(uploadPrefs.lastStatus, color = SeqColors.Muted, fontSize = 12.sp)
+                    if (profile != null) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Daily email QA digest", Modifier.weight(1f))
+                            Switch(checked = account.dailyDigest,
+                                onCheckedChange = { requested -> scope.launch { account.setDailyDigest(requested) } })
+                        }
+                        Text("Optional daily summary when the email service is configured.",
+                            color = SeqColors.Muted, fontSize = 12.sp)
+                    }
                 }
-            }
-        }
-        Text("App settings", fontSize = 19.sp, fontWeight = FontWeight.Bold)
-        SeqCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                SeqTextButton(onClick = onPermissions) { Text("Permissions & Accessibility →") }
-                SeqTextButton(onClick = onDisplaySettings) { Text("Android screen timeout →") }
-                Text("Runner configuration stays in the Runner tab.",
-                    color = SeqColors.Muted, fontSize = 13.sp)
-            }
-        }
-        Text("About", fontSize = 19.sp, fontWeight = FontWeight.Bold)
-        SeqCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                Text("Sequmio v" + BuildConfig.VERSION_NAME,
-                    fontWeight = FontWeight.SemiBold)
-                Text("Package: " + BuildConfig.APPLICATION_ID,
-                    color = SeqColors.Muted, fontSize = 12.sp)
-                SeqTextButton(onClick = {
-                    openExternal(context, "https://givlse.github.io/AppCycleTester/privacy.html")
-                }) { Text("Privacy Policy") }
-                SeqTextButton(onClick = {
-                    openExternal(context, "https://givlse.github.io/AppCycleTester/terms.html")
-                }) { Text("Terms of Service") }
-                SeqTextButton(onClick = {
-                    openExternal(context, "https://givlse.github.io/AppCycleTester/delete-account.html")
-                }) { Text("Account and data deletion") }
-                SeqTextButton(onClick = {
-                    openExternal(context, "https://github.com/GIVLSE/AppCycleTester/issues")
-                }) { Text("Support / Report a problem") }
-                SeqTextButton(onClick = {
-                    openExternal(context, "https://github.com/GIVLSE/AppCycleTester")
-                }) { Text("Source code") }
-            }
-        }
+            },
+            confirmButton = { TextButton(onClick = { showReports = false }) { Text("Close") } })
     }
     if (confirmSharing) {
         AlertDialog(
@@ -384,4 +432,37 @@ internal fun SequmioSettings(
         )
     }
 
+}
+
+@Composable
+internal fun SequmioAbout(onBack: () -> Unit) {
+    val context = LocalContext.current
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        SeqTopBar("About", onBack)
+        SeqCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.fillMaxWidth().padding(18.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SequmioMark(size = 76.dp)
+                Text("Sequmio v" + BuildConfig.VERSION_NAME, fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold)
+                Text("Build " + BuildConfig.VERSION_CODE, color = SeqColors.Muted, fontSize = 13.sp)
+                Text(BuildConfig.APPLICATION_ID, color = SeqColors.Muted, fontSize = 12.sp)
+            }
+        }
+        SeqCard(Modifier.fillMaxWidth()) {
+            SettingsMenuRow(Icons.Outlined.Description, "Privacy Policy", "",
+                onClick = { openExternal(context, "https://givlse.github.io/AppCycleTester/privacy.html") })
+            SettingsRowDivider()
+            SettingsMenuRow(Icons.Outlined.Gavel, "Terms of Service", "",
+                onClick = { openExternal(context, "https://givlse.github.io/AppCycleTester/terms.html") })
+            SettingsRowDivider()
+            SettingsMenuRow(Icons.Outlined.DeleteOutline, "Account and data deletion", "",
+                onClick = { openExternal(context, "https://givlse.github.io/AppCycleTester/delete-account.html") })
+            SettingsRowDivider()
+            SettingsMenuRow(Icons.Outlined.Code, "Source code", "",
+                onClick = { openExternal(context, "https://github.com/GIVLSE/AppCycleTester") })
+        }
+    }
 }
