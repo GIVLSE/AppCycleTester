@@ -128,7 +128,7 @@ internal fun SequmioCommunityCatalog(
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         if (selected == null) {
-            SeqSectionTitle("App List", Icons.Outlined.Layers,
+            SeqNeonHeader(SeqHeroKind.CATALOG, "App List", "Installed / testable apps",
                 trailing = {
                     SeqIconAction(Icons.Outlined.Refresh, "Refresh catalog",
                         onClick = { refresh++ }, enabled = !busy)
@@ -568,6 +568,7 @@ internal fun SequmioDeveloperApp(
             .padding(horizontal = 18.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(13.dp)
     ) {
+        SeqNeonHeader(SeqHeroKind.DEVELOPER, "My App", "Developer listing")
         if (profile == null) {
             SeqPrimaryButton("Sign in to publish", onClick = onOpenSettings,
                 modifier = Modifier.fillMaxWidth(), icon = Icons.Outlined.PersonOutline)

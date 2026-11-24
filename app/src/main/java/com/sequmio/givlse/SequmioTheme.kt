@@ -94,18 +94,19 @@ internal fun SequmioTheme(content: @Composable () -> Unit) {
 }
 
 @Composable
-internal fun SeqCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+internal fun SeqCard(modifier: Modifier = Modifier, neon: Boolean = false,
+    content: @Composable ColumnScope.() -> Unit) {
     Card(modifier = modifier,
         colors = CardDefaults.cardColors(
-            containerColor = SeqColors.Card,
+            containerColor = if (neon) Color(0xFF142338) else SeqColors.Card,
             contentColor = SeqColors.Text,
             disabledContainerColor = SeqColors.CardRaised,
             disabledContentColor = SeqColors.Muted
         ),
         border = BorderStroke(1.dp, Brush.linearGradient(listOf(
-            SeqColors.Teal.copy(alpha = 0.29f),
+            SeqColors.Teal.copy(alpha = if (neon) 0.48f else 0.29f),
             SeqColors.Border.copy(alpha = 0.88f),
-            SeqColors.Primary.copy(alpha = 0.28f)))),
+            SeqColors.Primary.copy(alpha = if (neon) 0.44f else 0.28f)))),
         shape = RoundedCornerShape(22.dp)
     ) { Column(content = content) }
 }

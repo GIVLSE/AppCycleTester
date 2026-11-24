@@ -1,0 +1,3 @@
+# Sequmio 1.2.5 (26)
+
+Native Compose implementation of the supplied original design references: teal/blue/violet Runner logo halo and illuminated rim, subtle Runner backdrop, outlined navigation glyphs with blue glass active tile, and themed headers for App List (app grid), My App (code panel), and History (cyan wave). Preserves all current buttons and actions, dynamic history count, and catalog refresh. Decorative artwork uses scalable Canvas paths, not generated screenshots. Existing Firebase rules, permissions and runner logic unchanged. Version code 26 chosen after Play reported 25 already used; availability of 26 is not verified in Play Console. Device visual review is required; exact pixel parity with low-resolution concept references is not guaranteed.

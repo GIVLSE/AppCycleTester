@@ -186,7 +186,9 @@ internal fun SequmioApp(
         }
         Box(Modifier.weight(1f)) {
             when (page) {
-                Page.RUNNER -> SequmioHome(
+                Page.RUNNER -> Box(Modifier.fillMaxSize()) {
+                    SeqRunnerAtmosphere(Modifier.matchParentSize())
+                    SequmioHome(
                     plan, runner, connected, message,
                     onStart = { requestStart() },
                     onEdit = { page = Page.PLAN },
@@ -194,7 +196,8 @@ internal fun SequmioApp(
                     onPause = { CycleAccessibilityService.instance?.pause() },
                     onResume = { CycleAccessibilityService.instance?.resume() },
                     onStop = { CycleAccessibilityService.instance?.stop() }
-                )
+                    )
+                }
                 Page.PLAN -> SequmioPlan(
                     plan = plan, enabled = !active,
                     onBack = { page = Page.RUNNER },
@@ -382,50 +385,10 @@ internal fun SequmioApp(
             }
         }
         if (page in mainTabs) {
-            val tabs = listOf(
-                Triple(Page.RUNNER, Icons.Outlined.PlayArrow, "Runner"),
-                Triple(Page.APP_LIST, Icons.Outlined.Layers, "App List"),
-                Triple(Page.MY_APP, Icons.Outlined.Code, "My App"),
-                Triple(Page.HISTORY, Icons.Outlined.History, "History")
+            SeqNeonNavigation(
+                selected = mainTabs.indexOf(page),
+                onSelect = { index -> page = mainTabs[index] }
             )
-            Row(
-                Modifier.fillMaxWidth()
-                    .background(SeqColors.Background.copy(alpha = 0.97f))
-                    .padding(horizontal = 12.dp, vertical = 7.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                tabs.forEach { (tab, symbol, label) ->
-                    val selected = page == tab
-                    val shape = RoundedCornerShape(17.dp)
-                    Column(
-                        Modifier.weight(1f)
-                            .background(
-                                if (selected) SeqColors.CardRaised else Color.Transparent,
-                                shape
-                            )
-                            .then(
-                                if (selected) Modifier.border(
-                                    1.dp, SeqColors.Primary.copy(alpha = 0.25f), shape)
-                                else Modifier
-                            )
-                            .clickable { page = tab }
-                            .padding(vertical = 9.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(5.dp)
-                    ) {
-                        Icon(
-                            symbol, contentDescription = label,
-                            modifier = Modifier.size(24.dp),
-                            tint = if (selected) SeqColors.Primary else SeqColors.Muted
-                        )
-                        Text(
-                            label, fontSize = 11.sp,
-                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                            color = if (selected) SeqColors.Text else SeqColors.Muted
-                        )
-                    }
-                }
-            }
         }
     }
     if (picker) SequmioAppPicker(
@@ -503,15 +466,7 @@ private fun SequmioHome(
             }
         }
         item {
-            Column(
-                modifier = Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 2.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(3.dp)
-            ) {
-                SequmioMark(82.dp)
-                Text("Sequmio", fontSize = 31.sp, fontWeight = FontWeight.Bold)
-                Text("Mobile Test Runner", color = SeqColors.Muted, fontSize = 14.sp)
-            }
+            SeqRunnerHero()
         }
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(9.dp)) {
@@ -709,7 +664,7 @@ private fun SequmioHome(
 private fun SeqMetric(
     icon: ImageVector, amount: String, label: String, modifier: Modifier
 ) {
-    SeqCard(modifier) {
+    SeqCard(modifier, neon = true) {
         Column(
             Modifier.fillMaxWidth().padding(vertical = 14.dp, horizontal = 4.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -916,14 +871,8 @@ private fun SequmioHistory(history: List<RunEvent>, reports: List<RunReport>) {
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            SeqSectionTitle("Test History", Icons.Outlined.History,
-                tint = SeqColors.Primary)
-        }
-        item {
-            Text(
-                "Local QA sessions · " + reports.size + " latest",
-                color = SeqColors.Muted, fontSize = 12.sp
-            )
+            SeqNeonHeader(SeqHeroKind.HISTORY, "Test History",
+                "Local QA sessions · " + reports.size + " latest")
         }
         if (reports.isEmpty() && history.isEmpty()) {
             item {
