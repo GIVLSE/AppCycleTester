@@ -252,16 +252,16 @@ private fun DrawScope.heroArt(kind: SeqHeroKind) {
             }
         } else {
             fun pt(a:Float,b:Float)=Offset(x+cardW*a,y+cardH*b)
-            fun glyph(color:Color,vararg points:Offset) {
+            fun glyph(color:Color,points:List<Offset>) {
                 for(k in 0 until points.size-1) {
                     drawLine(color.copy(alpha=.20f),points[k],points[k+1],
                         strokeWidth=h*.060f,cap=StrokeCap.Round)
                     drawLine(color,points[k],points[k+1],strokeWidth=h*.023f,cap=StrokeCap.Round)
                 }
             }
-            glyph(cyan,pt(.37f,.39f),pt(.17f,.57f),pt(.37f,.75f))
-            glyph(violet,pt(.66f,.39f),pt(.86f,.57f),pt(.66f,.75f))
-            glyph(Color(0xFF94D7FF),pt(.57f,.33f),pt(.46f,.80f))
+            glyph(cyan,listOf(pt(.37f,.39f),pt(.17f,.57f),pt(.37f,.75f)))
+            glyph(violet,listOf(pt(.66f,.39f),pt(.86f,.57f),pt(.66f,.75f)))
+            glyph(Color(0xFF94D7FF),listOf(pt(.57f,.33f),pt(.46f,.80f)))
         }
     }
     // Keep foreground text dominant and fade the illustration into the page.
