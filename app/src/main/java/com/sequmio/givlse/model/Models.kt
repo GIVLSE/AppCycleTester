@@ -1,11 +1,16 @@
 package com.sequmio.givlse.model
 
 data class InstalledApp(val packageName: String, val activityClass: String, val label: String)
+enum class ExecutionMode { FIXED_DURATION, RUN_TEST_CASES, LOOP_TEST_CASES }
+
 data class TestTarget(
     val packageName: String, val activityClass: String, val label: String,
     val durationSeconds: Int = 300,
     val scenarioJson: String? = null,
-    val origin: String = "local"
+    val origin: String = "local",
+    val executionMode: ExecutionMode = if (scenarioJson.isNullOrBlank())
+        ExecutionMode.FIXED_DURATION else ExecutionMode.RUN_TEST_CASES,
+    val scenarioTimeoutSeconds: Int = 0
 )
 enum class RepeatMode { ONCE, COUNT, ENDLESS }
 data class TestPlan(
@@ -17,6 +22,9 @@ data class TestPlan(
     fun validate(): String? = when {
         targets.isEmpty() -> "Добавьте хотя бы одно приложение"
         targets.any { it.durationSeconds !in 1..7200 } -> "Время приложения: от 1 секунды до 120 минут"
+        targets.any { it.scenarioTimeoutSeconds !in 0..14430 } -> "Invalid scenario timeout"
+        targets.any { it.executionMode != ExecutionMode.FIXED_DURATION && it.scenarioJson.isNullOrBlank() } ->
+            "Selected execution mode requires test cases"
         repeatCount !in 1..999 -> "Количество циклов: от 1 до 999"
         maxDurationMinutes !in 0..10080 -> "Общий лимит: от 0 до 10080 минут"
         else -> null

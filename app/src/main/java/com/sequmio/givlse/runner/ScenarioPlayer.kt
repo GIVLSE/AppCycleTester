@@ -10,6 +10,7 @@ import android.view.accessibility.AccessibilityNodeInfo
 import com.sequmio.givlse.data.ScenarioSpec
 import com.sequmio.givlse.data.ScenarioStep
 import com.sequmio.givlse.data.StepExecutionResult
+import com.sequmio.givlse.data.StepOutcome
 
 /**
  * Deterministic, bounded, on-device scenario player.
@@ -35,6 +36,23 @@ class ScenarioPlayer(
     private var stepStartedAt = 0L
     private var pending: Runnable? = null
 
+    /** Terminal interruption; never replay a partially executed gesture. */
+    fun interrupt(status: String, reason: String) {
+        if (stopped) return
+        stop()
+        for (i in current until scenario.steps.size) {
+            val step = scenario.steps[i]
+            val active = i == current && stepStartedAt != 0L
+            onResult(StepExecutionResult(scenario.name, scenario.suite, scenario.version,
+                i + 1, step.action, if (active) status else "NOT_EXECUTED",
+                if (active) (SystemClock.elapsedRealtime() - stepStartedAt).coerceAtLeast(0) else 0L,
+                reason.take(220), System.currentTimeMillis(),
+                StepOutcome.expected(step.action),
+                if (active) "Interrupted before verification" else "Not executed",
+                status))
+        }
+    }
+
     fun start() { advance() }
 
     fun stop() {
@@ -55,16 +73,16 @@ class ScenarioPlayer(
 
     private fun advance() {
         if (stopped) return
-        if (!mayRun()) {
-            later(300) { advance() }
-            return
-        }
         if (current >= scenario.steps.size) {
             completedPasses++
             onStep("Scenario pass " + completedPasses + " completed")
             onCompleted(scenario)
             if (singlePass || !scenario.loopSteps) return
             current = 0
+        }
+        if (!mayRun()) {
+            later(300) { advance() }
+            return
         }
         val step = scenario.steps[current]
         later(step.delayBeforeMs) {
@@ -76,6 +94,7 @@ class ScenarioPlayer(
 
     private fun execute(step: ScenarioStep) {
         if (stopped) return
+        if (!mayRun()) { later(250) { execute(step) }; return }
         if (stepStartedAt == 0L) stepStartedAt = SystemClock.elapsedRealtime()
         when (step.action) {
             "WAIT" -> later(step.params.optLong("duration_ms", 500)) { complete(step) }
@@ -247,8 +266,10 @@ class ScenarioPlayer(
             advance()
         } else {
             record(step, "FAIL", message)
-            stop()
-            onFailure("Step " + (current + 1) + " " + step.action + " FAIL: " + message)
+            val failedIndex = current + 1
+            current++
+            interrupt("FAIL", "Not executed after required step failed")
+            onFailure("Step " + failedIndex + " " + step.action + " FAIL: " + message)
         }
     }
 
@@ -260,9 +281,14 @@ class ScenarioPlayer(
             stepIndex = current + 1,
             action = step.action,
             status = status,
-            durationMs = (SystemClock.elapsedRealtime() - stepStartedAt).coerceAtLeast(0),
+            durationMs = if (stepStartedAt == 0L) 0L else
+                (SystemClock.elapsedRealtime() - stepStartedAt).coerceAtLeast(0),
             message = message.take(220),
-            at = System.currentTimeMillis()
+            at = System.currentTimeMillis(),
+            expectedResult = StepOutcome.expected(step.action),
+            actualResult = if (status == "PASS") StepOutcome.passed(step.action) else message.take(220),
+            errorCode = if (status == "PASS") "" else if (step.action.startsWith("ASSERT_"))
+                "ASSERTION_NOT_MET" else "ACTION_NOT_COMPLETED"
         ))
     }
 }

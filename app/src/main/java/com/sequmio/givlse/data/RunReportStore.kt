@@ -34,6 +34,7 @@ class RunReportStore(private val context: Context) {
 
     fun recoverInterrupted(): Boolean {
         val json = pending() ?: return false
+        finalizeActive(json, "BLOCKED", "Process or Accessibility service interrupted")
         json.put("status", "INTERRUPTED")
             .put("endedAt", System.currentTimeMillis())
             .put("reason", "Process or Accessibility service interrupted")
@@ -52,6 +53,7 @@ class RunReportStore(private val context: Context) {
                 .put("packageName", t.packageName)
                 .put("durationSeconds", t.durationSeconds)
                 .put("origin", t.origin)
+                .put("executionMode", t.executionMode.name)
                 .put("scenarioName", t.scenarioJson?.let {
                     runCatching { ScenarioCodec.parseAll(it, t.packageName)
                         .joinToString(" + ") { spec -> spec.name } }.getOrDefault("")
@@ -71,7 +73,7 @@ class RunReportStore(private val context: Context) {
                 .put("retries", 0).put("failures", 0).put("foregroundSeconds", 0))
         }
         save(JSONObject()
-            .put("schema", 1).put("id", UUID.randomUUID().toString())
+            .put("schema", 2).put("id", UUID.randomUUID().toString())
             .put("status", "RUNNING").put("startedAt", System.currentTimeMillis())
             .put("endedAt", 0L).put("elapsedSeconds", 0L)
             .put("completedCycles", 0).put("repeatMode", plan.repeatMode.name)
@@ -107,65 +109,88 @@ class RunReportStore(private val context: Context) {
         }
     }
 
-    fun scenarioStarted(index: Int, spec: ScenarioSpec) {
+    fun scenarioStarted(index: Int, spec: ScenarioSpec, cycle: Int, iteration: Int,
+        timeout: Int): Boolean {
+        var accepted = false
         change { json ->
             item(json, index)?.let { target ->
                 val arr = target.optJSONArray("scenarios") ?: JSONArray()
                 if (arr.length() < 150) {
+                    val expectedSteps = JSONArray()
+                    spec.steps.forEachIndexed { i, step ->
+                        expectedSteps.put(JSONObject().put("stepIndex", i + 1)
+                            .put("action", step.action)
+                            .put("expectedResult", StepOutcome.expected(step.action)))
+                    }
                     arr.put(JSONObject()
-                        .put("name", spec.name)
-                        .put("suite", spec.suite)
-                        .put("version", spec.version)
-                        .put("status", "RUNNING")
-                        .put("startedAt", System.currentTimeMillis())
-                        .put("endedAt", 0L)
-                        .put("steps", JSONArray()))
+                        .put("name", spec.name).put("suite", spec.suite).put("version", spec.version)
+                        .put("cycle", cycle).put("iteration", iteration)
+                        .put("estimatedSeconds", spec.totalDurationSec).put("timeoutSeconds", timeout)
+                        .put("status", "RUNNING").put("reason", "")
+                        .put("startedAt", System.currentTimeMillis()).put("endedAt", 0L)
+                        .put("expectedSteps", expectedSteps).put("steps", JSONArray()))
                     target.put("scenarios", arr)
                     target.put("activeScenarioIndex", arr.length() - 1)
+                    accepted = true
                 }
             }
         }
+        return accepted
     }
 
-    private fun markScenario(index: Int, status: String) {
+    fun targetOutcome(index: Int, status: String, reason: String) {
+        change { json -> item(json, index)?.let {
+            it.put("outcome", status).put("reason", reason.take(220))
+        } }
+    }
+
+    fun scenarioEnded(index: Int, status: String, reason: String) {
         change { json ->
             item(json, index)?.let { target ->
                 val current = target.optInt("activeScenarioIndex", -1)
                 target.optJSONArray("scenarios")?.optJSONObject(current)?.let {
-                    it.put("status", status)
-                        .put("endedAt", System.currentTimeMillis())
+                    if (it.optString("status") == "RUNNING")
+                        ReportDetails.finalizeScenario(it, status, reason, System.currentTimeMillis())
                 }
+                target.put("activeScenarioIndex", -1)
             }
         }
     }
-    fun scenarioCompleted(index: Int) = markScenario(index, "PASS")
-    fun scenarioFailed(index: Int) = markScenario(index, "FAIL")
 
-    /** Save structured step outcome without UI text, selector contents or input payload. */
+    private fun finalizeActive(json: JSONObject, status: String, reason: String) {
+        val targets = json.optJSONArray("targets") ?: JSONArray()
+        for (i in 0 until targets.length()) {
+            val target = targets.optJSONObject(i) ?: continue
+            val cases = target.optJSONArray("scenarios") ?: JSONArray()
+            for (j in 0 until cases.length()) {
+                val scenario = cases.optJSONObject(j) ?: continue
+                if (scenario.optString("status") == "RUNNING")
+                    ReportDetails.finalizeScenario(scenario,
+                        if (status == "PASS") "BLOCKED" else status, reason, System.currentTimeMillis())
+            }
+            target.put("activeScenarioIndex", -1)
+        }
+    }
+
+    /** Save safe metadata only. Each scenario owns its rows; legacy aggregate is bounded. */
     fun step(index: Int, result: StepExecutionResult) {
         change { json ->
             item(json, index)?.let { target ->
+                val row = JSONObject()
+                    .put("scenarioName", result.scenarioName).put("suite", result.suite)
+                    .put("scenarioVersion", result.scenarioVersion).put("stepIndex", result.stepIndex)
+                    .put("action", result.action).put("status", result.status)
+                    .put("durationMs", result.durationMs).put("message", result.message)
+                    .put("at", result.at).put("expectedResult", result.expectedResult)
+                    .put("actualResult", result.actualResult).put("errorCode", result.errorCode)
                 val steps = target.optJSONArray("steps") ?: JSONArray()
-                if (steps.length() < 200) {
-                    steps.put(JSONObject()
-                        .put("scenarioName", result.scenarioName)
-                        .put("suite", result.suite)
-                        .put("scenarioVersion", result.scenarioVersion)
-                        .put("stepIndex", result.stepIndex)
-                        .put("action", result.action)
-                        .put("status", result.status)
-                        .put("durationMs", result.durationMs)
-                        .put("message", result.message)
-                        .put("at", result.at))
-                }
+                if (steps.length() < 200) steps.put(row)
                 target.put("steps", steps)
                 val current = target.optInt("activeScenarioIndex", -1)
                 target.optJSONArray("scenarios")?.optJSONObject(current)?.let { scenario ->
                     val ownSteps = scenario.optJSONArray("steps") ?: JSONArray()
-                    if (ownSteps.length() < 150) {
-                        ownSteps.put(steps.optJSONObject(steps.length() - 1))
-                        scenario.put("steps", ownSteps)
-                    }
+                    if (ownSteps.length() < 150) ownSteps.put(row)
+                    scenario.put("steps", ownSteps)
                 }
             }
         }
@@ -187,6 +212,7 @@ class RunReportStore(private val context: Context) {
 
     fun finish(status: String, reason: String, seconds: Long, cycles: Int) {
         val json = pending() ?: return
+        finalizeActive(json, status, reason)
         json.put("status", status).put("reason", reason)
             .put("endedAt", System.currentTimeMillis())
             .put("elapsedSeconds", seconds).put("completedCycles", cycles)
@@ -202,7 +228,7 @@ class RunReportStore(private val context: Context) {
         val arr = JSONArray().put(json)
         val old = runCatching { JSONArray(prefs.getString("history", "[]")) }.getOrDefault(JSONArray())
         for (i in 0 until minOf(old.length(), 39)) old.optJSONObject(i)?.let { arr.put(it) }
-        prefs.edit().remove("active").putString("history", arr.toString()).apply()
+        prefs.edit().remove("active").putString("history", arr.toString()).commit()
         if (CloudUploadPrefs(context).enabled) {
             runCatching { CloudRunUploader.enqueue(context, json.optString("id")) }
         }
@@ -216,31 +242,11 @@ class RunReportStore(private val context: Context) {
                     json.optString("id"), json.optString("status"),
                     json.optLong("startedAt"), json.optLong("endedAt"),
                     json.optLong("elapsedSeconds"), json.optInt("completedCycles"),
-                    json.optString("reason"), json.toString(2), toCsv(json)
+                    json.optString("reason"), json.toString(2), ReportDetails.toCsv(json)
                 )
             }
         }
     }
 
-    private fun toCsv(json: JSONObject): String {
-        fun cell(value: Any?): String = "\"" + (value?.toString() ?: "").replace("\"", "\"\"") + "\""
-        val columns = listOf("session_id", "status", "started_at", "ended_at",
-            "elapsed_seconds", "completed_cycles", "app_name", "package_name",
-            "target_seconds", "launches", "confirmed", "retries", "failures", "foreground_seconds")
-        val lines = mutableListOf(columns.joinToString(","))
-        val entries = json.optJSONArray("targets") ?: JSONArray()
-        for (i in 0 until entries.length()) {
-            val t = entries.optJSONObject(i) ?: continue
-            lines.add(listOf(
-                json.optString("id"), json.optString("status"),
-                json.optLong("startedAt"), json.optLong("endedAt"),
-                json.optLong("elapsedSeconds"), json.optInt("completedCycles"),
-                t.optString("label"), t.optString("packageName"),
-                t.optInt("durationSeconds"), t.optInt("launches"),
-                t.optInt("confirmed"), t.optInt("retries"),
-                t.optInt("failures"), t.optLong("foregroundSeconds")
-            ).joinToString(",") { cell(it) })
-        }
-        return lines.joinToString("\n")
-    }
+
 }

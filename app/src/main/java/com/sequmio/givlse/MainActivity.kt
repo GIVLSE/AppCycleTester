@@ -50,6 +50,12 @@ class MainActivity : ComponentActivity() {
         settingsReturnVersion.value += 1
     }
 
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus && RunnerRuntime.state.value.phase == RunPhase.FINISHED)
+            CycleAccessibilityService.instance?.acknowledgeResultVisible()
+    }
+
     private fun tryOpenSettings(intent: Intent): Boolean {
         return try {
             startActivity(intent)

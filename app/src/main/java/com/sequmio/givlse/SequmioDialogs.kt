@@ -29,6 +29,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.sequmio.givlse.model.InstalledApp
 import com.sequmio.givlse.model.TestTarget
+import com.sequmio.givlse.model.ExecutionMode
+import com.sequmio.givlse.model.ExecutionPolicy
+import com.sequmio.givlse.data.ScenarioCodec
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Switch
 
 @Composable
 internal fun SequmioAppPicker(
@@ -112,13 +119,28 @@ internal fun targetTimeLabel(seconds: Int): String =
         (seconds / 60).toString() + "m " + (seconds % 60).toString() + "s"
     else seconds.toString() + "s"
 
+internal fun executionLabel(target: TestTarget): String = when (target.executionMode) {
+    ExecutionMode.FIXED_DURATION -> targetTimeLabel(target.durationSeconds) + " · Fixed"
+    ExecutionMode.RUN_TEST_CASES -> "Test cases · " + targetTimeLabel(
+        runCatching { ScenarioCodec.parseAll(target.scenarioJson.orEmpty(), target.packageName)
+            .sumOf { it.totalDurationSec } }.getOrDefault(target.durationSeconds)) + " est."
+    ExecutionMode.LOOP_TEST_CASES -> targetTimeLabel(target.durationSeconds) + " · Loop"
+}
+
 @Composable
 internal fun SequmioDurationDialog(
-    target: TestTarget, onDismiss: () -> Unit, onSave: (Int) -> Unit
+    target: TestTarget, onDismiss: () -> Unit, onSave: (TestTarget) -> Unit
 ) {
-    var seconds by remember(target.packageName) {
-        mutableStateOf(target.durationSeconds.coerceIn(1, 7200))
+    val cases = remember(target.scenarioJson) {
+        runCatching { ScenarioCodec.parseAll(target.scenarioJson.orEmpty(), target.packageName) }
+            .getOrDefault(emptyList())
     }
+    var mode by remember(target) { mutableStateOf(target.executionMode) }
+    var seconds by remember(target) { mutableStateOf(target.durationSeconds.coerceIn(1, 7200)) }
+    var auto by remember(target) { mutableStateOf(target.scenarioTimeoutSeconds == 0) }
+    var manual by remember(target) { mutableStateOf(
+        if (target.scenarioTimeoutSeconds > 0) target.scenarioTimeoutSeconds.toString() else "300") }
+    val timeout = manual.toIntOrNull()
     fun adjust(delta: Int) { seconds = (seconds + delta).coerceIn(1, 7200) }
 
     AlertDialog(
@@ -128,7 +150,40 @@ internal fun SequmioDurationDialog(
         titleContentColor = SeqColors.Text,
         textContentColor = SeqColors.Text,
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Execution mode")
+                listOf(ExecutionMode.FIXED_DURATION to "Fixed Duration",
+                    ExecutionMode.RUN_TEST_CASES to "Run Test Cases",
+                    ExecutionMode.LOOP_TEST_CASES to "Loop Test Cases").forEach { (option, label) ->
+                    val available = option == ExecutionMode.FIXED_DURATION || cases.isNotEmpty()
+                    Row(Modifier.fillMaxWidth().clickable(enabled = available) { mode = option },
+                        verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = mode == option, onClick = { mode = option }, enabled = available)
+                        Text(label, color = if (available) SeqColors.Text else SeqColors.Muted)
+                    }
+                }
+                if (mode != ExecutionMode.FIXED_DURATION) {
+                    cases.forEach { spec ->
+                        Text(spec.name + " v" + spec.version + " · " +
+                            targetTimeLabel(spec.totalDurationSec) + " estimated · " +
+                            targetTimeLabel(ExecutionPolicy.timeout(spec.totalDurationSec,
+                                if (auto) 0 else timeout ?: 300)) + " timeout", fontSize = 12.sp)
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Automatic timeout", Modifier.weight(1f))
+                        Switch(checked = auto, onCheckedChange = { auto = it })
+                    }
+                    if (!auto) OutlinedTextField(value = manual,
+                        onValueChange = { manual = it.filter(Char::isDigit).take(5) },
+                        label = { Text("Timeout per case (seconds)") },
+                        isError = timeout == null || timeout !in 1..14430, singleLine = true)
+                    Text(if (mode == ExecutionMode.RUN_TEST_CASES)
+                        "Proceed immediately when the selected cases finish."
+                        else "No new case starts after the duration. The last case may finish.",
+                        color = SeqColors.Muted, fontSize = 12.sp)
+                }
+                if (mode != ExecutionMode.RUN_TEST_CASES) {
                 Text("Foreground time for this app")
                 Text(targetTimeLabel(seconds), fontSize = 24.sp, color = SeqColors.Teal)
                 Text("Minutes", color = SeqColors.Muted)
@@ -152,9 +207,15 @@ internal fun SequmioDurationDialog(
                     }
                 }
                 Text("Range: 1 second – 120 minutes", color = SeqColors.Muted, fontSize = 12.sp)
+                }
             }
         },
-        confirmButton = { SeqTextButton(onClick = { onSave(seconds) }) { Text("Save") } },
+        confirmButton = { SeqTextButton(
+            enabled = mode == ExecutionMode.FIXED_DURATION ||
+                (cases.isNotEmpty() && (auto || timeout != null && timeout in 1..14430)),
+            onClick = { onSave(target.copy(durationSeconds = seconds, executionMode = mode,
+                scenarioTimeoutSeconds = if (auto) 0 else timeout?.coerceIn(1, 14430) ?: 0)) }
+        ) { Text("Save") } },
         dismissButton = { SeqTextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }

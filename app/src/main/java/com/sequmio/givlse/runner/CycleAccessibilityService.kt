@@ -28,6 +28,8 @@ import com.sequmio.givlse.model.RunPhase
 import com.sequmio.givlse.model.RunSnapshot
 import com.sequmio.givlse.model.TestPlan
 import com.sequmio.givlse.model.TestTarget
+import com.sequmio.givlse.model.ExecutionMode
+import com.sequmio.givlse.model.ExecutionPolicy
 
 /**
  * V0.4 foreground app runner. No UI-content reading, gesture injection, or
@@ -66,19 +68,31 @@ class CycleAccessibilityService : AccessibilityService() {
     private var scenarioQueue: List<ScenarioSpec> = emptyList()
     private var scenarioPosition = 0
     private var scenarioCompletedCount = 0
+    private var scenarioStartedAt = 0L
+    private var scenarioDeadline = 0L
+    private var scenarioIteration = 1
+    private var worstStatus = "PASS"
+    private var runGeneration = 0
+    private var resultPresented = false
+    private val scenarioTimeout = Runnable {
+        if (phase == RunPhase.RUNNING && scenarioPlayer != null) {
+            val now = SystemClock.elapsedRealtime()
+            if (now >= scenarioDeadline) failScenario("Scenario timeout exceeded", "TIMEOUT")
+        }
+    }
     private var recorder: AccessibilityEventRecorder? = null
 
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == Intent.ACTION_SCREEN_OFF && phase == RunPhase.RUNNING) {
-                finish("FAIL: screen switched off or locked during an active test", false)
+                finish("Screen switched off or locked during an active test", false, status = "BLOCKED")
             }
         }
     }
     private val ticker = object : Runnable {
         override fun run() {
             tick()
-            if (phase == RunPhase.RUNNING) handler.postDelayed(this, 1000L)
+            if (phase == RunPhase.RUNNING) handler.postDelayed(this, 250L)
         }
     }
 
@@ -119,7 +133,7 @@ class CycleAccessibilityService : AccessibilityService() {
     override fun onInterrupt() {
         recorder?.stop()
         if (phase == RunPhase.RUNNING || phase == RunPhase.PAUSED)
-            finish("FAIL: Accessibility service interrupted", false)
+            finish("Accessibility service interrupted", false, status = "BLOCKED")
     }
 
     override fun onDestroy() {
@@ -127,7 +141,7 @@ class CycleAccessibilityService : AccessibilityService() {
         handler.removeCallbacks(ticker)
         scenarioPlayer?.stop()
         if (phase == RunPhase.RUNNING || phase == RunPhase.PAUSED)
-            finish("FAIL: Accessibility service stopped", false)
+            finish("Accessibility service stopped", false, status = "BLOCKED")
         unregisterScreenReceiver()
         instance = null
         publish()
@@ -195,6 +209,9 @@ class CycleAccessibilityService : AccessibilityService() {
         recordedAppSeconds = 0L
         lastTickMs = SystemClock.elapsedRealtime()
         hadFailure = false
+        worstStatus = "PASS"
+        runGeneration++
+        resultPresented = false
         success = null
         terminalStatus = null
         runCatching { getSystemService(NotificationManager::class.java).cancel(411) }
@@ -212,6 +229,8 @@ class CycleAccessibilityService : AccessibilityService() {
 
     fun pause() {
         if (phase != RunPhase.RUNNING) return
+        // Pausing a UI action mid-flight can duplicate input on resume.
+        if (plan?.targets?.getOrNull(index)?.executionMode != ExecutionMode.FIXED_DURATION) return
         accumulateTime()
         checkpoint()
         scenarioPlayer?.stop()
@@ -226,7 +245,7 @@ class CycleAccessibilityService : AccessibilityService() {
         if (phase != RunPhase.PAUSED) return
         val power = getSystemService(POWER_SERVICE) as PowerManager
         if (!power.isInteractive) {
-            finish("FAIL: device screen is off; unlock before resuming", false)
+            finish("Device screen is off; unlock before resuming", false, status = "BLOCKED")
             return
         }
         phase = RunPhase.RUNNING
@@ -251,7 +270,7 @@ class CycleAccessibilityService : AccessibilityService() {
     }
 
     fun abort(reason: String) {
-        if (phase == RunPhase.RUNNING || phase == RunPhase.PAUSED) finish("FAIL: " + reason, false)
+        if (phase == RunPhase.RUNNING || phase == RunPhase.PAUSED) finish(reason, false, status = "BLOCKED")
     }
 
     private fun tick() {
@@ -259,24 +278,28 @@ class CycleAccessibilityService : AccessibilityService() {
         val power = getSystemService(POWER_SERVICE) as PowerManager
         val keyguard = getSystemService(KEYGUARD_SERVICE) as KeyguardManager
         if (!power.isInteractive || keyguard.isKeyguardLocked) {
-            finish("FAIL: screen off or locked, foreground test cannot continue", false)
+            finish("Screen off or locked, foreground test cannot continue", false, status = "BLOCKED")
             return
         }
         accumulateTime()
         val p = plan ?: return
         if (p.maxDurationMinutes > 0 && elapsedMs >= p.maxDurationMinutes * 60_000L) {
-            if (p.targets[index].scenarioJson != null && !scenarioFailed &&
-                (scenarioQueue.isEmpty() ||
-                    scenarioCompletedCount < scenarioQueue.size)) {
-                hadFailure = true
-                reports.failure(index)
-                addEvent("FAIL: scenario did not complete before overall time cap")
-            }
-            finish("Overall time limit reached", !hadFailure)
+            finish("Overall time limit reached", false, status = "TIMEOUT")
             return
         }
         val target = p.targets[index]
         val now = SystemClock.elapsedRealtime()
+        // A launch can reuse an existing activity without a new window event.
+        if (rootInActiveWindow?.packageName?.toString() == target.packageName) {
+            otherWindowAt = 0L
+            otherWindowPackage = ""
+            if (!launchConfirmed) {
+                launchConfirmed = true
+                reports.confirmed(index)
+                startScenarioIfNeeded()
+                return
+            }
+        }
         if (!launchConfirmed && otherWindowAt > 0L &&
             RunRecoveryPolicy.isPermissionDialog(otherWindowPackage)) {
             if (now - otherWindowAt >= RunRecoveryPolicy.PERMISSION_DIALOG_TIMEOUT_MS)
@@ -291,7 +314,8 @@ class CycleAccessibilityService : AccessibilityService() {
                     "Permission dialog was not handled by user"
                 else "Unexpected foreground app " + otherWindowPackage
             )
-        } else if (appElapsedMs >= target.durationSeconds * 1000L) {
+        } else if (target.executionMode == ExecutionMode.FIXED_DURATION &&
+            appElapsedMs >= target.durationSeconds * 1000L) {
             addEvent("Completed foreground time for " + target.label)
             advanceToNext()
         }
@@ -321,20 +345,16 @@ class CycleAccessibilityService : AccessibilityService() {
     }
 
     private fun advanceToNext() {
+        accumulateTime()
         checkpoint()
         val p = plan ?: return
-        if (p.targets[index].scenarioJson != null && !scenarioFailed &&
-            (scenarioQueue.isEmpty() ||
-                scenarioCompletedCount < scenarioQueue.size)) {
-            hadFailure = true
-            reports.failure(index)
-            addEvent("FAIL: scenario did not complete for " + p.targets[index].label)
-        }
+        handler.removeCallbacks(scenarioTimeout)
         scenarioPlayer?.stop()
         scenarioPlayer = null
         scenarioQueue = emptyList()
         scenarioCompletedCount = 0
         scenarioPosition = 0
+        scenarioDeadline = 0L
         val next = RunPolicy.next(index, p.targets.size, completedCycles,
             p.repeatMode, p.repeatCount)
         completedCycles = next.completedCycles
@@ -364,9 +384,10 @@ class CycleAccessibilityService : AccessibilityService() {
                 addEvent("Retry " + retries + " for " + target.label)
                 if (launch(target)) return true
             }
-            hadFailure = true
+            noteFailure("BLOCKED")
             reports.failure(index)
-            addEvent("FAIL: could not launch " + target.label)
+            reports.targetOutcome(index, "BLOCKED", "Could not launch application")
+            addEvent("BLOCKED: could not launch " + target.label)
             inspected++
             val next = RunPolicy.next(index, p.targets.size, completedCycles,
                 p.repeatMode, p.repeatCount)
@@ -385,6 +406,10 @@ class CycleAccessibilityService : AccessibilityService() {
 
     private fun retryCurrent(reason: String) {
         val target = plan?.targets?.getOrNull(index) ?: return
+        if (scenarioPlayer != null || scenarioQueue.isNotEmpty()) {
+            failScenario(reason, "BLOCKED")
+            return
+        }
         if (RunRecoveryPolicy.canRetry(retries)) {
             retries++
             reports.retry(index)
@@ -392,9 +417,10 @@ class CycleAccessibilityService : AccessibilityService() {
                 " for " + target.label + ": " + reason)
             if (!launch(target)) retryCurrent("Relaunch failed")
         } else {
-            hadFailure = true
+            noteFailure("BLOCKED")
             reports.failure(index)
-            addEvent("FAIL: " + target.label + " after recovery attempts: " + reason)
+            reports.targetOutcome(index, "BLOCKED", reason)
+            addEvent("BLOCKED: " + target.label + " after recovery attempts: " + reason)
             advanceToNext()
         }
     }
@@ -406,6 +432,9 @@ class CycleAccessibilityService : AccessibilityService() {
         scenarioQueue = emptyList()
         scenarioPosition = 0
         scenarioCompletedCount = 0
+        scenarioIteration = 1
+        scenarioDeadline = 0L
+        handler.removeCallbacks(scenarioTimeout)
         val intent = Intent.makeMainActivity(ComponentName(target.packageName, target.activityClass))
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
         startActivity(intent)
@@ -421,16 +450,29 @@ class CycleAccessibilityService : AccessibilityService() {
         false
     }
 
-    private fun finish(reason: String, passed: Boolean, manuallyStopped: Boolean = false) {
+    private fun noteFailure(status: String) {
+        hadFailure = true
+        worstStatus = ExecutionPolicy.combine(worstStatus, status)
+    }
+
+    private fun finish(reason: String, passed: Boolean, manuallyStopped: Boolean = false,
+        status: String? = null) {
         if (phase != RunPhase.RUNNING && phase != RunPhase.PAUSED) return
         handler.removeCallbacks(ticker)
-        scenarioPlayer?.stop()
+        handler.removeCallbacks(scenarioTimeout)
+        val outcome = if (manuallyStopped) "STOPPED" else status
+            ?: if (passed) "PASS" else if (worstStatus == "PASS") "BLOCKED" else worstStatus
+        if (scenarioPlayer != null) {
+            scenarioPlayer?.interrupt(outcome, reason)
+            reports.scenarioEnded(index, outcome, reason)
+        }
         scenarioPlayer = null
         if (phase == RunPhase.RUNNING) accumulateTime()
         checkpoint()
         phase = RunPhase.FINISHED
         success = passed
-        terminalStatus = if (manuallyStopped) "STOPPED" else if (passed) "PASS" else "FAIL"
+        terminalStatus = outcome
+        if (outcome != "PASS") reports.targetOutcome(index, outcome, reason)
         lastMessage = reason
         addEvent(reason)
         reports.finish(
@@ -438,9 +480,9 @@ class CycleAccessibilityService : AccessibilityService() {
             reason, elapsedMs / 1000L, completedCycles
         )
         unregisterScreenReceiver()
-        RunnerForegroundService.stop(this)
         publish()
         presentRunResult(reason, requireNotNull(terminalStatus))
+        RunnerForegroundService.stop(this)
     }
 
     /** Return only after the terminal report is committed. Never unlock or wake the device. */
@@ -453,9 +495,9 @@ class CycleAccessibilityService : AccessibilityService() {
         runCatching {
             val manager = getSystemService(NotificationManager::class.java)
             if (manager.areNotificationsEnabled()) {
-                val channel = "sequmio_run_results"
+                val channel = "sequmio_run_results_high_v2"
                 manager.createNotificationChannel(NotificationChannel(
-                    channel, "Sequmio test results", NotificationManager.IMPORTANCE_DEFAULT
+                    channel, "Sequmio test results", NotificationManager.IMPORTANCE_HIGH
                 ))
                 val open = PendingIntent.getActivity(this, 411, intent,
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
@@ -474,8 +516,18 @@ class CycleAccessibilityService : AccessibilityService() {
         val keyguard = getSystemService(KEYGUARD_SERVICE) as KeyguardManager
         if (power.isInteractive && !keyguard.isKeyguardLocked) {
             runCatching { startActivity(intent) }
+            val generation = runGeneration
+            handler.postDelayed({
+                if (phase == RunPhase.FINISHED && runGeneration == generation &&
+                    !resultPresented && rootInActiveWindow?.packageName?.toString() != packageName &&
+                    power.isInteractive && !keyguard.isKeyguardLocked) {
+                    runCatching { startActivity(intent) }
+                }
+            }, 750L)
         }
     }
+
+    fun acknowledgeResultVisible() { resultPresented = true }
 
     private fun registerScreenReceiver() {
         if (!receiverRegistered) {
@@ -493,11 +545,15 @@ class CycleAccessibilityService : AccessibilityService() {
 
     private fun startScenarioIfNeeded() {
         val target = plan?.targets?.getOrNull(index) ?: return
-        val raw = target.scenarioJson ?: return
+        if (target.executionMode == ExecutionMode.FIXED_DURATION) return
+        val raw = target.scenarioJson ?: run {
+            failScenario("No scenario configured", "BLOCKED")
+            return
+        }
         scenarioQueue = runCatching {
             ScenarioCodec.parseAll(raw, target.packageName)
         }.getOrElse { error ->
-            failScenario("Invalid scenario: " + (error.message ?: "schema error"))
+            failScenario("Invalid scenario configuration", "BLOCKED")
             return
         }
         scenarioPosition = 0
@@ -509,52 +565,70 @@ class CycleAccessibilityService : AccessibilityService() {
         val target = plan?.targets?.getOrNull(index) ?: return
         val spec = scenarioQueue.getOrNull(scenarioPosition) ?: return
         val targetPackage = target.packageName
-        reports.scenarioStarted(index, spec)
+        val timeout = ExecutionPolicy.timeout(spec.totalDurationSec, target.scenarioTimeoutSeconds)
+        if (!reports.scenarioStarted(index, spec, completedCycles + 1, scenarioIteration, timeout)) {
+            finish("Local report capacity reached; start a new plan", false, status = "BLOCKED")
+            return
+        }
+        scenarioStartedAt = SystemClock.elapsedRealtime()
+        scenarioDeadline = scenarioStartedAt + timeout * 1000L
+        handler.removeCallbacks(scenarioTimeout)
+        handler.postDelayed(scenarioTimeout, timeout * 1000L)
         val player = ScenarioPlayer(
-            service = this,
-            handler = handler,
-            scenario = spec,
+            service = this, handler = handler, scenario = spec,
             mayRun = {
-                phase == RunPhase.RUNNING && launchConfirmed &&
-                    otherWindowAt == 0L &&
+                phase == RunPhase.RUNNING && launchConfirmed && otherWindowAt == 0L &&
+                    SystemClock.elapsedRealtime() < scenarioDeadline &&
+                    rootInActiveWindow?.packageName?.toString() == targetPackage &&
                     plan?.targets?.getOrNull(index)?.packageName == targetPackage
             },
             onStep = { event -> addEvent(event) },
-            onFailure = { error -> failScenario(error) },
+            onFailure = { error -> failScenario(error, "FAIL") },
             onResult = { result -> reports.step(index, result) },
-            singlePass = scenarioQueue.size > 1,
+            singlePass = true,
             onCompleted = { completed ->
-                // Repeated passes of one looping scenario count as one completed case.
-                if (scenarioCompletedCount <= scenarioPosition) {
-                    reports.scenarioCompleted(index)
+                if (SystemClock.elapsedRealtime() >= scenarioDeadline) {
+                    failScenario("Scenario timeout exceeded", "TIMEOUT")
+                } else {
+                    handler.removeCallbacks(scenarioTimeout)
+                    reports.scenarioEnded(index, "PASS", "")
                     scenarioCompletedCount++
-                }
-                addEvent("Scenario PASS: " + completed.name +
-                    " / " + completed.suite + " v" + completed.version)
-                if (scenarioPosition + 1 < scenarioQueue.size) {
+                    addEvent("Scenario PASS: " + completed.name + " v" + completed.version)
                     scenarioPlayer?.stop()
-                    scenarioPosition++
-                    startNextScenario()
-                } else if (!(scenarioQueue.size == 1 && completed.loopSteps)) {
-                    // A non-looping automated test finishes when its assertions pass,
-                    // not after an arbitrary five-minute idle foreground wait.
-                    advanceToNext()
+                    scenarioPlayer = null
+                    accumulateTime()
+                    if (scenarioPosition + 1 < scenarioQueue.size &&
+                        (target.executionMode != ExecutionMode.LOOP_TEST_CASES ||
+                            appElapsedMs < target.durationSeconds * 1000L)) {
+                        scenarioPosition++
+                        startNextScenario()
+                    } else if (ExecutionPolicy.repeat(target.executionMode, appElapsedMs, target.durationSeconds)) {
+                        scenarioPosition = 0
+                        scenarioIteration++
+                        startNextScenario()
+                    } else {
+                        advanceToNext()
+                    }
                 }
             }
         )
         scenarioPlayer = player
         addEvent("Executing " + spec.suite + ": " + spec.name +
-            " (v" + spec.version + ", " + spec.steps.size + " steps)")
+            " (v" + spec.version + ", timeout " + timeout + "s)")
         player.start()
     }
 
-    private fun failScenario(error: String) {
+    private fun failScenario(error: String, status: String) {
         if (phase != RunPhase.RUNNING) return
-        reports.scenarioFailed(index)
+        handler.removeCallbacks(scenarioTimeout)
+        scenarioPlayer?.interrupt(status, error)
+        reports.scenarioEnded(index, status, error)
+        scenarioPlayer = null
         scenarioFailed = true
-        hadFailure = true
+        noteFailure(status)
         reports.failure(index)
-        addEvent("FAIL: " + error)
+        reports.targetOutcome(index, status, error)
+        addEvent(status + ": " + error)
         advanceToNext()
     }
 
@@ -579,7 +653,9 @@ class CycleAccessibilityService : AccessibilityService() {
             elapsedSeconds = elapsedMs / 1000L,
             remainingSeconds = if (target != null && (phase == RunPhase.RUNNING ||
                     phase == RunPhase.PAUSED))
-                ((target.durationSeconds * 1000L - appElapsedMs).coerceAtLeast(0L) + 999L) / 1000L
+                ((if (target.executionMode == ExecutionMode.RUN_TEST_CASES)
+                    (scenarioDeadline - SystemClock.elapsedRealtime()).coerceAtLeast(0L)
+                else (target.durationSeconds * 1000L - appElapsedMs).coerceAtLeast(0L)) + 999L) / 1000L
                 else 0L,
             message = lastMessage,
             success = success,

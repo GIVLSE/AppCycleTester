@@ -139,7 +139,11 @@ internal fun SequmioApp(
         val next = plan.targets.map { existing ->
             val remote = imported[existing.packageName]
             if (remote != null && (explicitJoin || existing.origin == "community"))
-                remote else existing
+                remote.copy(executionMode = if (explicitJoin && existing.scenarioJson.isNullOrBlank())
+                    remote.executionMode else existing.executionMode,
+                    durationSeconds = if (existing.executionMode == ExecutionMode.RUN_TEST_CASES)
+                        remote.durationSeconds else existing.durationSeconds,
+                    scenarioTimeoutSeconds = existing.scenarioTimeoutSeconds) else existing
         }.toMutableList()
         imported.values.forEach { remote ->
             if (next.none { it.packageName == remote.packageName }) next.add(remote)
@@ -402,10 +406,10 @@ internal fun SequmioApp(
         }
     )
     durationTarget?.let { target ->
-        SequmioDurationDialog(target, onDismiss = { durationTarget = null }) { seconds ->
+        SequmioDurationDialog(target, onDismiss = { durationTarget = null }) { updated ->
             setPlan(plan.copy(targets = plan.targets.map {
                 if (it.packageName == target.packageName)
-                    it.copy(durationSeconds = seconds) else it
+                    updated else it
             }))
             durationTarget = null
         }
@@ -424,7 +428,12 @@ private fun SequmioHome(
     LaunchedEffect(runner.phase) {
         if (runner.phase == RunPhase.FINISHED) listState.scrollToItem(0)
     }
-    val cycleSeconds = plan.targets.sumOf { it.durationSeconds }.toLong()
+    val cycleSeconds = plan.targets.sumOf { target ->
+        if (target.executionMode == ExecutionMode.RUN_TEST_CASES)
+            runCatching { ScenarioCodec.parseAll(target.scenarioJson.orEmpty(), target.packageName)
+                .sumOf { it.totalDurationSec } }.getOrDefault(target.durationSeconds)
+        else target.durationSeconds
+    }.toLong()
     val planned = when (plan.repeatMode) {
         RepeatMode.ONCE -> cycleSeconds
         RepeatMode.COUNT -> cycleSeconds * plan.repeatCount
@@ -475,7 +484,8 @@ private fun SequmioHome(
                 SeqMetric(Icons.Outlined.Schedule,
                     seconds?.let { targetTimeLabel(it.coerceAtMost(720000L).toInt()) }
                         ?: "∞",
-                    "Duration", Modifier.weight(1f))
+                    if (plan.targets.any { it.executionMode != ExecutionMode.FIXED_DURATION })
+                        "Est. Duration" else "Duration", Modifier.weight(1f))
                 SeqMetric(Icons.Outlined.Repeat,
                     when (plan.repeatMode) {
                         RepeatMode.ONCE -> "1×"
@@ -508,6 +518,8 @@ private fun SequmioHome(
                                 title = if (runner.phase == RunPhase.RUNNING) "Pause" else "Resume",
                                 onClick = if (runner.phase == RunPhase.RUNNING) onPause else onResume,
                                 modifier = Modifier.weight(1f),
+                                enabled = plan.targets.getOrNull(runner.currentIndex)?.executionMode ==
+                                    ExecutionMode.FIXED_DURATION,
                                 icon = if (runner.phase == RunPhase.RUNNING)
                                     Icons.Outlined.Pause else Icons.Outlined.PlayArrow
                             )
@@ -557,7 +569,7 @@ private fun SequmioHome(
                                                 fontWeight = FontWeight.SemiBold,
                                                 maxLines = 1, overflow = TextOverflow.Ellipsis)
                                             Text(
-                                                targetTimeLabel(target.durationSeconds) +
+                                                executionLabel(target) +
                                                     if (target.origin == "community")
                                                         " · Community" else " · Local plan",
                                                 fontSize = 11.sp, color = SeqColors.Muted
@@ -720,7 +732,7 @@ private fun SequmioPlan(
                     }) {
                         Text(target.label, maxLines = 1, overflow = TextOverflow.Ellipsis,
                             fontWeight = FontWeight.SemiBold)
-                        Text(targetTimeLabel(target.durationSeconds) +
+                        Text(executionLabel(target) +
                             (if (target.origin == "community") " • Community" else " • edit"),
                             color = SeqColors.Muted, fontSize = 12.sp)
                     }
@@ -1001,21 +1013,40 @@ private fun SequmioHistory(history: List<RunEvent>, reports: List<RunReport>) {
                                     test.optString("suite") + " · " +
                                         test.optString("name") + " v" +
                                         test.optInt("version") + " · " +
-                                        test.optString("status"),
-                                    fontSize = 12.sp, color = SeqColors.Teal
+                                        if (test.optString("status") == "RUNNING") "INCOMPLETE"
+                                        else test.optString("status"),
+                                    fontSize = 12.sp, color = if (test.optString("status") == "PASS")
+                                        SeqColors.Success else SeqColors.Muted
                                 )
                                 val rows = test.optJSONArray("steps") ?: JSONArray()
-                                for (k in 0 until minOf(rows.length(), 75)) {
+                                if (test.has("cycle")) {
+                                    Text("Cycle " + test.optInt("cycle") + " · Iteration " +
+                                        test.optInt("iteration") + " · Estimated " +
+                                        test.optInt("estimatedSeconds") + "s · Actual " +
+                                        test.optLong("actualSeconds") + "s · Timeout " +
+                                        test.optInt("timeoutSeconds") + "s",
+                                        fontSize = 11.sp, color = SeqColors.Muted)
+                                    val statuses = (0 until rows.length()).map {
+                                        rows.optJSONObject(it)?.optString("status") }
+                                    Text("Steps: " + statuses.count { it == "PASS" } + " PASS · " +
+                                        statuses.count { it == "FAIL" } + " FAIL · " +
+                                        statuses.count { it == "NOT_EXECUTED" || it == "SKIPPED" } +
+                                        " skipped / not executed",
+                                        color = SeqColors.Muted, fontSize = 11.sp)
+                                }
+                                if (test.optString("reason").isNotBlank())
+                                    Text(test.optString("reason"), color = SeqColors.Error, fontSize = 12.sp)
+                                for (k in 0 until rows.length()) {
                                     val step = rows.optJSONObject(k) ?: continue
                                     Row(verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                         Icon(
-                                            if (step.optString("status") == "FAIL")
-                                                Icons.Outlined.Cancel
-                                            else Icons.Outlined.CheckCircle,
+                                            if (step.optString("status") == "PASS")
+                                                Icons.Outlined.CheckCircle
+                                            else Icons.Outlined.ErrorOutline,
                                             null, Modifier.size(15.dp),
-                                            tint = if (step.optString("status") == "FAIL")
-                                                SeqColors.Error else SeqColors.Success
+                                            tint = if (step.optString("status") == "PASS")
+                                                SeqColors.Success else SeqColors.Error
                                         )
                                         Text(
                                             "#" + step.optInt("stepIndex") + " " +
@@ -1025,10 +1056,14 @@ private fun SequmioHistory(history: List<RunEvent>, reports: List<RunReport>) {
                                             fontSize = 11.sp, color = SeqColors.Muted
                                         )
                                     }
-                                    if (step.optString("status") == "FAIL") {
-                                        Text(step.optString("message"),
+                                    if (step.optString("expectedResult").isNotBlank())
+                                        Text("ER: " + step.optString("expectedResult"),
                                             color = SeqColors.Muted, fontSize = 11.sp)
-                                    }
+                                    if (step.optString("actualResult").isNotBlank())
+                                        Text("AR: " + step.optString("actualResult"),
+                                            color = SeqColors.Muted, fontSize = 11.sp)
+                                    if (step.optString("status") != "PASS")
+                                        Text(step.optString("message"), color = SeqColors.Muted, fontSize = 11.sp)
                                 }
                             }
                         }

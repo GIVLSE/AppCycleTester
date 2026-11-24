@@ -93,6 +93,7 @@ class RunUploadWorker(context: Context, params: WorkerParameters) :
                     val outcome = when {
                         scenario.optString("status") == "FAIL" -> "FAIL"
                         scenario.optString("status") == "PASS" -> "PASS"
+                        scenario.optString("status") == "STOPPED" -> "STOPPED"
                         report.status == "STOPPED" -> "STOPPED"
                         report.status == "INTERRUPTED" -> "INTERRUPTED"
                         else -> "INCOMPLETE"
@@ -145,11 +146,9 @@ class RunUploadWorker(context: Context, params: WorkerParameters) :
                     )
                     val upload = db.collection("testRuns")
                         .document(report.id + "_" + index + "_" + caseIndex)
-                    if (!upload.get().await().exists()) {
-                        // Same deterministic ID prevents duplicate reports after retries.
-                        // Firestore rules accept an identical-payload retry only.
-                        upload.set(record).await()
-                    }
+                    // A read of a nonexistent report is denied by the current rules.
+                    // Create directly; immutable identical-payload retries are allowed.
+                    upload.set(record).await()
                 }
             }
             prefs.lastStatus = "Last QA run uploaded"

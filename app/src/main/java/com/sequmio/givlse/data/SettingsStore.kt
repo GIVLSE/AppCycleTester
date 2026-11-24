@@ -2,6 +2,7 @@ package com.sequmio.givlse.data
 
 import android.content.Context
 import com.sequmio.givlse.model.RepeatMode
+import com.sequmio.givlse.model.ExecutionMode
 import com.sequmio.givlse.model.RunEvent
 import com.sequmio.givlse.model.TestPlan
 import com.sequmio.givlse.model.TestTarget
@@ -29,7 +30,11 @@ class SettingsStore(context: Context) {
                 add(TestTarget(pkg, activity, target.optString("label", pkg),
                     target.optInt("durationSeconds", 300).coerceIn(1, 7200),
                     target.optString("scenarioJson", "").takeIf { it.isNotBlank() },
-                    target.optString("origin", "local")))
+                    target.optString("origin", "local"),
+                    runCatching { ExecutionMode.valueOf(target.optString("executionMode")) }
+                        .getOrDefault(if (target.optString("scenarioJson").isBlank())
+                            ExecutionMode.FIXED_DURATION else ExecutionMode.RUN_TEST_CASES),
+                    target.optInt("scenarioTimeoutSeconds", 0).coerceIn(0, 14430)))
             }
         }
         TestPlan(
@@ -51,7 +56,9 @@ class SettingsStore(context: Context) {
                 .put("activityClass", it.activityClass)
                 .put("label", it.label).put("durationSeconds", it.durationSeconds)
                 .put("scenarioJson", it.scenarioJson ?: "")
-                .put("origin", it.origin))
+                .put("origin", it.origin)
+                .put("executionMode", it.executionMode.name)
+                .put("scenarioTimeoutSeconds", it.scenarioTimeoutSeconds))
         }
         json.put("targets", targets)
         prefs.edit().putString("plan", json.toString()).apply()

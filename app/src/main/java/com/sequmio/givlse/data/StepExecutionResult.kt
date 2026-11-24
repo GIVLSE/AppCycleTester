@@ -10,5 +10,8 @@ data class StepExecutionResult(
     val status: String,
     val durationMs: Long,
     val message: String,
-    val at: Long
+    val at: Long,
+    val expectedResult: String = "",
+    val actualResult: String = "",
+    val errorCode: String = ""
 )
