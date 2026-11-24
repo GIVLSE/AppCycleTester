@@ -26,7 +26,7 @@ data class MyAppDraft(
         if (playStoreUrl.isNotBlank() && android.net.Uri.parse(playStoreUrl).host != "play.google.com")
             add("Google Play URL must use play.google.com")
         val scenarioError = runCatching {
-            ScenarioCodec.parse(scenarioJson, packageName)
+            ScenarioCodec.parseAll(scenarioJson, packageName)
         }.exceptionOrNull()
         if (scenarioError != null) add("Scenario: " + (scenarioError.message ?: "Invalid JSON"))
     }
@@ -36,7 +36,7 @@ private fun String.isHttps() =
     startsWith("https://", ignoreCase = true) &&
     android.net.Uri.parse(this).host?.isNotBlank() == true
 
-/** One offline draft in V0.5. No public listing or server-side publishing. */
+/** Offline developer draft; JSON may contain up to 12 versioned test cases. */
 class MyAppDraftStore(context: Context) {
     private val prefs = context.applicationContext
         .getSharedPreferences("sequmio_my_app_draft_v1", Context.MODE_PRIVATE)

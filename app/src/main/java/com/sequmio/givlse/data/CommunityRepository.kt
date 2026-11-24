@@ -63,26 +63,46 @@ class CommunityRepository(private val account: SequmioAccount) {
         val uid = requiredUid()
         val errors = draft.validateForPublish()
         require(errors.isEmpty()) { errors.joinToString("; ") }
+        val testCases = ScenarioCodec.parseAll(scenarioJson, draft.packageName)
         require(scenarioJson.length <= 48_000) { "Scenario is too large." }
         val doc = db().collection("apps").document(draft.packageName)
-        val existing = doc.get().await()
-        if (existing.exists() && existing.getString("ownerUid") != uid) {
-            error("This package name is already registered by another developer.")
-        }
-        val fields = mapOf(
-            "packageName" to draft.packageName,
-            "name" to draft.appName,
-            "description" to draft.description,
-            "ownerUid" to uid,
-            "ownerName" to (account.profile?.name.orEmpty().ifBlank { "Developer" }),
-            "googleGroupUrl" to draft.googleGroupUrl,
-            "optInUrl" to draft.optInUrl,
-            "playStoreUrl" to draft.playStoreUrl,
-            "scenarioJson" to scenarioJson,
-            "status" to "published",
-            "updatedAt" to Timestamp.now()
-        )
-        doc.set(fields).await()
+        db().runTransaction { transaction ->
+            val existing = transaction.get(doc)
+            if (existing.exists() && existing.getString("ownerUid") != uid) {
+                error("This package name belongs to another developer")
+            }
+            val changed = !existing.exists() ||
+                existing.getString("scenarioJson") != scenarioJson
+            val oldVersion = existing.getLong("scenarioVersion")?.toInt() ?: 0
+            val version = if (changed) oldVersion + 1 else maxOf(oldVersion, 1)
+            val fields = mapOf(
+                "packageName" to draft.packageName,
+                "name" to draft.appName,
+                "description" to draft.description,
+                "ownerUid" to uid,
+                "ownerName" to (account.profile?.name.orEmpty().ifBlank { "Developer" }),
+                "googleGroupUrl" to draft.googleGroupUrl,
+                "optInUrl" to draft.optInUrl,
+                "playStoreUrl" to draft.playStoreUrl,
+                "scenarioJson" to scenarioJson,
+                "scenarioVersion" to version,
+                "status" to "published",
+                "updatedAt" to Timestamp.now()
+            )
+            transaction.set(doc, fields)
+            if (changed) {
+                val history = doc.collection("scenarioVersions")
+                    .document("v" + version.toString().padStart(6, '0'))
+                transaction.set(history, mapOf(
+                    "ownerUid" to uid,
+                    "appId" to draft.packageName,
+                    "version" to version,
+                    "scenarioJson" to scenarioJson,
+                    "suiteNames" to testCases.map { it.suite }.distinct(),
+                    "updatedAt" to Timestamp.now()
+                ))
+            }
+        }.await()
     }
 
     suspend fun unpublish(packageName: String) {

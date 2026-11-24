@@ -2,6 +2,7 @@ package com.sequmio.givlse.data
 
 import android.content.Context
 import com.sequmio.givlse.model.TestPlan
+import com.sequmio.givlse.data.StepExecutionResult
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
@@ -46,6 +47,22 @@ class RunReportStore(private val context: Context) {
             targets.put(JSONObject().put("label", t.label)
                 .put("packageName", t.packageName)
                 .put("durationSeconds", t.durationSeconds)
+                .put("origin", t.origin)
+                .put("scenarioName", t.scenarioJson?.let {
+                    runCatching { ScenarioCodec.parseAll(it, t.packageName)
+                        .joinToString(" + ") { spec -> spec.name } }.getOrDefault("")
+                } ?: "")
+                .put("suite", t.scenarioJson?.let {
+                    runCatching { ScenarioCodec.parseAll(it, t.packageName)
+                        .joinToString(",") { spec -> spec.suite } }.getOrDefault("")
+                } ?: "")
+                .put("scenarioVersions", t.scenarioJson?.let {
+                    runCatching { ScenarioCodec.parseAll(it, t.packageName)
+                        .joinToString(",") { spec -> spec.version.toString() } }.getOrDefault("")
+                } ?: "")
+                .put("steps", JSONArray())
+                .put("scenarios", JSONArray())
+                .put("activeScenarioIndex", -1)
                 .put("launches", 0).put("confirmed", 0)
                 .put("retries", 0).put("failures", 0).put("foregroundSeconds", 0))
         }
@@ -70,6 +87,70 @@ class RunReportStore(private val context: Context) {
         change { json ->
             item(json, index)?.let { row ->
                 row.put("foregroundSeconds", row.optLong("foregroundSeconds") + seconds)
+            }
+        }
+    }
+
+    fun scenarioStarted(index: Int, spec: ScenarioSpec) {
+        change { json ->
+            item(json, index)?.let { target ->
+                val arr = target.optJSONArray("scenarios") ?: JSONArray()
+                if (arr.length() < 150) {
+                    arr.put(JSONObject()
+                        .put("name", spec.name)
+                        .put("suite", spec.suite)
+                        .put("version", spec.version)
+                        .put("status", "RUNNING")
+                        .put("startedAt", System.currentTimeMillis())
+                        .put("endedAt", 0L)
+                        .put("steps", JSONArray()))
+                    target.put("scenarios", arr)
+                    target.put("activeScenarioIndex", arr.length() - 1)
+                }
+            }
+        }
+    }
+
+    private fun markScenario(index: Int, status: String) {
+        change { json ->
+            item(json, index)?.let { target ->
+                val current = target.optInt("activeScenarioIndex", -1)
+                target.optJSONArray("scenarios")?.optJSONObject(current)?.let {
+                    it.put("status", status)
+                        .put("endedAt", System.currentTimeMillis())
+                }
+            }
+        }
+    }
+    fun scenarioCompleted(index: Int) = markScenario(index, "PASS")
+    fun scenarioFailed(index: Int) = markScenario(index, "FAIL")
+
+    /** Save structured step outcome without UI text, selector contents or input payload. */
+    fun step(index: Int, result: StepExecutionResult) {
+        change { json ->
+            item(json, index)?.let { target ->
+                val steps = target.optJSONArray("steps") ?: JSONArray()
+                if (steps.length() < 200) {
+                    steps.put(JSONObject()
+                        .put("scenarioName", result.scenarioName)
+                        .put("suite", result.suite)
+                        .put("scenarioVersion", result.scenarioVersion)
+                        .put("stepIndex", result.stepIndex)
+                        .put("action", result.action)
+                        .put("status", result.status)
+                        .put("durationMs", result.durationMs)
+                        .put("message", result.message)
+                        .put("at", result.at))
+                }
+                target.put("steps", steps)
+                val current = target.optInt("activeScenarioIndex", -1)
+                target.optJSONArray("scenarios")?.optJSONObject(current)?.let { scenario ->
+                    val ownSteps = scenario.optJSONArray("steps") ?: JSONArray()
+                    if (ownSteps.length() < 150) {
+                        ownSteps.put(steps.optJSONObject(steps.length() - 1))
+                        scenario.put("steps", ownSteps)
+                    }
+                }
             }
         }
     }
@@ -106,6 +187,9 @@ class RunReportStore(private val context: Context) {
         val old = runCatching { JSONArray(prefs.getString("history", "[]")) }.getOrDefault(JSONArray())
         for (i in 0 until minOf(old.length(), 39)) old.optJSONObject(i)?.let { arr.put(it) }
         prefs.edit().remove("active").putString("history", arr.toString()).apply()
+        if (CloudUploadPrefs(context).enabled) {
+            runCatching { CloudRunUploader.enqueue(context, json.optString("id")) }
+        }
     }
 
     fun recent(): List<RunReport> {

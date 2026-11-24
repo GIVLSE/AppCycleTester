@@ -41,7 +41,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-private enum class Page { RUNNER, APP_LIST, MY_APP, HISTORY, PLAN, SETUP, SETTINGS, SCENARIO_EDITOR }
+private enum class Page { RUNNER, APP_LIST, MY_APP, HISTORY, PLAN, SETUP,
+    SETTINGS, SUITE_MANAGER, SCENARIO_EDITOR, QA_DASHBOARD }
 
 @Composable
 internal fun SequmioApp(
@@ -67,6 +68,7 @@ internal fun SequmioApp(
     var durationTarget by remember { mutableStateOf<TestTarget?>(null) }
     var message by remember { mutableStateOf("") }
     var recorderNotice by remember { mutableStateOf("") }
+    var selectedScenarioIndex by remember { mutableIntStateOf(0) }
     val recorder by RecorderRuntime.state.collectAsState()
     LaunchedEffect(permissionRefreshToken) {
         if (!RecorderRuntime.state.value.recording &&
@@ -102,11 +104,12 @@ internal fun SequmioApp(
     ) {
         val imported = changes.mapNotNull { (published, installed) ->
             val spec = runCatching {
-                ScenarioCodec.parse(published.scenarioJson, published.packageName)
+                ScenarioCodec.parseAll(published.scenarioJson, published.packageName)
             }.getOrNull() ?: return@mapNotNull null
             installed.packageName to TestTarget(
                 installed.packageName, installed.activityClass, published.name,
-                spec.totalDurationSec, published.scenarioJson, "community"
+                spec.sumOf { it.totalDurationSec }.coerceAtMost(7200),
+                published.scenarioJson, "community"
             )
         }.toMap()
         if (imported.isEmpty()) return
@@ -209,7 +212,12 @@ internal fun SequmioApp(
                     onOpenScenarios = { draft ->
                         draftStore.save(draft)
                         ownAppDraft = draft
-                        page = Page.SCENARIO_EDITOR
+                        page = Page.SUITE_MANAGER
+                    },
+                    onDashboard = { draft ->
+                        draftStore.save(draft)
+                        ownAppDraft = draft
+                        page = Page.QA_DASHBOARD
                     },
                     recorderState = recorder,
                     recorderNotice = recorderNotice,
@@ -219,7 +227,7 @@ internal fun SequmioApp(
                             it.packageName == draft.packageName
                         }
                         val parsed = runCatching {
-                            ScenarioCodec.parse(draft.scenarioJson, draft.packageName)
+                            ScenarioCodec.parseAll(draft.scenarioJson, draft.packageName)
                         }
                         when {
                             active -> recorderNotice = "Stop the current run before editing."
@@ -228,10 +236,11 @@ internal fun SequmioApp(
                             installed == null -> recorderNotice =
                                 "Your application is not installed on this device."
                             else -> {
-                                val spec = parsed.getOrThrow()
+                                val specs = parsed.getOrThrow()
                                 val target = TestTarget(
                                     installed.packageName, installed.activityClass, draft.appName,
-                                    spec.totalDurationSec, draft.scenarioJson, "local"
+                                    specs.sumOf { it.totalDurationSec }.coerceAtMost(7200),
+                                    draft.scenarioJson, "local"
                                 )
                                 val next = plan.targets.filterNot {
                                     it.packageName == installed.packageName
@@ -267,12 +276,44 @@ internal fun SequmioApp(
                         }
                     }
                 )
-                Page.SCENARIO_EDITOR -> SequmioVisualScenarioEditor(
+                Page.SUITE_MANAGER -> SequmioSuiteManager(
                     initial = ownAppDraft,
                     onSave = { updated ->
                         draftStore.save(updated)
                         ownAppDraft = updated
                     },
+                    onEdit = { chosen ->
+                        selectedScenarioIndex = chosen
+                        page = Page.SCENARIO_EDITOR
+                    },
+                    onBack = { page = Page.MY_APP }
+                )
+                Page.SCENARIO_EDITOR -> SequmioVisualScenarioEditor(
+                    initial = ownAppDraft.copy(
+                        scenarioJson = runCatching {
+                            ScenarioCodec.split(ownAppDraft.scenarioJson)
+                                .getOrNull(selectedScenarioIndex)
+                        }.getOrNull().orEmpty()
+                    ),
+                    onSave = { updated ->
+                        val cases = runCatching {
+                            ScenarioCodec.split(ownAppDraft.scenarioJson).toMutableList()
+                        }.getOrElse { mutableListOf() }
+                        if (selectedScenarioIndex in cases.indices)
+                            cases[selectedScenarioIndex] = updated.scenarioJson
+                        else cases.add(updated.scenarioJson)
+                        val next = ownAppDraft.copy(
+                            scenarioJson = ScenarioCodec.compose(cases)
+                        )
+                        draftStore.save(next)
+                        ownAppDraft = next
+                        page = Page.SUITE_MANAGER
+                    },
+                    onBack = { page = Page.SUITE_MANAGER }
+                )
+                Page.QA_DASHBOARD -> SequmioQaDashboard(
+                    appId = ownAppDraft.packageName,
+                    account = account,
                     onBack = { page = Page.MY_APP }
                 )
                 Page.HISTORY -> SequmioHistory(history, runReports)

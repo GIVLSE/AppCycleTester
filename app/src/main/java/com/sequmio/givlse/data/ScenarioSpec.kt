@@ -26,6 +26,33 @@ data class ScenarioSpec(
 object ScenarioCodec {
     private val actions = setOf("WAIT","CLICK","SWIPE","INPUT_TEXT","SYSTEM_BACK","ASSERT_EXISTS")
 
+    /** One JSON scenario or a bundle of independent smoke/regression/feature scenarios. */
+    fun split(raw: String): List<String> {
+        if (raw.isBlank()) return emptyList()
+        val root = JSONObject(raw)
+        val scenarios = root.optJSONArray("scenarios")
+        if (scenarios == null) return listOf(root.toString())
+        return (0 until scenarios.length()).map { scenarios.getJSONObject(it).toString() }
+    }
+
+    fun compose(scenarios: List<String>): String {
+        require(scenarios.size in 1..12) { "Specify 1–12 test cases" }
+        if (scenarios.size == 1) return JSONObject(scenarios[0]).toString()
+        val arr = JSONArray()
+        scenarios.forEach { arr.put(JSONObject(it)) }
+        return JSONObject().put("schema_version", 1)
+            .put("scenarios", arr).toString()
+    }
+
+    fun parseAll(raw: String, expectedPackage: String): List<ScenarioSpec> {
+        require(raw.length <= 48_000) { "Test suite exceeds 48 KB" }
+        val scenarios = split(raw)
+        require(scenarios.size in 1..12) { "Specify 1–12 test cases" }
+        val parsed = scenarios.map { parse(it, expectedPackage) }
+        require(parsed.sumOf { it.steps.size } <= 150) { "Too many combined test steps" }
+        return parsed
+    }
+
     fun parse(json: String, expectedPackage: String): ScenarioSpec {
         require(json.length in 50..48_000) { "Scenario JSON must be 50–48,000 characters" }
         val data = JSONObject(json)

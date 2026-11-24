@@ -252,6 +252,7 @@ internal fun SequmioDeveloperApp(
     onSave: (MyAppDraft) -> Unit,
     onOpenSettings: () -> Unit,
     onOpenScenarios: (MyAppDraft) -> Unit,
+    onDashboard: (MyAppDraft) -> Unit,
     recorderState: RecorderState,
     recorderNotice: String,
     onTest: (MyAppDraft) -> Unit,
@@ -277,7 +278,19 @@ internal fun SequmioDeveloperApp(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         SeqTopBar("My App")
-        Text("Developer listing", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Text("Your QA workspace", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        SeqCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Distributed QA results", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                Text("Monitor real test runs, PASS/FAIL by scenario, device and app " +
+                    "version, and your previous daily digests. The online dashboard " +
+                    "uses real Firebase reports, never simulated data.",
+                    color = SeqColors.Muted, fontSize = 12.sp)
+                SeqPrimaryButton("Open QA Dashboard", onClick = { onDashboard(form) },
+                    enabled = profile != null && form.packageName.isNotBlank(),
+                    modifier = Modifier.fillMaxWidth())
+            }
+        }
         Text("Your details are saved locally until you choose Publish. " +
             "A public listing requires a Google account and a valid UI scenario.",
             color = SeqColors.Muted, fontSize = 13.sp)
@@ -304,14 +317,21 @@ internal fun SequmioDeveloperApp(
         }
         SeqCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Test Scenario", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                Text("Test Suites", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                val cases = runCatching {
+                    ScenarioCodec.split(form.scenarioJson)
+                }.getOrDefault(emptyList())
                 val valid = runCatching {
-                    ScenarioCodec.parse(form.scenarioJson, form.packageName)
+                    ScenarioCodec.parseAll(form.scenarioJson, form.packageName)
                 }.isSuccess
-                Text(if (valid) "Valid scenario defined" else "Scenario required",
+                Text(cases.size.toString() + " test cases · " +
+                    if (valid) "Assertions validated" else "Needs QA validation",
                     color = if (valid) SeqColors.Success else SeqColors.Error)
+                Text("Smoke · Regression · Feature. Each case requires an expected " +
+                    "result, not just a sequence of taps.",
+                    color = SeqColors.Muted, fontSize = 12.sp)
                 SeqTextButton(onClick = { onOpenScenarios(form) }) {
-                    Text("Visual scenario editor →")
+                    Text("Manage tests & guided editor →")
                 }
                 SeqTextButton(onClick = { onTest(form) }) {
                     Text("Add scenario to Runner for testing")

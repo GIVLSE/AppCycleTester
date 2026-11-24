@@ -18,10 +18,13 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -37,6 +40,7 @@ import androidx.compose.ui.unit.sp
 import com.sequmio.givlse.account.AccountProfile
 import com.sequmio.givlse.account.SequmioAccount
 import com.sequmio.givlse.data.MyAppDraft
+import com.sequmio.givlse.data.CloudUploadPrefs
 import kotlinx.coroutines.launch
 
 private fun openExternal(context: android.content.Context, url: String) {
@@ -193,7 +197,13 @@ internal fun SequmioSettings(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val profile = account.profile
+    val uploadPrefs = remember { CloudUploadPrefs(context) }
+    var shareResults by remember { mutableStateOf(uploadPrefs.enabled) }
+    var confirmSharing by remember { mutableStateOf(false) }
     var confirmDeletion by remember { mutableStateOf(false) }
+    LaunchedEffect(profile?.uid) {
+        if (profile != null) account.refreshDailyDigest()
+    }
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState())
             .padding(20.dp),
@@ -239,6 +249,56 @@ internal fun SequmioSettings(
                 account.status?.let { Text(it, color = SeqColors.Muted, fontSize = 13.sp) }
             }
         }
+        Text("QA report sharing", fontSize = 19.sp, fontWeight = FontWeight.Bold)
+        SeqCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Automatically share QA results", fontWeight = FontWeight.SemiBold)
+                        Text("Default OFF. After a run, send your tester ID, " +
+                            "device model, Android version, tested app version, " +
+                            "scenario/suite and PASS/FAIL step metadata to that " +
+                            "app's developer. No screen contents, input text or " +
+                            "passwords are uploaded.",
+                            color = SeqColors.Muted, fontSize = 12.sp)
+                    }
+                    Switch(checked = shareResults, enabled = profile != null &&
+                        account.configured, onCheckedChange = { desired ->
+                        if (desired) confirmSharing = true else {
+                            shareResults = false
+                            uploadPrefs.enabled = false
+                        }
+                    })
+                }
+                if (profile == null) Text("Sign in with Google before enabling " +
+                    "automatic sharing.", color = SeqColors.Muted, fontSize = 12.sp)
+                Text(uploadPrefs.lastStatus, color = SeqColors.Muted, fontSize = 12.sp)
+                Text("Your local Runner and reports work with sharing disabled.",
+                    color = SeqColors.Muted, fontSize = 12.sp)
+            }
+        }
+        if (profile != null) {
+            SeqCard(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Daily email QA digest",
+                                fontWeight = FontWeight.SemiBold)
+                            Text("Optional. Email your previous UTC day's QA " +
+                                "summary when the cloud scheduler and email " +
+                                "provider are configured. Reports are also shown " +
+                                "in My App → QA Dashboard.",
+                                color = SeqColors.Muted, fontSize = 12.sp)
+                        }
+                        Switch(checked = account.dailyDigest,
+                            onCheckedChange = { requested ->
+                                scope.launch { account.setDailyDigest(requested) }
+                            })
+                    }
+                }
+            }
+        }
         Text("App settings", fontSize = 19.sp, fontWeight = FontWeight.Bold)
         SeqCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
@@ -272,6 +332,33 @@ internal fun SequmioSettings(
                 }) { Text("Source code") }
             }
         }
+    }
+    if (confirmSharing) {
+        AlertDialog(
+            onDismissRequest = { confirmSharing = false },
+            containerColor = SeqColors.CardRaised,
+            titleContentColor = SeqColors.Text,
+            textContentColor = SeqColors.Text,
+            title = { Text("Allow automatic QA report upload?") },
+            text = { Text("Following each completed or interrupted test, " +
+                "Sequmio may send only test metadata to the app owner: " +
+                "your account tester ID, device model, Android/API version, " +
+                "tested build version, scenario steps, timing and outcomes. " +
+                "No screen or typed text is sent. You can turn this off at " +
+                "any time in Settings.") },
+            confirmButton = {
+                SeqTextButton(onClick = {
+                    uploadPrefs.enabled = true
+                    shareResults = true
+                    confirmSharing = false
+                }) { Text("Enable sharing") }
+            },
+            dismissButton = {
+                SeqTextButton(onClick = { confirmSharing = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
     if (confirmDeletion) {
         AlertDialog(

@@ -65,6 +65,8 @@ class SequmioAccount(context: Context) {
             user.photoUrl?.toString())
     })
         private set
+    var dailyDigest by mutableStateOf(false)
+        private set
     var busy by mutableStateOf(false)
         private set
     var status by mutableStateOf<String?>(null)
@@ -119,6 +121,7 @@ class SequmioAccount(context: Context) {
                     ),
                     SetOptions.merge()
                 )?.await()
+                refreshDailyDigest()
                 status = "Signed in with Google."
             } catch (error: Exception) {
                 status = "Signed in. Profile sync unavailable: " +
@@ -128,6 +131,27 @@ class SequmioAccount(context: Context) {
             status = "Sign-in failed or cancelled: " + error.javaClass.simpleName
         } finally {
             busy = false
+        }
+    }
+
+    suspend fun refreshDailyDigest() {
+        val user = auth?.currentUser ?: return
+        dailyDigest = runCatching {
+            db?.collection("users")?.document(user.uid)
+                ?.get()?.await()?.getBoolean("dailyDigest") == true
+        }.getOrDefault(false)
+    }
+
+    suspend fun setDailyDigest(value: Boolean) {
+        val user = auth?.currentUser ?: return
+        try {
+            db?.collection("users")?.document(user.uid)
+                ?.set(mapOf("dailyDigest" to value), SetOptions.merge())?.await()
+            dailyDigest = value
+            status = if (value) "Daily email digest enabled when the mail service is deployed"
+                else "Daily email digest disabled"
+        } catch (error: Exception) {
+            status = "Digest setting could not be saved: " + error.javaClass.simpleName
         }
     }
 
@@ -148,7 +172,29 @@ class SequmioAccount(context: Context) {
                 val docs = database.collection("apps").whereEqualTo("ownerUid", uid)
                     .limit(100).get().await().documents
                 if (docs.isEmpty()) break
-                docs.forEach { it.reference.delete().await() }
+                docs.forEach { listing ->
+                    while (true) {
+                        val versions = listing.reference.collection("scenarioVersions")
+                            .limit(100).get().await().documents
+                        if (versions.isEmpty()) break
+                        versions.forEach { it.reference.delete().await() }
+                    }
+                    listing.reference.delete().await()
+                }
+            }
+            for (field in listOf("ownerUid", "testerUid")) {
+                while (true) {
+                    val runs = database.collection("testRuns")
+                        .whereEqualTo(field, uid).limit(100).get().await().documents
+                    if (runs.isEmpty()) break
+                    runs.forEach { it.reference.delete().await() }
+                }
+            }
+            while (true) {
+                val digests = database.collection("dailyReports")
+                    .whereEqualTo("ownerUid", uid).limit(100).get().await().documents
+                if (digests.isEmpty()) break
+                digests.forEach { it.reference.delete().await() }
             }
             while (true) {
                 val docs = database.collection("memberships").whereEqualTo("userUid", uid)
@@ -173,6 +219,7 @@ class SequmioAccount(context: Context) {
     suspend fun signOut() {
         auth?.signOut()
         profile = null
+        dailyDigest = false
         status = "Signed out."
         try {
             CredentialManager.create(appContext).clearCredentialState(

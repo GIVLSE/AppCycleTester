@@ -9,6 +9,7 @@ import android.os.SystemClock
 import android.view.accessibility.AccessibilityNodeInfo
 import com.sequmio.givlse.data.ScenarioSpec
 import com.sequmio.givlse.data.ScenarioStep
+import com.sequmio.givlse.data.StepExecutionResult
 
 /**
  * Deterministic, bounded, on-device scenario player.
@@ -21,7 +22,10 @@ class ScenarioPlayer(
     private val scenario: ScenarioSpec,
     private val mayRun: () -> Boolean,
     private val onStep: (String) -> Unit,
-    private val onFailure: (String) -> Unit
+    private val onFailure: (String) -> Unit,
+    private val onResult: (StepExecutionResult) -> Unit = {},
+    private val singlePass: Boolean = false,
+    private val onCompleted: (ScenarioSpec) -> Unit = {}
 ) {
     var completedPasses: Int = 0
         private set
@@ -58,7 +62,8 @@ class ScenarioPlayer(
         if (current >= scenario.steps.size) {
             completedPasses++
             onStep("Scenario pass " + completedPasses + " completed")
-            if (!scenario.loopSteps) return
+            onCompleted(scenario)
+            if (singlePass || !scenario.loopSteps) return
             current = 0
         }
         val step = scenario.steps[current]
@@ -79,9 +84,29 @@ class ScenarioPlayer(
                     complete(step)
                 else fail(step, "Android did not perform Back")
             }
-            "ASSERT_EXISTS" -> {
+            "ASSERT_EXISTS", "ASSERT_SCREEN" -> {
                 if (findNode(step) != null) complete(step)
-                else retryMissing(step, "Expected UI element not found")
+                else retryMissing(step, "Expected screen element was not visible")
+            }
+            "ASSERT_NOT_EXISTS" -> {
+                if (!isCorrectForeground()) {
+                    retryMissing(step, "Target application is not foreground")
+                } else if (findNode(step) == null) complete(step)
+                else retryMissing(step, "Element is still visible")
+            }
+            "ASSERT_TEXT" -> {
+                val node = findNode(step)
+                val expected = step.params.optString("expected")
+                val found = node?.text?.toString()
+                val caseInsensitive = step.params.optBoolean("ignore_case", false)
+                if (found != null && found.equals(expected, ignoreCase = caseInsensitive))
+                    complete(step)
+                else retryMissing(step, "Text assertion did not match expected value")
+            }
+            "ASSERT_ENABLED" -> {
+                val node = findNode(step)
+                if (node?.isEnabled == true) complete(step)
+                else retryMissing(step, "Expected element not enabled")
             }
             "CLICK" -> {
                 val node = findNode(step)
@@ -134,6 +159,9 @@ class ScenarioPlayer(
             else -> fail(step, "Unsupported UI action")
         }
     }
+
+    private fun isCorrectForeground(): Boolean =
+        service.rootInActiveWindow?.packageName?.toString() == scenario.packageName
 
     private fun findNode(step: ScenarioStep): AccessibilityNodeInfo? {
         val root = service.rootInActiveWindow ?: return null
@@ -202,6 +230,7 @@ class ScenarioPlayer(
 
     private fun complete(step: ScenarioStep) {
         if (stopped) return
+        record(step, "PASS", "Verified")
         onStep("Step " + (current + 1) + ": " + step.action + " PASS")
         current++
         stepStartedAt = 0L
@@ -211,13 +240,29 @@ class ScenarioPlayer(
     private fun fail(step: ScenarioStep, message: String) {
         if (stopped) return
         if (step.optional) {
+            record(step, "SKIPPED", message)
             onStep("Optional step " + (current + 1) + " skipped: " + message)
             current++
             stepStartedAt = 0L
             advance()
         } else {
+            record(step, "FAIL", message)
             stop()
             onFailure("Step " + (current + 1) + " " + step.action + " FAIL: " + message)
         }
+    }
+
+    private fun record(step: ScenarioStep, status: String, message: String) {
+        onResult(StepExecutionResult(
+            scenarioName = scenario.name,
+            suite = scenario.suite,
+            scenarioVersion = scenario.version,
+            stepIndex = current + 1,
+            action = step.action,
+            status = status,
+            durationMs = (SystemClock.elapsedRealtime() - stepStartedAt).coerceAtLeast(0),
+            message = message.take(220),
+            at = System.currentTimeMillis()
+        ))
     }
 }

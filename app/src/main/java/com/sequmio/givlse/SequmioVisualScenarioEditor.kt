@@ -27,6 +27,7 @@ private data class EditableStep(
     val endY: String = "0.25",
     val timeMs: String = "1000",
     val inputText: String = "",
+    val expected: String = "",
     val optional: Boolean = false
 )
 
@@ -55,6 +56,7 @@ private fun parseSteps(json: String): List<EditableStep> {
             endY = params.optDouble("end_y_percent", 0.25).toString(),
             timeMs = params.optLong("duration_ms", if (action == "SWIPE") 450 else 1000).toString(),
             inputText = params.optString("text"),
+            expected = params.optString("expected"),
             optional = step.optBoolean("optional", false)
         )
     }
@@ -62,7 +64,8 @@ private fun parseSteps(json: String): List<EditableStep> {
 
 private fun createJson(
     packageName: String, name: String, durationSeconds: Int,
-    loop: Boolean, steps: List<EditableStep>
+    loop: Boolean, steps: List<EditableStep>,
+    suite: String, version: Int, regressionApproved: Boolean
 ): String {
     val arr = JSONArray()
     steps.forEachIndexed { index, s ->
@@ -86,6 +89,7 @@ private fun createJson(
                     .put("end_y_percent", s.endY.toDoubleOrNull() ?: -1.0)
                     .put("duration_ms", s.timeMs.toLongOrNull() ?: 450L)
             }
+            "ASSERT_TEXT" -> params.put("expected", s.expected)
             "INPUT_TEXT" -> {
                 params.put("text", s.inputText)
                     .put("clear_before", true)
@@ -102,7 +106,9 @@ private fun createJson(
     }
     return JSONObject()
         .put("schema_version", 1)
-        .put("meta", JSONObject().put("name", name))
+        .put("meta", JSONObject().put("name", name)
+            .put("suite", suite).put("version", version)
+            .put("regression_approved", regressionApproved))
         .put("target", JSONObject().put("package_name", packageName))
         .put("execution", JSONObject().put("total_duration_sec", durationSeconds)
             .put("loop_steps", loop))
@@ -156,6 +162,9 @@ internal fun SequmioVisualScenarioEditor(
         mutableStateOf(parsed?.optJSONObject("execution")
             ?.optInt("total_duration_sec", 300)?.toString() ?: "300")
     }
+    val startingSuite = parsed?.optJSONObject("meta")?.optString("suite", "SMOKE") ?: "SMOKE"
+    val startingVersion = parsed?.optJSONObject("meta")?.optInt("version", 1) ?: 1
+    var suite by remember(initial.packageName) { mutableStateOf(startingSuite) }
     var loop by remember(initial.packageName) {
         mutableStateOf(parsed?.optJSONObject("execution")?.optBoolean("loop_steps", false) ?: false)
     }
@@ -169,7 +178,8 @@ internal fun SequmioVisualScenarioEditor(
         steps = steps.toMutableList().apply { this[index] = block(this[index]) }
     }
     fun snapshot(): String = if (showJson) rawJson else createJson(
-        initial.packageName, name, duration.toIntOrNull() ?: 0, loop, steps
+        initial.packageName, name, duration.toIntOrNull() ?: 0, loop, steps,
+        suite, startingVersion, startingSuite == "REGRESSION"
     )
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
@@ -177,6 +187,37 @@ internal fun SequmioVisualScenarioEditor(
     ) {
         SeqTopBar("Scenario Editor", onBack)
         Text("For " + initial.packageName, color = SeqColors.Muted, fontSize = 12.sp)
+        SeqCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Text("Build a test like a QA engineer", fontWeight = FontWeight.Bold)
+                Text("1 · Choose a suite and a user journey",
+                    color = SeqColors.Muted, fontSize = 12.sp)
+                Text("2 · Add actions: what the user does",
+                    color = SeqColors.Muted, fontSize = 12.sp)
+                Text("3 · Add an ASSERT: what the app MUST show",
+                    color = SeqColors.Muted, fontSize = 12.sp)
+                Text("4 · Run on your own device before publishing",
+                    color = SeqColors.Muted, fontSize = 12.sp)
+                Text("5 · Promote successful tests to Regression",
+                    color = SeqColors.Muted, fontSize = 12.sp)
+            }
+        }
+        Text("Test suite", fontWeight = FontWeight.SemiBold)
+        Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+            listOf("SMOKE", "FEATURE").forEach { option ->
+                FilterChip(selected = suite == option, onClick = { suite = option },
+                    label = { Text(option, fontSize = 12.sp) })
+            }
+            if (startingSuite == "REGRESSION") {
+                FilterChip(selected = suite == "REGRESSION", onClick = {
+                    suite = "REGRESSION"
+                }, label = { Text("REGRESSION", fontSize = 11.sp) })
+            }
+        }
+        if (startingSuite == "REGRESSION") Text(
+            "Editing an approved Regression test creates a new Feature version; " +
+                "re-run it and approve again from Test Suites.",
+            color = SeqColors.Muted, fontSize = 12.sp)
         TextConfig("Scenario name", name) { name = it }
         TextConfig("Total app time (seconds)", duration) { duration = it }
         Row {
@@ -192,6 +233,7 @@ internal fun SequmioVisualScenarioEditor(
                         steps = parseSteps(rawJson)
                         val obj = result.getOrThrow()
                         name = obj.optJSONObject("meta")?.optString("name", name) ?: name
+                        suite = obj.optJSONObject("meta")?.optString("suite", "SMOKE") ?: "SMOKE"
                         duration = obj.optJSONObject("execution")
                             ?.optInt("total_duration_sec", 300)?.toString() ?: "300"
                         loop = obj.optJSONObject("execution")
@@ -213,7 +255,9 @@ internal fun SequmioVisualScenarioEditor(
             Text("Steps (" + steps.size + "/50)", fontWeight = FontWeight.Bold, fontSize = 18.sp)
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                listOf("CLICK", "WAIT", "SWIPE", "INPUT_TEXT", "ASSERT_EXISTS", "SYSTEM_BACK")
+                listOf("CLICK", "WAIT", "SWIPE", "INPUT_TEXT",
+                    "ASSERT_EXISTS", "ASSERT_TEXT", "ASSERT_NOT_EXISTS",
+                    "ASSERT_ENABLED", "ASSERT_SCREEN", "SYSTEM_BACK")
                     .forEach { action ->
                         SeqTextButton(
                             onClick = {
@@ -262,7 +306,9 @@ internal fun SequmioVisualScenarioEditor(
                             TextConfig("Delay before (ms)", step.delay) { next ->
                                 changeStep(i) { it.copy(delay = next) }
                             }
-                            if (step.action in listOf("CLICK","ASSERT_EXISTS","INPUT_TEXT")) {
+                            if (step.action in listOf("CLICK","ASSERT_EXISTS","INPUT_TEXT",
+                                    "ASSERT_TEXT","ASSERT_NOT_EXISTS",
+                                    "ASSERT_ENABLED","ASSERT_SCREEN")) {
                                 TextConfig("View ID", step.viewId) { next ->
                                     changeStep(i) { it.copy(viewId = next) }
                                 }
@@ -271,6 +317,13 @@ internal fun SequmioVisualScenarioEditor(
                                 }
                                 TextConfig("Content description", step.description) { next ->
                                     changeStep(i) { it.copy(description = next) }
+                                }
+                            }
+                            if (step.action == "ASSERT_TEXT") {
+                                Text("Expected result: the target element's text equals...",
+                                    color = SeqColors.Muted, fontSize = 12.sp)
+                                TextConfig("Expected exact text", step.expected) { next ->
+                                    changeStep(i) { it.copy(expected = next) }
                                 }
                             }
                             if (step.action == "CLICK" || step.action == "SWIPE") {
@@ -313,6 +366,15 @@ internal fun SequmioVisualScenarioEditor(
                 }
             }
         }
+        if (!showJson && steps.none { it.action.startsWith("ASSERT_") }) {
+            Text("Missing expected result: add an ASSERT step. " +
+                "A sequence of taps without verification is not a test.",
+                color = SeqColors.Error, fontSize = 13.sp)
+            SeqTextButton(onClick = {
+                steps = steps + EditableStep("ASSERT_EXISTS")
+                expanded = steps.lastIndex
+            }) { Text("+ Add an expected-result assertion") }
+        }
         SeqTextButton(onClick = {
             validation = runCatching {
                 ScenarioCodec.parse(snapshot(), initial.packageName)
@@ -322,11 +384,25 @@ internal fun SequmioVisualScenarioEditor(
         if (validation.isNotBlank())
             Text(validation,
                 color = if (validation == "Valid scenario") SeqColors.Success else SeqColors.Error)
-        SeqPrimaryButton("Save scenario", onClick = {
-            val json = snapshot()
+        SeqPrimaryButton("Save test case", onClick = {
             validation = runCatching {
-                ScenarioCodec.parse(json, initial.packageName)
-                onSave(initial.copy(scenarioJson = json))
+                val updated = JSONObject(snapshot())
+                val oldMeta = parsed?.optJSONObject("meta") ?: JSONObject()
+                val changed = updated.toString() != parsed?.toString()
+                val meta = updated.optJSONObject("meta") ?: JSONObject()
+                val originalVersion = oldMeta.optInt("version", 1)
+                meta.put("version", if (changed) originalVersion + 1 else originalVersion)
+                if (startingSuite == "REGRESSION" && changed &&
+                    suite == "REGRESSION") {
+                    meta.put("suite", "FEATURE")
+                    meta.put("regression_approved", false)
+                } else if (suite != "REGRESSION") {
+                    meta.put("regression_approved", false)
+                }
+                updated.put("meta", meta)
+                val finalJson = updated.toString()
+                ScenarioCodec.parse(finalJson, initial.packageName)
+                onSave(initial.copy(scenarioJson = finalJson))
                 onBack()
                 "Saved"
             }.getOrElse { it.message ?: "Fix scenario errors" }

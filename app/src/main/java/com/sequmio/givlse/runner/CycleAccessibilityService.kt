@@ -14,6 +14,7 @@ import android.os.SystemClock
 import android.view.accessibility.AccessibilityEvent
 import com.sequmio.givlse.data.RunReportStore
 import com.sequmio.givlse.data.ScenarioCodec
+import com.sequmio.givlse.data.ScenarioSpec
 import com.sequmio.givlse.data.MyAppDraftStore
 import com.sequmio.givlse.model.InstalledApp
 import com.sequmio.givlse.MainActivity
@@ -57,6 +58,9 @@ class CycleAccessibilityService : AccessibilityService() {
     private var receiverRegistered = false
     private var scenarioPlayer: ScenarioPlayer? = null
     private var scenarioFailed = false
+    private var scenarioQueue: List<ScenarioSpec> = emptyList()
+    private var scenarioPosition = 0
+    private var scenarioCompletedCount = 0
     private var recorder: AccessibilityEventRecorder? = null
 
     private val screenReceiver = object : BroadcastReceiver() {
@@ -144,7 +148,13 @@ class CycleAccessibilityService : AccessibilityService() {
             if (json != null) {
                 val current = draftStore.load()
                 if (current.packageName == target.packageName) {
-                    draftStore.save(current.copy(scenarioJson = json))
+                    val existing = runCatching {
+                        ScenarioCodec.split(current.scenarioJson)
+                    }.getOrDefault(emptyList())
+                    if (existing.size < 12) {
+                        draftStore.save(current.copy(
+                            scenarioJson = ScenarioCodec.compose(existing + json)))
+                    }
                 }
             }
             // Show the resulting scenario in My App after the user stops recording.
@@ -245,7 +255,8 @@ class CycleAccessibilityService : AccessibilityService() {
         val p = plan ?: return
         if (p.maxDurationMinutes > 0 && elapsedMs >= p.maxDurationMinutes * 60_000L) {
             if (p.targets[index].scenarioJson != null && !scenarioFailed &&
-                (scenarioPlayer?.completedPasses ?: 0) == 0) {
+                (scenarioQueue.isEmpty() ||
+                    scenarioCompletedCount < scenarioQueue.size)) {
                 hadFailure = true
                 reports.failure(index)
                 addEvent("FAIL: scenario did not complete before overall time cap")
@@ -302,13 +313,17 @@ class CycleAccessibilityService : AccessibilityService() {
         checkpoint()
         val p = plan ?: return
         if (p.targets[index].scenarioJson != null && !scenarioFailed &&
-            (scenarioPlayer?.completedPasses ?: 0) == 0) {
+            (scenarioQueue.isEmpty() ||
+                scenarioCompletedCount < scenarioQueue.size)) {
             hadFailure = true
             reports.failure(index)
             addEvent("FAIL: scenario did not complete for " + p.targets[index].label)
         }
         scenarioPlayer?.stop()
         scenarioPlayer = null
+        scenarioQueue = emptyList()
+        scenarioCompletedCount = 0
+        scenarioPosition = 0
         val next = RunPolicy.next(index, p.targets.size, completedCycles,
             p.repeatMode, p.repeatCount)
         completedCycles = next.completedCycles
@@ -377,6 +392,9 @@ class CycleAccessibilityService : AccessibilityService() {
         scenarioPlayer?.stop()
         scenarioPlayer = null
         scenarioFailed = false
+        scenarioQueue = emptyList()
+        scenarioPosition = 0
+        scenarioCompletedCount = 0
         val intent = Intent.makeMainActivity(ComponentName(target.packageName, target.activityClass))
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
         startActivity(intent)
@@ -427,13 +445,23 @@ class CycleAccessibilityService : AccessibilityService() {
 
     private fun startScenarioIfNeeded() {
         val target = plan?.targets?.getOrNull(index) ?: return
-        val json = target.scenarioJson ?: return
-        val spec = runCatching { ScenarioCodec.parse(json, target.packageName) }
-            .getOrElse { error ->
-                failScenario("Invalid scenario: " + (error.message ?: "parse error"))
-                return
-            }
+        val raw = target.scenarioJson ?: return
+        scenarioQueue = runCatching {
+            ScenarioCodec.parseAll(raw, target.packageName)
+        }.getOrElse { error ->
+            failScenario("Invalid scenario: " + (error.message ?: "schema error"))
+            return
+        }
+        scenarioPosition = 0
+        scenarioCompletedCount = 0
+        startNextScenario()
+    }
+
+    private fun startNextScenario() {
+        val target = plan?.targets?.getOrNull(index) ?: return
+        val spec = scenarioQueue.getOrNull(scenarioPosition) ?: return
         val targetPackage = target.packageName
+        reports.scenarioStarted(index, spec)
         val player = ScenarioPlayer(
             service = this,
             handler = handler,
@@ -444,15 +472,33 @@ class CycleAccessibilityService : AccessibilityService() {
                     plan?.targets?.getOrNull(index)?.packageName == targetPackage
             },
             onStep = { event -> addEvent(event) },
-            onFailure = { error -> failScenario(error) }
+            onFailure = { error -> failScenario(error) },
+            onResult = { result -> reports.step(index, result) },
+            singlePass = scenarioQueue.size > 1,
+            onCompleted = { completed ->
+                // Repeated passes of one looping scenario count as one completed case.
+                if (scenarioCompletedCount <= scenarioPosition) {
+                    reports.scenarioCompleted(index)
+                    scenarioCompletedCount++
+                }
+                addEvent("Scenario PASS: " + completed.name +
+                    " / " + completed.suite + " v" + completed.version)
+                if (scenarioPosition + 1 < scenarioQueue.size) {
+                    scenarioPlayer?.stop()
+                    scenarioPosition++
+                    startNextScenario()
+                }
+            }
         )
         scenarioPlayer = player
-        addEvent("Executing scenario " + spec.name + " (" + spec.steps.size + " steps)")
+        addEvent("Executing " + spec.suite + ": " + spec.name +
+            " (v" + spec.version + ", " + spec.steps.size + " steps)")
         player.start()
     }
 
     private fun failScenario(error: String) {
         if (phase != RunPhase.RUNNING) return
+        reports.scenarioFailed(index)
         scenarioFailed = true
         hadFailure = true
         reports.failure(index)

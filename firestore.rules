@@ -11,10 +11,10 @@ service cloud.firestore {
       return data.keys().hasOnly([
           'packageName', 'name', 'description', 'ownerUid', 'ownerName',
           'googleGroupUrl', 'optInUrl', 'playStoreUrl', 'scenarioJson',
-          'status', 'updatedAt'
+          'status', 'updatedAt', 'scenarioVersion'
         ])
         && data.keys().hasAll(['packageName', 'name', 'ownerUid', 'status',
-          'googleGroupUrl', 'optInUrl', 'playStoreUrl', 'scenarioJson'])
+          'googleGroupUrl', 'optInUrl', 'playStoreUrl', 'scenarioJson', 'scenarioVersion'])
         && data.packageName == appId
         && data.name is string && data.name.size() > 0 && data.name.size() < 100
         && data.description is string && data.description.size() <= 1000
@@ -28,13 +28,14 @@ service cloud.firestore {
         && data.playStoreUrl.matches('https://play\\.google\\.com/store/apps/details.*')
         && data.scenarioJson is string
         && data.scenarioJson.size() > 40 && data.scenarioJson.size() <= 48000
+        && data.scenarioVersion is int && data.scenarioVersion >= 1
         && data.status in ['draft', 'published']
         && data.updatedAt is timestamp;
     }
     match /users/{userId} {
       allow read: if owner(userId);
       allow create, update: if owner(userId)
-        && request.resource.data.keys().hasOnly(['displayName','email','photoUrl','lastLogin']);
+        && request.resource.data.keys().hasOnly(['displayName','email','photoUrl','lastLogin','dailyDigest']);
       allow delete: if owner(userId);
     }
     match /apps/{appId} {
@@ -46,6 +47,75 @@ service cloud.firestore {
       allow update: if owner(resource.data.ownerUid)
         && request.resource.data.ownerUid == resource.data.ownerUid
         && validApp(request.resource.data, appId);
+      allow delete: if owner(resource.data.ownerUid);
+    }
+    // Immutable owner-published scenario snapshots. getAfter covers atomic app creation.
+    match /apps/{appId}/scenarioVersions/{versionId} {
+      allow create: if signedIn() && request.resource.data.keys().hasOnly([
+          'ownerUid', 'appId', 'version', 'scenarioJson', 'suiteNames', 'updatedAt'
+        ])
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.appId == appId
+        && request.resource.data.scenarioJson is string
+        && request.resource.data.scenarioJson.size() <= 48000
+        && request.resource.data.version is int
+        && getAfter(/databases/$(database)/documents/apps/$(appId))
+            .data.ownerUid == request.auth.uid;
+      allow read, delete: if signedIn() &&
+        get(/databases/$(database)/documents/apps/$(appId))
+          .data.ownerUid == request.auth.uid;
+      allow update: if false;
+    }
+    // Consent is collected locally. Rules also verify authenticated submitter
+    // and participation/ownership to prevent uploads to unrelated applications.
+    match /testRuns/{runId} {
+      function hasPermission(data) {
+        return owner(data.testerUid) &&
+          (data.ownerUid == request.auth.uid ||
+            (exists(/databases/$(database)/documents/memberships/$(request.auth.uid + '_' + data.appId))
+              && get(/databases/$(database)/documents/memberships/$(request.auth.uid + '_' + data.appId))
+                 .data.selfConfirmed == true));
+      }
+      function validRun(data) {
+        return data.keys().hasOnly([
+          'ownerUid', 'testerUid', 'appId', 'runId', 'sessionStatus', 'status',
+          'startedAt', 'endedAt', 'elapsedSeconds', 'foregroundSeconds',
+          'launches', 'retries', 'scenarioName', 'suite', 'scenarioVersions',
+          'appVersion', 'appVersionCode', 'deviceManufacturer', 'deviceModel',
+          'androidApi', 'stepResults'
+        ])
+        && data.keys().hasAll(['ownerUid','testerUid','appId','runId','status',
+          'startedAt','endedAt','stepResults'])
+        && data.ownerUid is string && data.testerUid is string
+        && data.appId is string && data.runId is string
+        && data.status in ['PASS','FAIL','STOPPED','INTERRUPTED','INCOMPLETE']
+        && data.sessionStatus is string
+        && data.stepResults is list && data.stepResults.size() <= 150
+        && data.startedAt is timestamp && data.endedAt is timestamp
+        && data.androidApi is int && data.androidApi >= 26
+        && data.appVersion is string && data.appVersion.size() <= 80
+        && data.scenarioName is string && data.scenarioName.size() <= 250
+        && data.elapsedSeconds is int && data.elapsedSeconds >= 0;
+      }
+      allow create: if signedIn() && validRun(request.resource.data)
+        && hasPermission(request.resource.data)
+        && get(/databases/$(database)/documents/apps/$(request.resource.data.appId))
+            .data.ownerUid == request.resource.data.ownerUid
+        && get(/databases/$(database)/documents/apps/$(request.resource.data.appId))
+            .data.status == 'published';
+      // Same idempotent payload may be retried by WorkManager; avoid mutable results.
+      allow update: if false;
+      allow get, list: if signedIn() &&
+        (resource.data.ownerUid == request.auth.uid ||
+          resource.data.testerUid == request.auth.uid);
+      allow delete: if signedIn() &&
+        (resource.data.ownerUid == request.auth.uid ||
+          resource.data.testerUid == request.auth.uid);
+    }
+    // Generated by trusted scheduled Cloud Function only, not Android clients.
+    match /dailyReports/{reportId} {
+      allow get, list: if owner(resource.data.ownerUid);
+      allow create, update: if false;
       allow delete: if owner(resource.data.ownerUid);
     }
     match /memberships/{membershipId} {
