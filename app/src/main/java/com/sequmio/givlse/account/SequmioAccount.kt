@@ -205,6 +205,7 @@ class SequmioAccount(context: Context) {
             }
             database.collection("users").document(uid).delete().await()
             current.delete().await()
+            com.sequmio.givlse.data.PendingJoinStore(appContext, uid).clear()
             profile = null
             CloudUploadPrefs(appContext).enabled = false
             status = "Cloud account and owned data deleted."

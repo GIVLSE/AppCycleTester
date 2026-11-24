@@ -3,6 +3,7 @@ package com.sequmio.givlse
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -52,15 +53,33 @@ internal fun SequmioCommunityCatalog(
     val repo = remember(account) { CommunityRepository(account) }
     val progress = remember(context) { RunProgressStore(context) }
     var published by remember { mutableStateOf<List<PublishedApp>>(emptyList()) }
-    var joined by remember { mutableStateOf<Set<String>>(emptySet()) }
-    var selected by remember { mutableStateOf<PublishedApp?>(null) }
+    val uid = account.profile?.uid
+    val joinStore = remember(context, uid) { uid?.let { PendingJoinStore(context, it) } }
+    var pending by remember(uid) { mutableStateOf(joinStore?.load().orEmpty()) }
+    var joined by remember(uid) { mutableStateOf<Set<String>>(emptySet()) }
+    var selected by remember(uid) { mutableStateOf<PublishedApp?>(null) }
+    var cancelJoin by remember(uid) { mutableStateOf(false) }
+    fun savePending(packageName: String, steps: JoinSteps?) {
+        joinStore?.save(packageName, steps)
+        pending = if (steps == null) pending - packageName else pending + (packageName to steps)
+    }
+    fun openJoin(app: PublishedApp) {
+        if (uid == null) { onOpenSettings(); return }
+        if (app.packageName !in joined && app.packageName !in pending)
+            savePending(app.packageName, JoinSteps())
+        selected = app
+    }
     var busy by remember { mutableStateOf(false) }
     var notice by remember { mutableStateOf("") }
     var refresh by remember { mutableIntStateOf(0) }
     var search by remember { mutableStateOf("") }
     var showInstalled by remember { mutableStateOf(false) }
-    var groupConfirmed by remember(selected?.packageName) { mutableStateOf(false) }
-    var optInConfirmed by remember(selected?.packageName) { mutableStateOf(false) }
+    val scroll = rememberScrollState()
+    val selection = selected?.packageName
+    LaunchedEffect(selection) { scroll.scrollTo(0) }
+    BackHandler(enabled = selected != null && !cancelJoin) {
+        if (!busy) { selected = null; notice = "" }
+    }
 
     LaunchedEffect(account.profile?.uid, refresh, refreshToken) {
         if (!account.configured) {
@@ -69,11 +88,20 @@ internal fun SequmioCommunityCatalog(
         } else {
             busy = true
             try {
-                published = repo.published()
+                val catalog = repo.published()
                 val memberList = if (account.profile != null)
                     repo.joined().filter { it.selfConfirmed } else emptyList()
                 joined = memberList.map { it.packageName }.toSet()
-                val known = published.associateBy { it.packageName }
+                // Reconcile successful joins, including a previously interrupted response.
+                joined.forEach { if (it in pending) savePending(it, null) }
+                val known = catalog.associateBy { it.packageName }
+                val extra = (pending.keys - known.keys).mapNotNull { pkg ->
+                    runCatching { repo.publishedApp(pkg) }.getOrNull()
+                }
+                published = catalog + extra
+                selected?.let { old ->
+                    published.firstOrNull { it.packageName == old.packageName }?.let { selected = it }
+                }
                 val synced = memberList.mapNotNull { membership ->
                     val remote = known[membership.packageName] ?: runCatching {
                         repo.publishedApp(membership.packageName)
@@ -95,7 +123,7 @@ internal fun SequmioCommunityCatalog(
     }
 
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+        Modifier.fillMaxSize().verticalScroll(scroll)
             .padding(horizontal = 18.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
@@ -215,7 +243,10 @@ internal fun SequmioCommunityCatalog(
                         it.name.contains(search, ignoreCase = true) ||
                         it.packageName.contains(search, ignoreCase = true) ||
                         it.description.contains(search, ignoreCase = true)
-                }
+                }.sortedWith(compareBy<PublishedApp> {
+                    JoinSteps.priority(it.packageName in pending && it.packageName !in joined &&
+                        it.ownerUid != uid)
+                }.thenBy { it.name.lowercase() })
                 if (!busy && matches.isEmpty() && notice.isBlank()) {
                     SeqCard(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(18.dp),
@@ -239,17 +270,49 @@ internal fun SequmioCommunityCatalog(
                                 SeqAppLetter(app.packageName, app.name)
                                 Spacer(Modifier.width(11.dp))
                                 Column(Modifier.weight(1f)) {
-                                    Text(app.name, fontSize = 16.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(app.name, fontSize = 16.sp,
+                                            fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f, fill = false),
+                                            maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        SeqIconAction(Icons.Outlined.OpenInNew, "Open on Google Play",
+                                            onClick = { openSafeLink(context, app.playStoreUrl) },
+                                            modifier = Modifier.size(34.dp))
+                                    }
                                     Text(app.packageName, color = SeqColors.Muted,
                                         fontSize = 11.sp, maxLines = 1,
                                         overflow = TextOverflow.Ellipsis)
                                 }
-                                if (member) SeqChip("Joined", SeqColors.Success,
-                                    icon = Icons.Outlined.CheckCircle)
-                                else if (account.profile?.uid == app.ownerUid)
-                                    SeqChip("My app", SeqColors.Teal)
+                                if (uid == app.ownerUid) {
+                                    SeqChip("My App", SeqColors.Teal)
+                                } else if (member) {
+                                    Surface(onClick = { notice = ""; selected = app },
+                                        shape = RoundedCornerShape(50),
+                                        color = SeqColors.Success.copy(alpha = 0.15f),
+                                        contentColor = SeqColors.Success) {
+                                        Row(Modifier.padding(horizontal = 10.dp, vertical = 9.dp),
+                                            verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(Icons.Outlined.Check, null, Modifier.size(16.dp))
+                                            Spacer(Modifier.width(4.dp))
+                                            Text("Joined", fontSize = 12.sp, maxLines = 1, softWrap = false)
+                                        }
+                                    }
+                                } else {
+                                    val continuing = app.packageName in pending
+                                    Surface(onClick = { notice = ""; openJoin(app) },
+                                        enabled = !busy,
+                                        shape = RoundedCornerShape(50),
+                                        color = if (continuing) Color(0xFF72521C) else SeqColors.PrimaryDark,
+                                        contentColor = Color.White) {
+                                        Row(Modifier.padding(horizontal = 10.dp, vertical = 9.dp),
+                                            verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(if (continuing) Icons.Outlined.ArrowForward else Icons.Outlined.Add,
+                                                null, Modifier.size(16.dp))
+                                            Spacer(Modifier.width(4.dp))
+                                            Text(if (continuing) "Continue" else "Join",
+                                                fontSize = 12.sp, maxLines = 1, softWrap = false)
+                                        }
+                                    }
+                                }
                             }
                             if (app.description.isNotBlank())
                                 Text(app.description, color = SeqColors.Muted,
@@ -261,30 +324,11 @@ internal fun SequmioCommunityCatalog(
                                 progress.days(app.packageName).toString() +
                                     " local QA days (not Google-verified)",
                                 color = SeqColors.Muted, fontSize = 11.sp)
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                verticalAlignment = Alignment.CenterVertically) {
-                                if (member && local != null) {
-                                    SeqTextButton(onClick = { onJoined(app, local) },
-                                        modifier = Modifier.weight(1f)) {
-                                        Icon(Icons.Outlined.PlayArrow, null,
-                                            Modifier.size(18.dp))
-                                        Text("Test", fontSize = 12.sp)
-                                    }
+                            if (member && local != null) {
+                                SeqTextButton(onClick = { onJoined(app, local) }) {
+                                    Icon(Icons.Outlined.PlayArrow, null, Modifier.size(18.dp))
+                                    Text("Test", fontSize = 12.sp)
                                 }
-                                if (account.profile?.uid != app.ownerUid) {
-                                    SeqTextButton(onClick = { selected = app },
-                                        enabled = account.profile != null,
-                                        modifier = Modifier.weight(1f)) {
-                                        Icon(Icons.Outlined.PersonAddAlt, null,
-                                            Modifier.size(18.dp))
-                                        Text(if (member) "Links" else "Join tester",
-                                            fontSize = 12.sp)
-                                    }
-                                }
-                                SeqIconAction(
-                                    Icons.Outlined.OpenInNew, "Open on Google Play",
-                                    onClick = { openSafeLink(context, app.playStoreUrl) }
-                                )
                             }
                         }
                     }
@@ -294,7 +338,8 @@ internal fun SequmioCommunityCatalog(
             val app = requireNotNull(selected)
             val local = installed.firstOrNull { it.packageName == app.packageName }
             val member = app.packageName in joined
-            SeqTextButton(onClick = { selected = null }) {
+            val steps = pending[app.packageName] ?: JoinSteps()
+            SeqTextButton(onClick = { selected = null; notice = "" }, enabled = !busy) {
                 Icon(Icons.Outlined.ArrowBack, null, Modifier.size(20.dp))
                 Text("App List")
             }
@@ -307,32 +352,36 @@ internal fun SequmioCommunityCatalog(
                 Column(Modifier.padding(15.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     SeqSectionTitle("1. Join tester group", Icons.Outlined.Groups)
-                    SeqTextButton(onClick = { openSafeLink(context, app.googleGroupUrl) }) {
-                        Icon(Icons.Outlined.OpenInNew, null, Modifier.size(17.dp))
-                        Spacer(Modifier.width(5.dp))
-                        Text("Open Google Group")
-                    }
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(groupConfirmed || member,
-                            onCheckedChange = { groupConfirmed = it }, enabled = !member)
-                        Text("I joined the Google Group", fontSize = 13.sp)
+                        Checkbox(steps.groupConfirmed || member,
+                            onCheckedChange = { savePending(app.packageName, steps.copy(groupConfirmed = it)) },
+                            enabled = !member && !busy)
+                        SeqTextButton(onClick = { openSafeLink(context, app.googleGroupUrl) }) {
+                            Text("Open Google Group", fontSize = 13.sp)
+                            Spacer(Modifier.width(5.dp))
+                            Icon(Icons.Outlined.OpenInNew, null, Modifier.size(17.dp))
+                        }
                     }
+                    Text("Check the box after joining the Google Group.",
+                        color = SeqColors.Muted, fontSize = 12.sp)
                 }
             }
             SeqCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(15.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     SeqSectionTitle("2. Become a tester", Icons.Outlined.VerifiedUser)
-                    SeqTextButton(onClick = { openSafeLink(context, app.optInUrl) }) {
-                        Icon(Icons.Outlined.OpenInNew, null, Modifier.size(17.dp))
-                        Spacer(Modifier.width(5.dp))
-                        Text("Open Google Play opt-in")
-                    }
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(optInConfirmed || member,
-                            onCheckedChange = { optInConfirmed = it }, enabled = !member)
-                        Text("I accepted the invitation", fontSize = 13.sp)
+                        Checkbox(steps.optInConfirmed || member,
+                            onCheckedChange = { savePending(app.packageName, steps.copy(optInConfirmed = it)) },
+                            enabled = !member && !busy)
+                        SeqTextButton(onClick = { openSafeLink(context, app.optInUrl) }) {
+                            Text("Open Google Play opt-in", fontSize = 13.sp)
+                            Spacer(Modifier.width(5.dp))
+                            Icon(Icons.Outlined.OpenInNew, null, Modifier.size(17.dp))
+                        }
                     }
+                    Text("Check the box after accepting the invitation.",
+                        color = SeqColors.Muted, fontSize = 12.sp)
                 }
             }
             SeqCard(Modifier.fillMaxWidth()) {
@@ -346,6 +395,11 @@ internal fun SequmioCommunityCatalog(
                     }
                     SeqChip(if (local == null) "Not installed" else "Installed",
                         if (local == null) SeqColors.Muted else SeqColors.Success)
+                    if (local == null && !member) {
+                        Text("Google Play may take several minutes or longer to make the app available. " +
+                            "You can return later using Continue in App List. Your progress is saved.",
+                            color = SeqColors.Muted, fontSize = 12.sp)
+                    }
                 }
             }
             if (notice.isNotBlank()) Text(notice, color = SeqColors.Muted)
@@ -356,21 +410,60 @@ internal fun SequmioCommunityCatalog(
                         modifier = Modifier.fillMaxWidth(), icon = Icons.Outlined.PlayArrow)
                 }
             } else {
-                SeqPrimaryButton("Confirm Join & add to Runner", onClick = {
-                    scope.launch {
-                        busy = true
-                        try {
-                            repo.confirmJoin(app, groupConfirmed, optInConfirmed, local != null)
-                            joined = joined + app.packageName
-                            if (local != null) onJoined(app, local)
-                            notice = "Joined (self-confirmed). Added to Runner."
-                        } catch (error: Exception) {
-                            notice = "Join failed: " + (error.message ?: error.javaClass.simpleName)
-                        } finally { busy = false }
-                    }
-                }, enabled = !busy && account.profile != null &&
-                    groupConfirmed && optInConfirmed && local != null,
-                    modifier = Modifier.fillMaxWidth(), icon = Icons.Outlined.Check)
+                val ready = !busy && uid != null && steps.ready(local != null)
+                Button(
+                    onClick = {
+                        scope.launch {
+                            busy = true
+                            try {
+                                repo.confirmJoin(app, steps.groupConfirmed, steps.optInConfirmed, local != null)
+                                joined = joined + app.packageName
+                                savePending(app.packageName, null)
+                                if (local != null) onJoined(app, local)
+                                notice = "Joined (self-confirmed). Added to Runner."
+                            } catch (error: Exception) {
+                                notice = "Join failed: " + (error.message ?: error.javaClass.simpleName)
+                            } finally { busy = false }
+                        }
+                    },
+                    enabled = ready, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                    shape = RoundedCornerShape(50),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF207A61), contentColor = Color.White,
+                        disabledContainerColor = Color(0xFFB8C0CD),
+                        disabledContentColor = Color(0xFF303846))
+                ) {
+                    Icon(Icons.Outlined.Check, null, Modifier.size(19.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Confirm", fontWeight = FontWeight.SemiBold)
+                }
+                Button(onClick = { cancelJoin = true }, enabled = !busy,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                    shape = RoundedCornerShape(50),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFAD2C49), contentColor = Color.White)) {
+                    Text("Cancel", fontWeight = FontWeight.SemiBold)
+                }
+                if (cancelJoin) {
+                    AlertDialog(
+                        onDismissRequest = { cancelJoin = false },
+                        title = { Text("Cancel joining?") },
+                        text = { Text("Your saved progress in Sequmio will be cleared. " +
+                            "You must manually leave the Google Group and opt out of Google Play testing. " +
+                            "Sequmio cannot do this for you.") },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                savePending(app.packageName, null)
+                                cancelJoin = false
+                                selected = null
+                                notice = ""
+                            }) { Text("Cancel join", color = SeqColors.Error) }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { cancelJoin = false }) { Text("Keep joining") }
+                        }
+                    )
+                }
             }
         }
         Spacer(Modifier.height(10.dp))

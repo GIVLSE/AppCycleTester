@@ -50,6 +50,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.sequmio.givlse.account.AccountProfile
@@ -284,8 +285,10 @@ internal fun SequmioSettings(
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Text(profile?.name?.ifBlank { "Google account" } ?: "Sign in with Google",
-                            fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-                        if (profile != null) Text(profile.email, color = SeqColors.Muted, fontSize = 12.sp)
+                            fontSize = 17.sp, fontWeight = FontWeight.SemiBold,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        if (profile != null) Text(profile.email, color = SeqColors.Muted, fontSize = 12.sp,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                     if (profile != null) {
                         Spacer(Modifier.width(6.dp))
@@ -297,14 +300,15 @@ internal fun SequmioSettings(
                                 scope.launch { account.signOut() }
                             }
                         ) {
-                            Column(
-                                Modifier.padding(horizontal = 9.dp, vertical = 8.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(3.dp)
+                            Row(
+                                Modifier.heightIn(min = 44.dp).padding(horizontal = 9.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(5.dp)
                             ) {
                                 Icon(Icons.Outlined.Logout, contentDescription = null,
-                                    modifier = Modifier.size(23.dp))
-                                Text("Sign out", fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                                    modifier = Modifier.size(18.dp))
+                                Text("Sign Out", fontSize = 12.sp, fontWeight = FontWeight.Medium,
+                                    maxLines = 1, softWrap = false)
                             }
                         }
                     }

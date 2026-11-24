@@ -1,0 +1,3 @@
+# Sequmio 1.2.2 (23)
+
+Community: compact cards with Play link beside name; Join/Continue/Joined/My App actions. Pending enrollment is saved per Firebase UID on this device, prioritised in catalog and restored after navigation or process death. Google Group and opt-in remain self-confirmed; launcher availability is refreshed on Activity resume. Confirm is green when ready, silver when disabled; red Cancel prompts before clearing local progress and reminds users to manually leave Google services. Cancel does not modify Google enrollment or cloud membership. No fixed availability timer. Profile Sign Out is horizontal. Existing Firestore rules unchanged. Verify real two-account enrollment, installation delay, resume/restart, cancellation and account isolation on devices.
