@@ -77,18 +77,18 @@ class AccessibilityEventRecorder(
             gravity = Gravity.CENTER_VERTICAL
         }
         val text = TextView(service).apply {
-            text = "REC ● 0"
+            this.text = "REC ● 0"
             textSize = 13f
             setTextColor(Color.WHITE)
         }
         labelView = text
         val pause = Button(service).apply {
-            text = "Pause"
+            this.text = "Pause"
             setOnClickListener { togglePause() }
         }
         pauseButton = pause
         val stop = Button(service).apply {
-            text = "Stop"
+            this.text = "Stop"
             setOnClickListener { stop() }
         }
         root.addView(text, LinearLayout.LayoutParams(0, -2, 1f))
