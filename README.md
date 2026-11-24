@@ -19,7 +19,7 @@ Repository: https://github.com/GIVLSE/AppCycleTester
 - Timeout if an app's window is not confirmed within 8 seconds; retry a lost window up to twice. Other-app windows trigger recovery after 5 seconds; permissioncontroller dialogs receive up to 45 seconds for manual user action, never silent approval.
 - Kotlin + Jetpack Compose, minSdk 26, targetSdk 36.
 
-**Application ID:** `com.sequmio.givlse` · **Version:** `1.1.0` (`versionCode` 16).
+**Application ID:** `com.sequmio.givlse` · **Version:** `1.1.5` (`versionCode` 17).
 
 **Important:** This is a new Android package compared to the prototype `io.github.givlse.appcycletester`; installing Sequmio will not update the previous package in place.
 
@@ -140,3 +140,17 @@ My App includes a visual scenario editor with step creation, reordering, field e
 **Critical external dependencies:** No Firebase project, deployed Firestore rules, deployed scheduled function or email service is provisioned by this repository commit. Local Runner and suite editing work without cloud; uploads, online Dashboard and daily digests work only after those services are configured. Device acceptance, Play Accessibility/FGS/Data Safety declarations and cloud security tests remain pending.
 
 See docs/RELEASE_1_1.md and docs/FIREBASE_SETUP.md.
+
+## v1.1.5 — dark neon UI redesign
+
+Following the approved four-screen design mockup, v1.1.5 updates **presentation only**; it preserves the v1.1 QA runner, Firebase account/catalog logic, test cases, Recorder and reporting.
+
+- Consistent Material outlined icons replace most Unicode placeholders, including bottom navigation, Settings and Test Plan controls. Teal/violet card outlines and gradient primary buttons refine the dark theme.
+- Runner's **Start Plan** appears immediately below the Test Plan title. Real selected apps appear as individual rows with Android launcher icons, duration/source and Included/Running state. A local **Hide apps / Show apps** toggle collapses this list. Runner Status retains genuine accessibility state and latest test result.
+- App List adds search plus separate Community and On this device views. Community contains **real, backend-returned listings only**; installed apps are never shown as verified community testers. On-device apps can be added to Runner directly.
+- My App groups existing fields into App Details, Closed-test Links, QA Overview and Test Suites cards. Existing draft, publish, scenario editor, record and dashboard actions remain available.
+- History displays the existing local reports as distinct PASS / FAIL / STOPPED cards, supports JSON/CSV sharing and expandable actual test steps, and shows an event timeline with a Show all switch.
+
+This UI release does not make unavailable Firebase/Google Sign-In or scheduled QA emails operational, does not change app permissions, and is **not real-device visual QA acceptance**. Android API 26–36 and different display scaling must be checked on-device.
+
+See `docs/UI_IMPLEMENTATION_1_1_5.md` and `docs/RELEASE_1_1_5.md`.

@@ -215,3 +215,24 @@ New color tokens: content #F4F6FC; muted #ADBAD0; text links #B99AFF; filled but
 | QA11-22 | Android 11/14/16 | Player, recorder, FGS, permissions, no UI freezes |
 
 | QA11-23 | Non-looping E2E checks complete early | Runner advances to next app when all required assertions PASS, without idle wait |
+
+## v1.1.5 UI acceptance checklist — device QA pending
+
+| ID | Interaction | Expected |
+|---|---|---|
+| UI115-01 | Launch fresh and with existing v1.1 plan | Four tabs, outlined navigation icons and gradient theme; persisted data unchanged |
+| UI115-02 | Runner with 3 app plan | Start Plan button at top of Test Plan card, then three real launcher-icon rows |
+| UI115-03 | Tap Hide apps / Show apps | List collapses/expands; plan contents and order remain unchanged |
+| UI115-04 | Open target row and Edit | Existing Test Plan editor remains functional |
+| UI115-05 | Start/pause/resume/stop | Same runner behavior; controls stay tappable |
+| UI115-06 | Previous PASS/STOP session | Runner Status continues to show actual last result, elapsed and cycles |
+| UI115-07 | Community App List without Firebase | Honest backend-unavailable state; no fake listings |
+| UI115-08 | App List → On this device | Search filters actually installed apps; Add-to-Runner works |
+| UI115-09 | Published app Join with Firebase configured | Three original opt-in stages remain; no verified-membership claim |
+| UI115-10 | My App edit name/package/description/test links | Form retains existing values and saves correctly |
+| UI115-11 | My App → dashboard / suites / recorder | Existing actions and validations unchanged |
+| UI115-12 | History PASS / FAIL / STOPPED | Correct status colors, real dates, export JSON/CSV works |
+| UI115-13 | History expand step results and event log | Local real step values shown, Show all expands history |
+| UI115-14 | Settings from four main tabs | Returns to origin tab, actual version 1.1.5 displayed |
+| UI115-15 | Android 11/14/16 with small and large font/display scaling | No clipped bottom nav or controls; scrollable card layouts |
+| UI115-16 | Play AAB upgrade from 1.1.0 | Same upload certificate, versionCode 17 |

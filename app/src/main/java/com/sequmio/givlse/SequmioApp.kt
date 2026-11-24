@@ -2,6 +2,7 @@ package com.sequmio.givlse
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.graphics.Brush
@@ -685,7 +686,12 @@ private fun SequmioPlan(
                 Text("Selected Apps (" + plan.targets.size + ")",
                     fontSize = 17.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.weight(1f))
-                SeqTextButton(onClick = onAdd, enabled = enabled) { Text("+ Add App") }
+                SeqTextButton(onClick = onAdd, enabled = enabled) {
+                    Icon(Icons.Outlined.AddCircleOutline, contentDescription = null,
+                        modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(5.dp))
+                    Text("Add App")
+                }
             }
         }
         if (plan.targets.isEmpty()) item {
@@ -712,13 +718,19 @@ private fun SequmioPlan(
                     }
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Row(horizontalArrangement = Arrangement.spacedBy(0.dp)) {
-                            SeqTextButton(onClick = { onUp(index, -1) },
-                                enabled = enabled && index > 0) { Text("↑") }
-                            SeqTextButton(onClick = { onUp(index, 1) },
-                                enabled = enabled && index < plan.targets.lastIndex) { Text("↓") }
+                            SeqIconAction(Icons.Outlined.KeyboardArrowUp, "Move app up",
+                                onClick = { onUp(index, -1) },
+                                enabled = enabled && index > 0)
+                            SeqIconAction(Icons.Outlined.KeyboardArrowDown, "Move app down",
+                                onClick = { onUp(index, 1) },
+                                enabled = enabled && index < plan.targets.lastIndex)
                         }
                         SeqTextButton(onClick = { onRemove(target.packageName) },
-                            enabled = enabled) { Text("Remove", fontSize = 11.sp) }
+                            enabled = enabled) {
+                            Icon(Icons.Outlined.DeleteOutline,
+                                contentDescription = null, modifier = Modifier.size(17.dp))
+                            Text("Remove", fontSize = 11.sp)
+                        }
                     }
                 }
             }
@@ -748,7 +760,10 @@ private fun SequmioPlan(
         }
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("◷  Overall Time Limit", fontSize = 17.sp,
+                Icon(Icons.Outlined.Schedule, contentDescription = null,
+                    tint = SeqColors.Teal, modifier = Modifier.size(22.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Overall Time Limit", fontSize = 17.sp,
                     fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                 Switch(checked = plan.maxDurationMinutes > 0,
                     onCheckedChange = { onLimit(if (it) 15 else 0) },
@@ -764,9 +779,14 @@ private fun SequmioPlan(
             }
             if (plan.maxDurationMinutes > 0)
                 SeqCounter("Minutes", plan.maxDurationMinutes, 5, 10080, 5, enabled, onLimit)
-            Text(if (plan.maxDurationMinutes == 0) "ⓘ No overall limit."
-                else "ⓘ The test stops when the time limit is reached.",
-                color = SeqColors.Muted, fontSize = 12.sp)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.Info, contentDescription = null,
+                    tint = SeqColors.Muted, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(5.dp))
+                Text(if (plan.maxDurationMinutes == 0) "No overall limit."
+                    else "The test stops at the configured time limit.",
+                    color = SeqColors.Muted, fontSize = 12.sp)
+            }
         }
         item { SeqPrimaryButton("Save Plan", onSave, Modifier.fillMaxWidth(), enabled) }
         item { Spacer(Modifier.height(14.dp)) }
@@ -779,11 +799,13 @@ private fun SeqCounter(label: String, value: Int, low: Int, high: Int,
     SeqCard(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth().padding(9.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(label, Modifier.weight(1f), color = SeqColors.Muted)
-            SeqTextButton(onClick = { onChange((value - step).coerceAtLeast(low)) },
-                enabled = enabled && value > low) { Text("−", fontSize = 23.sp) }
+            SeqIconAction(Icons.Outlined.Remove, "Decrease " + label,
+                onClick = { onChange((value - step).coerceAtLeast(low)) },
+                enabled = enabled && value > low)
             Text(value.toString(), fontWeight = FontWeight.Bold)
-            SeqTextButton(onClick = { onChange((value + step).coerceAtMost(high)) },
-                enabled = enabled && value < high) { Text("+", fontSize = 23.sp) }
+            SeqIconAction(Icons.Outlined.Add, "Increase " + label,
+                onClick = { onChange((value + step).coerceAtMost(high)) },
+                enabled = enabled && value < high)
         }
     }
 }
@@ -800,7 +822,8 @@ internal fun SeqAppLetter(packageName: String, label: String) {
     Box(Modifier.size(43.dp).background(SeqColors.CardRaised,
         RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
         if (icon != null) {
-            Image(bitmap = icon, contentDescription = label, modifier = Modifier.fillMaxSize())
+            Image(bitmap = icon, contentDescription = label,
+                modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp)))
         } else {
             Text(label.take(1).uppercase(), color = SeqColors.Teal, fontSize = 18.sp,
                 fontWeight = FontWeight.Bold)
@@ -812,9 +835,8 @@ internal fun SeqAppLetter(packageName: String, label: String) {
 internal fun SeqTopBar(title: String, onBack: (() -> Unit)? = null) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         if (onBack != null) {
-            SeqTextButton(onClick = onBack) {
-                Text("‹", color = SeqColors.Text, fontSize = 30.sp)
-            }
+            SeqIconAction(Icons.Outlined.ArrowBack, "Back", onClick = onBack,
+                tint = SeqColors.Text)
         }
         Text(title, fontWeight = FontWeight.Bold, fontSize = 23.sp)
     }
