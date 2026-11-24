@@ -2,6 +2,9 @@ package com.sequmio.givlse
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
@@ -208,7 +211,16 @@ internal fun SequmioApp(
                     onJoined = { published, installed ->
                         mergeCommunity(listOf(published to installed), true)
                     },
-                    onSync = { list -> mergeCommunity(list, false) }
+                    onSync = { list -> mergeCommunity(list, false) },
+                    onLocalTest = { installed ->
+                        if (plan.targets.none { it.packageName == installed.packageName }) {
+                            setPlan(plan.copy(targets = plan.targets + TestTarget(
+                                installed.packageName, installed.activityClass,
+                                installed.label
+                            )))
+                        }
+                        page = Page.RUNNER
+                    }
                 )
                 Page.MY_APP -> SequmioDeveloperApp(
                     initial = ownAppDraft,
@@ -777,7 +789,7 @@ private fun SeqCounter(label: String, value: Int, low: Int, high: Int,
 }
 
 @Composable
-private fun SeqAppLetter(packageName: String, label: String) {
+internal fun SeqAppLetter(packageName: String, label: String) {
     val context = LocalContext.current
     val icon = remember(packageName) {
         runCatching {
@@ -812,6 +824,7 @@ internal fun SeqTopBar(title: String, onBack: (() -> Unit)? = null) {
 private fun SequmioHistory(history: List<RunEvent>, reports: List<RunReport>) {
     val context = LocalContext.current
     var expandedReportId by remember { mutableStateOf<String?>(null) }
+    var showAllEvents by rememberSaveable { mutableStateOf(false) }
     fun share(report: RunReport, csv: Boolean) {
         val data = if (csv) report.csv else report.rawJson
         val intent = Intent(Intent.ACTION_SEND).apply {
@@ -821,41 +834,126 @@ private fun SequmioHistory(history: List<RunEvent>, reports: List<RunReport>) {
         }
         context.startActivity(Intent.createChooser(intent, "Share local QA report"))
     }
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        item { SeqTopBar("Test History") }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 13.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
         item {
-            Text("Local test sessions • " + reports.size + " latest",
-                color = SeqColors.Muted, fontSize = 13.sp)
+            SeqSectionTitle("Test History", Icons.Outlined.History,
+                tint = SeqColors.Primary)
         }
-        if (reports.isEmpty() && history.isEmpty()) item {
-            SeqCard(Modifier.fillMaxWidth()) {
-                Text("No test runs yet.", Modifier.padding(22.dp), color = SeqColors.Muted)
+        item {
+            Text(
+                "Local QA sessions · " + reports.size + " latest",
+                color = SeqColors.Muted, fontSize = 12.sp
+            )
+        }
+        if (reports.isEmpty() && history.isEmpty()) {
+            item {
+                SeqCard(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(22.dp),
+                        verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                        Icon(Icons.Outlined.AssignmentTurnedIn, null,
+                            tint = SeqColors.Teal, modifier = Modifier.size(29.dp))
+                        Text("No test runs yet", fontWeight = FontWeight.SemiBold)
+                        Text("Run your first Test Plan to see session results here.",
+                            color = SeqColors.Muted, fontSize = 12.sp)
+                    }
+                }
             }
         }
         items(reports, key = { it.id }) { report ->
-            SeqCard(Modifier.fillMaxWidth()) {
-                Column(Modifier.fillMaxWidth().padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            val tint = when (report.status) {
+                "PASS" -> SeqColors.Success
+                "STOPPED" -> SeqColors.Primary
+                else -> SeqColors.Error
+            }
+            val statusIcon = when (report.status) {
+                "PASS" -> Icons.Outlined.CheckCircle
+                "STOPPED" -> Icons.Outlined.StopCircle
+                else -> Icons.Outlined.ErrorOutline
+            }
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(22.dp),
+                color = SeqColors.Card,
+                border = BorderStroke(1.dp, tint.copy(alpha = 0.45f))
+            ) {
+                Column(
+                    Modifier.background(Brush.horizontalGradient(listOf(
+                        tint.copy(alpha = 0.14f), Color.Transparent)))
+                        .padding(15.dp),
+                    verticalArrangement = Arrangement.spacedBy(11.dp)
+                ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(report.status, fontWeight = FontWeight.Bold,
-                            color = when (report.status) {
-                                "PASS" -> SeqColors.Success
-                                "STOPPED" -> SeqColors.Muted
-                                else -> SeqColors.Error
-                            })
+                        Icon(statusIcon, contentDescription = report.status,
+                            tint = tint, modifier = Modifier.size(26.dp))
+                        Spacer(Modifier.width(9.dp))
+                        Text(report.status, color = tint,
+                            fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         Spacer(Modifier.weight(1f))
-                        Text(SimpleDateFormat("dd MMM HH:mm", Locale.getDefault())
-                            .format(Date(report.startedAt)),
-                            color = SeqColors.Muted, fontSize = 12.sp)
+                        Text(
+                            SimpleDateFormat("dd MMM HH:mm", Locale.getDefault())
+                                .format(Date(report.startedAt)),
+                            color = SeqColors.Muted, fontSize = 11.sp
+                        )
                     }
-                    Text("Elapsed " + duration(report.durationSeconds) + " • " +
-                        report.completedCycles + " cycles", color = SeqColors.Text)
+                    Text(
+                        "Elapsed " + duration(report.durationSeconds) +
+                            "  •  " + report.completedCycles + " cycles",
+                        color = SeqColors.Text, fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium
+                    )
                     Text(report.reason, color = SeqColors.Muted, fontSize = 12.sp)
+                    Row(Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = { share(report, false) },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = SeqColors.Primary
+                            ),
+                            border = BorderStroke(
+                                1.dp, SeqColors.Primary.copy(alpha = 0.27f))
+                        ) {
+                            Icon(Icons.Outlined.DataObject, null, Modifier.size(17.dp))
+                            Spacer(Modifier.width(5.dp))
+                            Text("JSON", fontSize = 12.sp)
+                        }
+                        OutlinedButton(
+                            onClick = { share(report, true) },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = SeqColors.Primary
+                            ),
+                            border = BorderStroke(
+                                1.dp, SeqColors.Primary.copy(alpha = 0.27f))
+                        ) {
+                            Icon(Icons.Outlined.Description, null, Modifier.size(17.dp))
+                            Spacer(Modifier.width(5.dp))
+                            Text("CSV", fontSize = 12.sp)
+                        }
+                    }
                     SeqTextButton(onClick = {
-                        expandedReportId = if (expandedReportId == report.id) null else report.id
-                    }) { Text(if (expandedReportId == report.id) "Hide test cases" else
-                        "Show test cases & step results") }
+                        expandedReportId = if (expandedReportId == report.id)
+                            null else report.id
+                    }) {
+                        Icon(
+                            if (expandedReportId == report.id)
+                                Icons.Outlined.KeyboardArrowUp
+                            else Icons.Outlined.KeyboardArrowDown,
+                            null, Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            if (expandedReportId == report.id) "Hide test case details"
+                            else "Show test cases & step results",
+                            fontSize = 12.sp
+                        )
+                    }
                     if (expandedReportId == report.id) {
                         val parsed = remember(report.id) {
                             runCatching { JSONObject(report.rawJson) }.getOrNull()
@@ -863,64 +961,116 @@ private fun SequmioHistory(history: List<RunEvent>, reports: List<RunReport>) {
                         val targets = parsed?.optJSONArray("targets") ?: JSONArray()
                         for (i in 0 until targets.length()) {
                             val target = targets.optJSONObject(i) ?: continue
+                            HorizontalDivider(
+                                color = SeqColors.Border.copy(alpha = 0.55f))
                             Text(target.optString("label"),
-                                fontWeight = FontWeight.SemiBold)
+                                fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                             val scenarios = target.optJSONArray("scenarios") ?: JSONArray()
+                            if (scenarios.length() == 0) {
+                                Text("No structured E2E steps for this target",
+                                    color = SeqColors.Muted, fontSize = 12.sp)
+                            }
                             for (j in 0 until scenarios.length()) {
                                 val test = scenarios.optJSONObject(j) ?: continue
-                                Text(test.optString("suite") + " · " +
-                                    test.optString("name") + " v" +
-                                    test.optInt("version") + " · " +
-                                    test.optString("status"),
-                                    fontSize = 12.sp, color = SeqColors.Teal)
+                                Text(
+                                    test.optString("suite") + " · " +
+                                        test.optString("name") + " v" +
+                                        test.optInt("version") + " · " +
+                                        test.optString("status"),
+                                    fontSize = 12.sp, color = SeqColors.Teal
+                                )
                                 val rows = test.optJSONArray("steps") ?: JSONArray()
                                 for (k in 0 until minOf(rows.length(), 75)) {
                                     val step = rows.optJSONObject(k) ?: continue
-                                    Text("#" + step.optInt("stepIndex") + " " +
-                                        step.optString("action") + " " +
-                                        step.optString("status") + " (" +
-                                        step.optLong("durationMs") + "ms)",
-                                        fontSize = 12.sp,
-                                        color = if (step.optString("status") == "FAIL")
-                                            SeqColors.Error else SeqColors.Muted)
+                                    Row(verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Icon(
+                                            if (step.optString("status") == "FAIL")
+                                                Icons.Outlined.Cancel
+                                            else Icons.Outlined.CheckCircle,
+                                            null, Modifier.size(15.dp),
+                                            tint = if (step.optString("status") == "FAIL")
+                                                SeqColors.Error else SeqColors.Success
+                                        )
+                                        Text(
+                                            "#" + step.optInt("stepIndex") + " " +
+                                                step.optString("action") + " · " +
+                                                step.optString("status") + " (" +
+                                                step.optLong("durationMs") + " ms)",
+                                            fontSize = 11.sp, color = SeqColors.Muted
+                                        )
+                                    }
                                     if (step.optString("status") == "FAIL") {
                                         Text(step.optString("message"),
-                                            fontSize = 11.sp, color = SeqColors.Muted)
+                                            color = SeqColors.Muted, fontSize = 11.sp)
                                     }
                                 }
                             }
-                        }
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        SeqTextButton(onClick = { share(report, false) }) {
-                            Text("Share JSON")
-                        }
-                        SeqTextButton(onClick = { share(report, true) }) {
-                            Text("Share CSV")
                         }
                     }
                 }
             }
         }
         item {
-            Spacer(Modifier.height(6.dp))
-            Text("Event log • " + history.size + " latest",
-                color = SeqColors.Muted, fontSize = 13.sp)
+            Spacer(Modifier.height(7.dp))
+            SeqSectionTitle("Event Log", Icons.Outlined.Timeline)
+            Text(history.size.toString() + " local events",
+                color = SeqColors.Muted, fontSize = 12.sp)
         }
-        items(history) { event ->
-            SeqCard(Modifier.fillMaxWidth()) {
-                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("•", color = SeqColors.Teal, fontSize = 23.sp)
-                    Spacer(Modifier.width(9.dp))
-                    Column {
-                        Text(event.message)
-                        Text(SimpleDateFormat("dd MMM HH:mm:ss", Locale.getDefault())
-                            .format(Date(event.timestampMillis)), color = SeqColors.Muted,
-                            fontSize = 12.sp)
+        items(if (showAllEvents) history else history.take(25)) { event ->
+            val isError = event.message.contains("fail", ignoreCase = true)
+            val isStopped = event.message.contains("stop", ignoreCase = true)
+            val tint = if (isError) SeqColors.Error else if (isStopped)
+                SeqColors.Primary else SeqColors.Teal
+            Row(Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.width(21.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box(Modifier.size(10.dp).background(tint, CircleShape))
+                    Box(Modifier.width(1.dp).height(47.dp).background(
+                        SeqColors.Border.copy(alpha = 0.65f)))
+                }
+                Spacer(Modifier.width(7.dp))
+                SeqCard(Modifier.weight(1f)) {
+                    Row(Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            if (isError) Icons.Outlined.ErrorOutline
+                            else if (isStopped) Icons.Outlined.StopCircle
+                            else Icons.Outlined.CheckCircle,
+                            null, Modifier.size(18.dp), tint = tint
+                        )
+                        Spacer(Modifier.width(9.dp))
+                        Column {
+                            Text(event.message,
+                                color = SeqColors.Text, fontSize = 13.sp,
+                                maxLines = 3, overflow = TextOverflow.Ellipsis)
+                            Text(
+                                SimpleDateFormat("dd MMM HH:mm:ss", Locale.getDefault())
+                                    .format(Date(event.timestampMillis)),
+                                color = SeqColors.Muted, fontSize = 11.sp
+                            )
+                        }
                     }
                 }
             }
         }
+        if (history.size > 25) {
+            item {
+                SeqTextButton(
+                    onClick = { showAllEvents = !showAllEvents },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(if (showAllEvents) "Show fewer events" else
+                        "Show all " + history.size + " events")
+                    Icon(
+                        if (showAllEvents) Icons.Outlined.KeyboardArrowUp
+                            else Icons.Outlined.KeyboardArrowDown,
+                        null, Modifier.size(20.dp)
+                    )
+                }
+            }
+        }
+        item { Spacer(Modifier.height(12.dp)) }
     }
 }
 
