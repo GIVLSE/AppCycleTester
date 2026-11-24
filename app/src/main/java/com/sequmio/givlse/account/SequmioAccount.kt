@@ -56,6 +56,10 @@ class SequmioAccount(context: Context) {
     private val auth = firebaseApp?.let { FirebaseAuth.getInstance(it) }
     private val db = firebaseApp?.let { FirebaseFirestore.getInstance(it) }
 
+    /** Public catalog can be read as a guest; community writes require sign-in. */
+    fun cloudStore(): FirebaseFirestore? = db
+
+
     var profile: AccountProfile? by mutableStateOf(auth?.currentUser?.let { user ->
         AccountProfile(user.uid, user.displayName.orEmpty(), user.email.orEmpty(),
             user.photoUrl?.toString())

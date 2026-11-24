@@ -28,7 +28,7 @@ class SettingsStore(context: Context) {
                 if (pkg.isBlank() || activity.isBlank()) continue
                 add(TestTarget(pkg, activity, target.optString("label", pkg),
                     target.optInt("durationSeconds", 300).coerceIn(1, 7200),
-                    target.optString("scenarioJson", "").takeIf { it.isNotBlank() })))
+                    target.optString("scenarioJson", "").takeIf { it.isNotBlank() }))
             }
         }
         TestPlan(
