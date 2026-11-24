@@ -54,7 +54,21 @@ internal fun SequmioQaDashboard(
             fontSize = 12.sp, color = SeqColors.Muted)
         SeqTextButton(onClick = { refresh++ }, enabled = !loading) { Text("Refresh data") }
         if (loading) CircularProgressIndicator(color = SeqColors.Teal)
-        if (error.isNotBlank()) Text(error, color = SeqColors.Error)
+        if (error.isNotBlank()) {
+            SeqCard(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                    Text("Cloud QA data unavailable", color = SeqColors.Error,
+                        fontWeight = FontWeight.SemiBold)
+                    Text(error, color = SeqColors.Muted, fontSize = 12.sp)
+                    Text("Once Firebase is connected, this dashboard will show " +
+                        "actual run totals, PASS/FAIL by scenario, device coverage, " +
+                        "test cases and step details, app build comparisons, " +
+                        "suite breakdowns and daily UTC summaries.",
+                        color = SeqColors.Muted, fontSize = 12.sp)
+                }
+            }
+        }
         val summary = data
         if (summary != null) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {

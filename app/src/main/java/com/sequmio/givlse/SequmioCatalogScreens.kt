@@ -287,7 +287,7 @@ internal fun SequmioDeveloperApp(
                     "uses real Firebase reports, never simulated data.",
                     color = SeqColors.Muted, fontSize = 12.sp)
                 SeqPrimaryButton("Open QA Dashboard", onClick = { onDashboard(form) },
-                    enabled = profile != null && form.packageName.isNotBlank(),
+                    enabled = form.packageName.isNotBlank(),
                     modifier = Modifier.fillMaxWidth())
             }
         }

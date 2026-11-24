@@ -18,6 +18,7 @@ import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import com.sequmio.givlse.BuildConfig
+import com.sequmio.givlse.data.CloudUploadPrefs
 import kotlinx.coroutines.tasks.await
 
 data class AccountProfile(
@@ -205,6 +206,7 @@ class SequmioAccount(context: Context) {
             database.collection("users").document(uid).delete().await()
             current.delete().await()
             profile = null
+            CloudUploadPrefs(appContext).enabled = false
             status = "Cloud account and owned data deleted."
             try {
                 CredentialManager.create(appContext)
@@ -220,7 +222,8 @@ class SequmioAccount(context: Context) {
         auth?.signOut()
         profile = null
         dailyDigest = false
-        status = "Signed out."
+        CloudUploadPrefs(appContext).enabled = false
+        status = "Signed out. Automatic report sharing was disabled."
         try {
             CredentialManager.create(appContext).clearCredentialState(
                 ClearCredentialStateRequest()

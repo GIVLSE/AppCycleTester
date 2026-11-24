@@ -1,6 +1,7 @@
 package com.sequmio.givlse.data
 
 import android.content.Context
+import android.os.Build
 import com.sequmio.givlse.model.TestPlan
 import com.sequmio.givlse.data.StepExecutionResult
 import org.json.JSONArray
@@ -44,7 +45,10 @@ class RunReportStore(private val context: Context) {
         recoverInterrupted()
         val targets = JSONArray()
         plan.targets.forEach { t ->
+            val version = installedVersion(t.packageName)
             targets.put(JSONObject().put("label", t.label)
+                .put("appVersion", version.first)
+                .put("appVersionCode", version.second)
                 .put("packageName", t.packageName)
                 .put("durationSeconds", t.durationSeconds)
                 .put("origin", t.origin)
@@ -73,6 +77,18 @@ class RunReportStore(private val context: Context) {
             .put("completedCycles", 0).put("repeatMode", plan.repeatMode.name)
             .put("reason", "").put("targets", targets).put("events", JSONArray()))
     }
+
+    @Suppress("DEPRECATION")
+    private fun installedVersion(packageName: String): Pair<String, Long> =
+        runCatching {
+            val pm = context.packageManager
+            val info = if (Build.VERSION.SDK_INT >= 33) pm.getPackageInfo(
+                packageName, android.content.pm.PackageManager.PackageInfoFlags.of(0)
+            ) else pm.getPackageInfo(packageName, 0)
+            (info.versionName ?: "unknown").take(80) to
+                if (Build.VERSION.SDK_INT >= 28) info.longVersionCode
+                else info.versionCode.toLong()
+        }.getOrDefault("unknown" to 0L)
 
     private fun inc(index: Int, name: String) {
         change { json -> item(json, index)?.let { it.put(name, it.optInt(name) + 1) } }

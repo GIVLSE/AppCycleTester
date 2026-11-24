@@ -112,7 +112,10 @@ class RunUploadWorker(context: Context, params: WorkerParameters) :
                             )
                         }
                     }
-                    val details = appVersion(appId)
+                    val savedVersion = target.optString("appVersion", "")
+                    val details = if (savedVersion.isNotBlank())
+                        savedVersion.take(80) to target.optLong("appVersionCode", 0)
+                    else appVersion(appId)
                     val started = scenario.optLong("startedAt", report.startedAt)
                         .coerceAtLeast(0L)
                     val ended = scenario.optLong("endedAt", report.endedAt)
