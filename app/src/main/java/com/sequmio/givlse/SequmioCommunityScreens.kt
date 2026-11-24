@@ -287,11 +287,45 @@ internal fun SequmioSettings(
                             fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
                         if (profile != null) Text(profile.email, color = SeqColors.Muted, fontSize = 12.sp)
                     }
+                    if (profile != null) {
+                        Spacer(Modifier.width(6.dp))
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = SeqColors.Primary.copy(alpha = 0.12f),
+                            contentColor = if (account.busy) SeqColors.Muted else SeqColors.Primary,
+                            modifier = Modifier.clickable(enabled = !account.busy) {
+                                scope.launch { account.signOut() }
+                            }
+                        ) {
+                            Column(
+                                Modifier.padding(horizontal = 9.dp, vertical = 8.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(3.dp)
+                            ) {
+                                Icon(Icons.Outlined.Logout, contentDescription = null,
+                                    modifier = Modifier.size(23.dp))
+                                Text("Sign out", fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                            }
+                        }
+                    }
                 }
                 if (profile != null) {
-                    SeqTextButton(onClick = { scope.launch { account.signOut() } }) { Text("Sign out") }
-                    SeqTextButton(onClick = { confirmDeletion = true }) {
-                        Text("Delete my Sequmio account", color = SeqColors.Error)
+                    Button(
+                        onClick = { confirmDeletion = true },
+                        enabled = !account.busy,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                        shape = RoundedCornerShape(50),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFAD2C49),
+                            contentColor = Color.White,
+                            disabledContainerColor = SeqColors.CardRaised,
+                            disabledContentColor = SeqColors.Muted
+                        )
+                    ) {
+                        Icon(Icons.Outlined.DeleteOutline, contentDescription = null,
+                            modifier = Modifier.size(19.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Delete my Sequmio account", fontWeight = FontWeight.SemiBold)
                     }
                 } else {
                     Surface(

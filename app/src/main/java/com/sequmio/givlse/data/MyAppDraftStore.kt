@@ -14,6 +14,8 @@ data class MyAppDraft(
 ) {
     fun validateForPublish(): List<String> = buildList {
         if (appName.isBlank()) add("App name is required")
+        if (appName.length >= 100) add("App name must be shorter than 100 characters")
+        if (description.length > 1000) add("Description must be 1000 characters or less")
         if (!Regex("^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)+$")
                 .matches(packageName)) add("Enter a valid Android package name")
         if (!googleGroupUrl.isHttps()) add("Google Group link must use HTTPS")
@@ -25,6 +27,15 @@ data class MyAppDraft(
             add("Become a Tester must use play.google.com")
         if (playStoreUrl.isNotBlank() && android.net.Uri.parse(playStoreUrl).host != "play.google.com")
             add("Google Play URL must use play.google.com")
+        // Match the Firestore publication URL allowlist before attempting the transaction.
+        if (googleGroupUrl.isNotBlank() && !googleGroupUrl.startsWith("https://groups.google.com/"))
+            add("Enter a direct HTTPS Google Group URL")
+        if (optInUrl.isNotBlank() && !optInUrl.startsWith("https://play.google.com/apps/testing/"))
+            add("Become a Tester link must start with https://play.google.com/apps/testing/")
+        if (playStoreUrl.isNotBlank() && !playStoreUrl.startsWith("https://play.google.com/store/apps/details"))
+            add("Enter the Google Play app details URL")
+        if (scenarioJson.length !in 41..48000)
+            add("Test case data must contain 41 to 48000 characters")
         val scenarioError = runCatching {
             ScenarioCodec.parseAll(scenarioJson, packageName)
         }.exceptionOrNull()

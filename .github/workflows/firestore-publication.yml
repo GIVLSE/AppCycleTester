@@ -1,0 +1,33 @@
+name: Firestore publication regression
+on:
+  push:
+    branches: [main]
+    paths:
+      - firestore.rules
+      - tests/firestore-publication.cjs
+      - .github/workflows/firestore-publication.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  rules:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Run isolated Firestore regression
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/sequmio-rules"
+          cp firestore.rules tests/firestore-publication.cjs "$RUNNER_TEMP/sequmio-rules/"
+          cd "$RUNNER_TEMP/sequmio-rules"
+          npm init -y
+          npm install --save-dev firebase-tools @firebase/rules-unit-testing firebase
+          printf '%s\n' '{"firestore":{"rules":"firestore.rules"},"emulators":{"firestore":{"host":"127.0.0.1","port":8085},"ui":{"enabled":false}}}' > firebase.json
+          npx firebase emulators:exec --only firestore --project demo-sequmio "node firestore-publication.cjs"
