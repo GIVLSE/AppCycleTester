@@ -130,7 +130,7 @@ class RunUploadWorker(context: Context, params: WorkerParameters) :
                         "status" to outcome,
                         "startedAt" to Timestamp(Date(started)),
                         "endedAt" to Timestamp(Date(ended)),
-                        "elapsedSeconds" to ((ended - started) / 1000L),
+                        "elapsedSeconds" to scenario.optLong("actualSeconds", (ended - started) / 1000L).coerceAtLeast(0L),
                         "foregroundSeconds" to target.optLong("foregroundSeconds"),
                         "launches" to target.optInt("launches"),
                         "retries" to target.optInt("retries"),

@@ -10,7 +10,8 @@ data class TestTarget(
     val origin: String = "local",
     val executionMode: ExecutionMode = if (scenarioJson.isNullOrBlank())
         ExecutionMode.FIXED_DURATION else ExecutionMode.RUN_TEST_CASES,
-    val scenarioTimeoutSeconds: Int = 0
+    val scenarioTimeoutSeconds: Int = 0,
+    val selectedCaseKeys: List<String>? = null
 )
 enum class RepeatMode { ONCE, COUNT, ENDLESS }
 data class TestPlan(
@@ -25,6 +26,8 @@ data class TestPlan(
         targets.any { it.scenarioTimeoutSeconds !in 0..14430 } -> "Invalid scenario timeout"
         targets.any { it.executionMode != ExecutionMode.FIXED_DURATION && it.scenarioJson.isNullOrBlank() } ->
             "Selected execution mode requires test cases"
+        targets.any { it.executionMode != ExecutionMode.FIXED_DURATION && it.selectedCaseKeys?.isEmpty() == true } ->
+            "Select at least one test case"
         repeatCount !in 1..999 -> "Количество циклов: от 1 до 999"
         maxDurationMinutes !in 0..10080 -> "Общий лимит: от 0 до 10080 минут"
         else -> null

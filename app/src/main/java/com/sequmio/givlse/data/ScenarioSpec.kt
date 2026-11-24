@@ -60,6 +60,20 @@ object ScenarioCodec {
         return parsed
     }
 
+    // Position disambiguates legacy duplicate names; revisions retain selection.
+    fun caseKey(index: Int, spec: ScenarioSpec): String =
+        index.toString() + ":" + spec.suite + ":" + spec.name
+
+    fun selectCases(raw: String, expectedPackage: String, keys: List<String>?): List<ScenarioSpec> {
+        val all = parseAll(raw, expectedPackage)
+        if (keys == null) return all
+        val selected = all.filterIndexed { index, spec -> caseKey(index, spec) in keys }
+        require(selected.isNotEmpty() && selected.size == keys.distinct().size) {
+            "Selected test cases changed; review the plan"
+        }
+        return selected
+    }
+
     fun parse(json: String, expectedPackage: String): ScenarioSpec {
         require(json.length in 50..48_000) { "Scenario JSON must be 50–48,000 characters" }
         val data = JSONObject(json)

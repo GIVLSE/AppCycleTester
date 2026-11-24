@@ -268,6 +268,7 @@ class ScenarioPlayer(
             record(step, "FAIL", message)
             val failedIndex = current + 1
             current++
+            stepStartedAt = 0L
             interrupt("FAIL", "Not executed after required step failed")
             onFailure("Step " + failedIndex + " " + step.action + " FAIL: " + message)
         }

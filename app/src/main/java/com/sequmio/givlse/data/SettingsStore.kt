@@ -34,7 +34,10 @@ class SettingsStore(context: Context) {
                     runCatching { ExecutionMode.valueOf(target.optString("executionMode")) }
                         .getOrDefault(if (target.optString("scenarioJson").isBlank())
                             ExecutionMode.FIXED_DURATION else ExecutionMode.RUN_TEST_CASES),
-                    target.optInt("scenarioTimeoutSeconds", 0).coerceIn(0, 14430)))
+                    target.optInt("scenarioTimeoutSeconds", 0).coerceIn(0, 14430),
+                    target.optJSONArray("selectedCaseKeys")?.let { arr ->
+                        (0 until arr.length()).map { arr.optString(it) }.filter { it.isNotBlank() }
+                    }))
             }
         }
         TestPlan(
@@ -58,7 +61,8 @@ class SettingsStore(context: Context) {
                 .put("scenarioJson", it.scenarioJson ?: "")
                 .put("origin", it.origin)
                 .put("executionMode", it.executionMode.name)
-                .put("scenarioTimeoutSeconds", it.scenarioTimeoutSeconds))
+                .put("scenarioTimeoutSeconds", it.scenarioTimeoutSeconds)
+                .put("selectedCaseKeys", it.selectedCaseKeys?.let { keys -> JSONArray(keys) } ?: JSONObject.NULL))
         }
         json.put("targets", targets)
         prefs.edit().putString("plan", json.toString()).apply()

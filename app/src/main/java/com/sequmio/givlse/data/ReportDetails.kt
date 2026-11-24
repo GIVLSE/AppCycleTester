@@ -62,8 +62,9 @@ object ReportDetails {
                     ?: t.optString("outcome", json.optString("status"))
                 val start = s?.optLong("startedAt") ?: json.optLong("startedAt")
                 val end = s?.optLong("endedAt")?.takeIf { it > 0 } ?: json.optLong("endedAt")
-                val reason = s?.optString("reason").orEmpty().ifBlank { t.optString("reason").ifBlank {
-                    if (status != "PASS") json.optString("reason") else "" } }
+                val reason = s?.optString("reason").orEmpty().ifBlank {
+                    if (status != "PASS") t.optString("reason").ifBlank { json.optString("reason") } else ""
+                }
                 val actual = if (s == null) t.optLong("foregroundSeconds") else
                     s.optLong("actualSeconds", ((end-start).coerceAtLeast(0L))/1000L)
                 lines.add(listOf(json.optString("id"), json.optString("status"),

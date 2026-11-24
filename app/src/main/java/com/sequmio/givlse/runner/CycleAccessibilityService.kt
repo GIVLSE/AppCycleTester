@@ -290,7 +290,8 @@ class CycleAccessibilityService : AccessibilityService() {
         val target = p.targets[index]
         val now = SystemClock.elapsedRealtime()
         // A launch can reuse an existing activity without a new window event.
-        if (rootInActiveWindow?.packageName?.toString() == target.packageName) {
+        val foreground = rootInActiveWindow?.packageName?.toString()
+        if (foreground == target.packageName) {
             otherWindowAt = 0L
             otherWindowPackage = ""
             if (!launchConfirmed) {
@@ -299,6 +300,9 @@ class CycleAccessibilityService : AccessibilityService() {
                 startScenarioIfNeeded()
                 return
             }
+        } else if (launchConfirmed && foreground != null && foreground != otherWindowPackage) {
+            otherWindowAt = now
+            otherWindowPackage = foreground
         }
         if (!launchConfirmed && otherWindowAt > 0L &&
             RunRecoveryPolicy.isPermissionDialog(otherWindowPackage)) {
@@ -316,6 +320,7 @@ class CycleAccessibilityService : AccessibilityService() {
             )
         } else if (target.executionMode == ExecutionMode.FIXED_DURATION &&
             appElapsedMs >= target.durationSeconds * 1000L) {
+            reports.targetOutcome(index, "PASS", "")
             addEvent("Completed foreground time for " + target.label)
             advanceToNext()
         }
@@ -464,7 +469,9 @@ class CycleAccessibilityService : AccessibilityService() {
             ?: if (passed) "PASS" else if (worstStatus == "PASS") "BLOCKED" else worstStatus
         if (scenarioPlayer != null) {
             scenarioPlayer?.interrupt(outcome, reason)
-            reports.scenarioEnded(index, outcome, reason)
+            reports.scenarioEnded(index, outcome, reason,
+                SystemClock.elapsedRealtime() - scenarioStartedAt)
+            recordUnstartedCases(reason)
         }
         scenarioPlayer = null
         if (phase == RunPhase.RUNNING) accumulateTime()
@@ -551,9 +558,9 @@ class CycleAccessibilityService : AccessibilityService() {
             return
         }
         scenarioQueue = runCatching {
-            ScenarioCodec.parseAll(raw, target.packageName)
+            ScenarioCodec.selectCases(raw, target.packageName, target.selectedCaseKeys)
         }.getOrElse { error ->
-            failScenario("Invalid scenario configuration", "BLOCKED")
+            failScenario("Invalid scenario or changed test case selection; review Test Plan", "BLOCKED")
             return
         }
         scenarioPosition = 0
@@ -591,7 +598,8 @@ class CycleAccessibilityService : AccessibilityService() {
                     failScenario("Scenario timeout exceeded", "TIMEOUT")
                 } else {
                     handler.removeCallbacks(scenarioTimeout)
-                    reports.scenarioEnded(index, "PASS", "")
+                    reports.scenarioEnded(index, "PASS", "",
+                        SystemClock.elapsedRealtime() - scenarioStartedAt)
                     scenarioCompletedCount++
                     addEvent("Scenario PASS: " + completed.name + " v" + completed.version)
                     scenarioPlayer?.stop()
@@ -607,6 +615,7 @@ class CycleAccessibilityService : AccessibilityService() {
                         scenarioIteration++
                         startNextScenario()
                     } else {
+                        if (!scenarioFailed) reports.targetOutcome(index, "PASS", "")
                         advanceToNext()
                     }
                 }
@@ -622,14 +631,36 @@ class CycleAccessibilityService : AccessibilityService() {
         if (phase != RunPhase.RUNNING) return
         handler.removeCallbacks(scenarioTimeout)
         scenarioPlayer?.interrupt(status, error)
-        reports.scenarioEnded(index, status, error)
+        reports.scenarioEnded(index, status, error,
+            if (scenarioStartedAt > 0) SystemClock.elapsedRealtime() - scenarioStartedAt else 0L)
         scenarioPlayer = null
         scenarioFailed = true
         noteFailure(status)
         reports.failure(index)
         reports.targetOutcome(index, status, error)
         addEvent(status + ": " + error)
-        advanceToNext()
+        // Continue independent cases after an ordinary test failure when still in
+        // the target app, but do not restart a failed loop iteration.
+        val target = plan?.targets?.getOrNull(index)
+        if (status == "FAIL" && target?.executionMode == ExecutionMode.RUN_TEST_CASES &&
+            scenarioPosition + 1 < scenarioQueue.size &&
+            rootInActiveWindow?.packageName?.toString() == target.packageName) {
+            scenarioPosition++
+            startNextScenario()
+        } else {
+            recordUnstartedCases(error)
+            advanceToNext()
+        }
+    }
+
+    private fun recordUnstartedCases(reason: String) {
+        val target = plan?.targets?.getOrNull(index) ?: return
+        for (position in scenarioPosition + 1 until scenarioQueue.size) {
+            val spec = scenarioQueue[position]
+            if (!reports.scenarioStarted(index, spec, completedCycles + 1, scenarioIteration,
+                    ExecutionPolicy.timeout(spec.totalDurationSec, target.scenarioTimeoutSeconds))) break
+            reports.scenarioEnded(index, "NOT_EXECUTED", reason, 0L)
+        }
     }
 
     private fun addEvent(message: String) {

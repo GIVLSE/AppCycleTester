@@ -122,7 +122,7 @@ internal fun targetTimeLabel(seconds: Int): String =
 internal fun executionLabel(target: TestTarget): String = when (target.executionMode) {
     ExecutionMode.FIXED_DURATION -> targetTimeLabel(target.durationSeconds) + " · Fixed"
     ExecutionMode.RUN_TEST_CASES -> "Test cases · " + targetTimeLabel(
-        runCatching { ScenarioCodec.parseAll(target.scenarioJson.orEmpty(), target.packageName)
+        runCatching { ScenarioCodec.selectCases(target.scenarioJson.orEmpty(), target.packageName, target.selectedCaseKeys)
             .sumOf { it.totalDurationSec } }.getOrDefault(target.durationSeconds)) + " est."
     ExecutionMode.LOOP_TEST_CASES -> targetTimeLabel(target.durationSeconds) + " · Loop"
 }
@@ -135,6 +135,9 @@ internal fun SequmioDurationDialog(
         runCatching { ScenarioCodec.parseAll(target.scenarioJson.orEmpty(), target.packageName) }
             .getOrDefault(emptyList())
     }
+    val allKeys = cases.mapIndexed { i, spec -> ScenarioCodec.caseKey(i, spec) }
+    var selectedKeys by remember(target) { mutableStateOf(
+        target.selectedCaseKeys?.toSet()?.intersect(allKeys.toSet()) ?: allKeys.toSet()) }
     var mode by remember(target) { mutableStateOf(target.executionMode) }
     var seconds by remember(target) { mutableStateOf(target.durationSeconds.coerceIn(1, 7200)) }
     var auto by remember(target) { mutableStateOf(target.scenarioTimeoutSeconds == 0) }
@@ -164,11 +167,17 @@ internal fun SequmioDurationDialog(
                     }
                 }
                 if (mode != ExecutionMode.FIXED_DURATION) {
-                    cases.forEach { spec ->
-                        Text(spec.name + " v" + spec.version + " · " +
-                            targetTimeLabel(spec.totalDurationSec) + " estimated · " +
-                            targetTimeLabel(ExecutionPolicy.timeout(spec.totalDurationSec,
-                                if (auto) 0 else timeout ?: 300)) + " timeout", fontSize = 12.sp)
+                    cases.forEachIndexed { i, spec ->
+                        val key = allKeys[i]
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(checked = key in selectedKeys, onCheckedChange = {
+                                selectedKeys = if (it) selectedKeys + key else selectedKeys - key
+                            })
+                            Text(spec.name + " v" + spec.version + " · " +
+                                targetTimeLabel(spec.totalDurationSec) + " estimated · " +
+                                targetTimeLabel(ExecutionPolicy.timeout(spec.totalDurationSec,
+                                    if (auto) 0 else timeout ?: 300)) + " timeout", fontSize = 12.sp)
+                        }
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("Automatic timeout", Modifier.weight(1f))
@@ -212,9 +221,10 @@ internal fun SequmioDurationDialog(
         },
         confirmButton = { SeqTextButton(
             enabled = mode == ExecutionMode.FIXED_DURATION ||
-                (cases.isNotEmpty() && (auto || timeout != null && timeout in 1..14430)),
+                (selectedKeys.isNotEmpty() && (auto || timeout != null && timeout in 1..14430)),
             onClick = { onSave(target.copy(durationSeconds = seconds, executionMode = mode,
-                scenarioTimeoutSeconds = if (auto) 0 else timeout?.coerceIn(1, 14430) ?: 0)) }
+                scenarioTimeoutSeconds = if (auto) 0 else timeout?.coerceIn(1, 14430) ?: 0,
+                selectedCaseKeys = if (selectedKeys == allKeys.toSet()) null else allKeys.filter { it in selectedKeys })) }
         ) { Text("Save") } },
         dismissButton = { SeqTextButton(onClick = onDismiss) { Text("Cancel") } }
     )

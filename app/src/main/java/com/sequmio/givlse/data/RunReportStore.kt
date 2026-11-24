@@ -144,13 +144,15 @@ class RunReportStore(private val context: Context) {
         } }
     }
 
-    fun scenarioEnded(index: Int, status: String, reason: String) {
+    fun scenarioEnded(index: Int, status: String, reason: String, actualMs: Long? = null) {
         change { json ->
             item(json, index)?.let { target ->
                 val current = target.optInt("activeScenarioIndex", -1)
                 target.optJSONArray("scenarios")?.optJSONObject(current)?.let {
-                    if (it.optString("status") == "RUNNING")
+                    if (it.optString("status") == "RUNNING") {
                         ReportDetails.finalizeScenario(it, status, reason, System.currentTimeMillis())
+                        actualMs?.let { ms -> it.put("actualSeconds", ms.coerceAtLeast(0L) / 1000L) }
+                    }
                 }
                 target.put("activeScenarioIndex", -1)
             }
@@ -238,6 +240,19 @@ class RunReportStore(private val context: Context) {
         val arr = runCatching { JSONArray(prefs.getString("history", "[]")) }.getOrDefault(JSONArray())
         return (0 until arr.length()).mapNotNull { i ->
             arr.optJSONObject(i)?.let { json ->
+                // Normalize old terminal reports, without fabricating missing step data.
+                if (json.optString("status") != "RUNNING") {
+                    val targets = json.optJSONArray("targets") ?: JSONArray()
+                    for (j in 0 until targets.length()) {
+                        val cases = targets.optJSONObject(j)?.optJSONArray("scenarios") ?: JSONArray()
+                        for (z in 0 until cases.length()) {
+                            cases.optJSONObject(z)?.let { c ->
+                                if (c.optString("status") == "RUNNING")
+                                    c.put("status", "INCOMPLETE").put("reason", json.optString("reason"))
+                            }
+                        }
+                    }
+                }
                 RunReport(
                     json.optString("id"), json.optString("status"),
                     json.optLong("startedAt"), json.optLong("endedAt"),

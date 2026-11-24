@@ -143,7 +143,8 @@ internal fun SequmioApp(
                     remote.executionMode else existing.executionMode,
                     durationSeconds = if (existing.executionMode == ExecutionMode.RUN_TEST_CASES)
                         remote.durationSeconds else existing.durationSeconds,
-                    scenarioTimeoutSeconds = existing.scenarioTimeoutSeconds) else existing
+                    scenarioTimeoutSeconds = existing.scenarioTimeoutSeconds,
+                    selectedCaseKeys = existing.selectedCaseKeys) else existing
         }.toMutableList()
         imported.values.forEach { remote ->
             if (next.none { it.packageName == remote.packageName }) next.add(remote)
@@ -430,7 +431,7 @@ private fun SequmioHome(
     }
     val cycleSeconds = plan.targets.sumOf { target ->
         if (target.executionMode == ExecutionMode.RUN_TEST_CASES)
-            runCatching { ScenarioCodec.parseAll(target.scenarioJson.orEmpty(), target.packageName)
+            runCatching { ScenarioCodec.selectCases(target.scenarioJson.orEmpty(), target.packageName, target.selectedCaseKeys)
                 .sumOf { it.totalDurationSec } }.getOrDefault(target.durationSeconds)
         else target.durationSeconds
     }.toLong()
@@ -1031,7 +1032,9 @@ private fun SequmioHistory(history: List<RunEvent>, reports: List<RunReport>) {
                                     Text("Steps: " + statuses.count { it == "PASS" } + " PASS · " +
                                         statuses.count { it == "FAIL" } + " FAIL · " +
                                         statuses.count { it == "NOT_EXECUTED" || it == "SKIPPED" } +
-                                        " skipped / not executed",
+                                        " skipped / not executed · " +
+                                        statuses.count { it in listOf("BLOCKED", "TIMEOUT", "STOPPED") } +
+                                        " interrupted",
                                         color = SeqColors.Muted, fontSize = 11.sp)
                                 }
                                 if (test.optString("reason").isNotBlank())
