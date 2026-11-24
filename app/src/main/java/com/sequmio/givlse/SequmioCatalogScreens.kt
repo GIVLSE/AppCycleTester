@@ -209,7 +209,7 @@ internal fun SequmioCommunityCatalog(
 
 @Composable
 private fun CatalogTextField(
-    title: String, value: String, onChange: (String) -> Unit, lines: Int = 1
+    title: String, value: String, lines: Int = 1, onChange: (String) -> Unit
 ) {
     OutlinedTextField(
         value = value, onValueChange = onChange, label = { Text(title) },
@@ -269,7 +269,7 @@ internal fun SequmioDeveloperApp(
         }
         CatalogTextField("App name", form.appName) { form = form.copy(appName = it) }
         CatalogTextField("Package name", form.packageName) { form = form.copy(packageName = it) }
-        CatalogTextField("Description", form.description, { form = form.copy(description = it) }, 3)
+        CatalogTextField("Description", form.description, 3) { form = form.copy(description = it) }
         Text("Closed-test links", fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
         CatalogTextField("1. Google Group", form.googleGroupUrl) {
             form = form.copy(googleGroupUrl = it)
@@ -360,7 +360,7 @@ internal fun SequmioScenarioEditor(
         Text("Replace the example selector with a real element in your app. " +
             "A WAIT-only script is not valid for publishing.",
             color = SeqColors.Muted, fontSize = 13.sp)
-        CatalogTextField("Scenario JSON", json, { json = it }, 15)
+        CatalogTextField("Scenario JSON", json, 15) { json = it }
         SeqTextButton(onClick = {
             result = runCatching {
                 ScenarioCodec.parse(json, initial.packageName)
