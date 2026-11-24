@@ -62,6 +62,7 @@ internal fun SequmioApp(
     resultOpenVersion: Int,
     requestNotificationPermission: () -> Unit,
     openAccessibility: () -> Unit,
+    openAccessibilityList: () -> Unit,
     openDisplaySettings: () -> Unit,
     openAppDetails: () -> Unit
 ) {
@@ -372,6 +373,7 @@ internal fun SequmioApp(
                     onBack = { page = setupReturnPage },
                     onAppInfo = openAppDetails,
                     onAccessibility = openAccessibility,
+                    onAccessibilityList = openAccessibilityList,
                     onNotifications = requestNotificationPermission,
                     onDisplaySettings = openDisplaySettings,
                     onPrivacy = openPrivacy,

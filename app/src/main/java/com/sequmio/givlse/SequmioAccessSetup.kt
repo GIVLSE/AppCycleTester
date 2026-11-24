@@ -43,6 +43,7 @@ internal fun SequmioAccessSetup(
     onConsent: () -> Unit,
     onAppInfo: () -> Unit,
     onAccessibility: () -> Unit,
+    onAccessibilityList: () -> Unit,
     onNotifications: () -> Unit,
     onDisplaySettings: () -> Unit,
     onPrivacy: () -> Unit,
@@ -50,6 +51,11 @@ internal fun SequmioAccessSetup(
     onStart: () -> Unit
 ) {
     var consentChecked by remember { mutableStateOf(false) }
+    val manualPath = when (Build.MANUFACTURER.lowercase(java.util.Locale.ROOT)) {
+        "samsung" -> "Accessibility → Installed apps → Sequmio Runner"
+        "xiaomi", "redmi", "poco" -> "Accessibility → Downloaded apps → Sequmio Runner"
+        else -> "Accessibility → Downloaded / Installed apps → Sequmio Runner"
+    }
     val checkColors = CheckboxDefaults.colors(
         checkedColor = SeqColors.PrimaryAction,
         uncheckedColor = SeqColors.Muted,
@@ -141,16 +147,17 @@ internal fun SequmioAccessSetup(
                         )
                         Text(
                             if (systemEnabled) "Confirmed by Android. Tap to review the setting."
-                            else "Open Accessibility, then select Installed apps / Downloaded apps and enable Sequmio Runner.",
+                            else "Open the Runner service page and enable access in Android.",
                             color = SeqColors.Muted, fontSize = 12.sp
                         )
                     }
                     Text("›", color = SeqColors.Primary, fontSize = 28.sp)
                 }
-                if (!systemEnabled && consent) {
-                    SeqTextButton(onClick = onAccessibility) { Text("Open Accessibility settings") }
-                    Text("Samsung: Settings → Accessibility → Installed apps → Sequmio Runner. " +
-                        "The exact menu name can vary by Android version.",
+                if (consent) {
+                    SeqTextButton(onClick = onAccessibility) { Text("Open Runner service settings") }
+                    SeqTextButton(onClick = onAccessibilityList) { Text("Open Accessibility menu") }
+                    Text("If the direct link does not show Runner: " + manualPath + ". " +
+                        "Menu names may vary by Android version.",
                         color = SeqColors.Muted, fontSize = 12.sp)
                 }
                 if (!systemEnabled && consent && Build.VERSION.SDK_INT >= 33) {

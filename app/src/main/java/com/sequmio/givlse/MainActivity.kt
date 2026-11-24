@@ -1,6 +1,8 @@
 package com.sequmio.givlse
 
 import android.content.Intent
+import android.content.ComponentName
+import android.widget.Toast
 import android.content.ActivityNotFoundException
 import com.sequmio.givlse.runner.CycleAccessibilityService
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -48,16 +50,33 @@ class MainActivity : ComponentActivity() {
         settingsReturnVersion.value += 1
     }
 
-    private fun showAccessibilityServiceSettings() {
-        // Standard public Android action: OEM service-details intents can resolve
-        // to unrelated or incomplete screens on One UI and other vendor builds.
-        try {
-            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+    private fun tryOpenSettings(intent: Intent): Boolean {
+        return try {
+            startActivity(intent)
+            true
         } catch (_: ActivityNotFoundException) {
-            startActivity(Intent(Settings.ACTION_SETTINGS))
+            false
         } catch (_: SecurityException) {
-            startActivity(Intent(Settings.ACTION_SETTINGS))
+            false
         }
+    }
+
+    private fun showAccessibilitySettings() {
+        if (!tryOpenSettings(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) &&
+            !tryOpenSettings(Intent(Settings.ACTION_SETTINGS))) {
+            Toast.makeText(this, "Open Android Settings > Accessibility manually.",
+                Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun showAccessibilityServiceSettings() {
+        // AOSP has a service-specific system action, but it is not a public SDK
+        // contract and vendors may not expose it. The ordinary settings route
+        // remains independently available, even if a vendor opens the wrong screen.
+        val service = ComponentName(this, CycleAccessibilityService::class.java)
+        val details = Intent("android.settings.ACCESSIBILITY_DETAILS_SETTINGS")
+            .putExtra(Intent.EXTRA_COMPONENT_NAME, service.flattenToString())
+        if (!tryOpenSettings(details)) showAccessibilitySettings()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -97,6 +116,7 @@ class MainActivity : ComponentActivity() {
                                     notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                             },
                             openAccessibility = { showAccessibilityServiceSettings() },
+                            openAccessibilityList = { showAccessibilitySettings() },
                             openDisplaySettings = {
                                 startActivity(Intent(Settings.ACTION_DISPLAY_SETTINGS))
                             },

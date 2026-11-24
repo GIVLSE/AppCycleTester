@@ -362,19 +362,25 @@ internal fun SequmioCommunityCatalog(
                     SeqSectionTitle("1. Join tester group", Icons.Outlined.Groups)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         val confirmed = steps.groupConfirmed || member
+                        Row(Modifier.weight(1f)
+                            .heightIn(min = 48.dp)
+                            .clickable { openSafeLink(context, app.googleGroupUrl) }
+                            .padding(end = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            Text("Open Google Group", fontSize = 12.sp, color = SeqColors.Primary,
+                                modifier = Modifier.weight(1f, fill = false))
+                            Spacer(Modifier.width(5.dp))
+                            Icon(Icons.Outlined.OpenInNew, "Open link", Modifier.size(16.dp),
+                                tint = SeqColors.Primary)
+                        }
+                        Spacer(Modifier.width(6.dp))
                         SeqGlassButton(
                             title = if (confirmed) "Confirmed" else "Confirm",
                             tint = if (confirmed) SeqColors.Success else SeqColors.Muted,
                             onClick = { savePending(app.packageName, steps.copy(groupConfirmed = !confirmed)) },
+                            modifier = Modifier.widthIn(min = 88.dp),
                             enabled = !member && !busy, compact = true,
                             inactiveTint = if (confirmed) SeqColors.Success else SeqColors.Muted)
-                        Spacer(Modifier.width(4.dp))
-                        SeqTextButton(onClick = { openSafeLink(context, app.googleGroupUrl) },
-                            modifier = Modifier.weight(1f)) {
-                            Text("Open Google Group", fontSize = 12.sp)
-                            Spacer(Modifier.width(5.dp))
-                            Icon(Icons.Outlined.OpenInNew, null, Modifier.size(17.dp))
-                        }
                     }
                     Text("Confirm after joining the Google Group.",
                         color = SeqColors.Muted, fontSize = 12.sp)
@@ -386,19 +392,25 @@ internal fun SequmioCommunityCatalog(
                     SeqSectionTitle("2. Become a tester", Icons.Outlined.VerifiedUser)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         val confirmed = steps.optInConfirmed || member
+                        Row(Modifier.weight(1f)
+                            .heightIn(min = 48.dp)
+                            .clickable { openSafeLink(context, app.optInUrl) }
+                            .padding(end = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            Text("Open Google Play opt-in", fontSize = 12.sp, color = SeqColors.Primary,
+                                modifier = Modifier.weight(1f, fill = false))
+                            Spacer(Modifier.width(5.dp))
+                            Icon(Icons.Outlined.OpenInNew, "Open link", Modifier.size(16.dp),
+                                tint = SeqColors.Primary)
+                        }
+                        Spacer(Modifier.width(6.dp))
                         SeqGlassButton(
                             title = if (confirmed) "Confirmed" else "Confirm",
                             tint = if (confirmed) SeqColors.Success else SeqColors.Muted,
                             onClick = { savePending(app.packageName, steps.copy(optInConfirmed = !confirmed)) },
+                            modifier = Modifier.widthIn(min = 88.dp),
                             enabled = !member && !busy, compact = true,
                             inactiveTint = if (confirmed) SeqColors.Success else SeqColors.Muted)
-                        Spacer(Modifier.width(4.dp))
-                        SeqTextButton(onClick = { openSafeLink(context, app.optInUrl) },
-                            modifier = Modifier.weight(1f)) {
-                            Text("Open Google Play opt-in", fontSize = 12.sp)
-                            Spacer(Modifier.width(5.dp))
-                            Icon(Icons.Outlined.OpenInNew, null, Modifier.size(17.dp))
-                        }
                     }
                     Text("Confirm after accepting the invitation.",
                         color = SeqColors.Muted, fontSize = 12.sp)
