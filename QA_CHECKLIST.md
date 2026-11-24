@@ -213,3 +213,5 @@ New color tokens: content #F4F6FC; muted #ADBAD0; text links #B99AFF; filled but
 | QA11-20 | Optional configured mail transport | Developer dailyDigest opt-in receives email; OFF receives none |
 | QA11-21 | Delete cloud account | Owned listings, versions, memberships, testRuns, digests removed |
 | QA11-22 | Android 11/14/16 | Player, recorder, FGS, permissions, no UI freezes |
+
+| QA11-23 | Non-looping E2E checks complete early | Runner advances to next app when all required assertions PASS, without idle wait |

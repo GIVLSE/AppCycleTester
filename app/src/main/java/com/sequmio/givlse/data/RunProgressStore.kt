@@ -24,9 +24,15 @@ class RunProgressStore(context: Context) {
         for (i in 0 until targets.length()) {
             val item = targets.optJSONObject(i) ?: continue
             val id = item.optString("packageName")
+            val cases = item.optJSONArray("scenarios") ?: JSONArray()
+            val casesPassed = cases.length() > 0 &&
+                (0 until cases.length()).all { position ->
+                    cases.optJSONObject(position)?.optString("status") == "PASS"
+                }
+            val timedAppPassed = cases.length() == 0 &&
+                item.optLong("foregroundSeconds") >= item.optLong("durationSeconds")
             if (id.isBlank() || item.optInt("confirmed") == 0 ||
-                item.optInt("failures") != 0 ||
-                item.optLong("foregroundSeconds") < item.optLong("durationSeconds")) continue
+                item.optInt("failures") != 0 || !(casesPassed || timedAppPassed)) continue
             val old = runCatching { JSONArray(prefs.getString(id, "[]")) }
                 .getOrDefault(JSONArray())
             val set = mutableSetOf<String>()

@@ -487,6 +487,10 @@ class CycleAccessibilityService : AccessibilityService() {
                     scenarioPlayer?.stop()
                     scenarioPosition++
                     startNextScenario()
+                } else if (!(scenarioQueue.size == 1 && completed.loopSteps)) {
+                    // A non-looping automated test finishes when its assertions pass,
+                    // not after an arbitrary five-minute idle foreground wait.
+                    advanceToNext()
                 }
             }
         )
