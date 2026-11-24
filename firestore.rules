@@ -11,7 +11,7 @@ service cloud.firestore {
       return data.keys().hasOnly([
           'packageName', 'name', 'description', 'ownerUid', 'ownerName',
           'googleGroupUrl', 'optInUrl', 'playStoreUrl', 'scenarioJson',
-          'status', 'updatedAt', 'scenarioVersion'
+          'status', 'updatedAt', 'scenarioVersion', 'iconPng'
         ])
         && data.keys().hasAll(['packageName', 'name', 'ownerUid', 'status',
           'googleGroupUrl', 'optInUrl', 'playStoreUrl', 'scenarioJson', 'scenarioVersion'])
@@ -30,7 +30,9 @@ service cloud.firestore {
         && data.scenarioJson.size() > 40 && data.scenarioJson.size() <= 48000
         && data.scenarioVersion is int && data.scenarioVersion >= 1
         && data.status in ['draft', 'published']
-        && data.updatedAt is timestamp;
+        && data.updatedAt is timestamp
+        && (!('iconPng' in data) ||
+          (data.iconPng is string && data.iconPng.size() > 0 && data.iconPng.size() <= 65536));
     }
     match /users/{userId} {
       allow read: if owner(userId);

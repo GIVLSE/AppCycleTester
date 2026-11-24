@@ -1,7 +1,6 @@
 package com.sequmio.givlse
 
 import android.content.Intent
-import android.content.ComponentName
 import android.content.ActivityNotFoundException
 import com.sequmio.givlse.runner.CycleAccessibilityService
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -50,17 +49,14 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun showAccessibilityServiceSettings() {
-        // Direct service-details page where supported; otherwise generic Accessibility settings.
-        val service = ComponentName(this, CycleAccessibilityService::class.java)
-        val details = Intent("android.settings.ACCESSIBILITY_DETAILS_SETTINGS").apply {
-            putExtra(Intent.EXTRA_COMPONENT_NAME, service.flattenToString())
-        }
+        // Standard public Android action: OEM service-details intents can resolve
+        // to unrelated or incomplete screens on One UI and other vendor builds.
         try {
-            startActivity(details)
+            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         } catch (_: ActivityNotFoundException) {
-            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            startActivity(Intent(Settings.ACTION_SETTINGS))
         } catch (_: SecurityException) {
-            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            startActivity(Intent(Settings.ACTION_SETTINGS))
         }
     }
 

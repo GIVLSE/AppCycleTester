@@ -862,13 +862,14 @@ private fun SeqCounter(label: String, value: Int, low: Int, high: Int,
 }
 
 @Composable
-internal fun SeqAppLetter(packageName: String, label: String) {
+internal fun SeqAppLetter(packageName: String, label: String,
+    refreshToken: Int = 0, publishedIcon: String = "") {
     val context = LocalContext.current
-    val icon = remember(packageName) {
+    val icon = remember(packageName, refreshToken, publishedIcon) {
         runCatching {
             context.packageManager.getApplicationIcon(packageName)
                 .toBitmap(width = 96, height = 96).asImageBitmap()
-        }.getOrNull()
+        }.getOrNull() ?: com.sequmio.givlse.data.AppIconCodec.decode(publishedIcon)?.asImageBitmap()
     }
     Box(Modifier.size(43.dp).background(SeqColors.CardRaised,
         RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {

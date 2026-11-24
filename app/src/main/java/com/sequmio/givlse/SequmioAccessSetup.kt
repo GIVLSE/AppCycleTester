@@ -141,11 +141,17 @@ internal fun SequmioAccessSetup(
                         )
                         Text(
                             if (systemEnabled) "Confirmed by Android. Tap to review the setting."
-                            else "Tap to open the Android permission screen and confirm there.",
+                            else "Open Accessibility, then select Installed apps / Downloaded apps and enable Sequmio Runner.",
                             color = SeqColors.Muted, fontSize = 12.sp
                         )
                     }
                     Text("›", color = SeqColors.Primary, fontSize = 28.sp)
+                }
+                if (!systemEnabled && consent) {
+                    SeqTextButton(onClick = onAccessibility) { Text("Open Accessibility settings") }
+                    Text("Samsung: Settings → Accessibility → Installed apps → Sequmio Runner. " +
+                        "The exact menu name can vary by Android version.",
+                        color = SeqColors.Muted, fontSize = 12.sp)
                 }
                 if (!systemEnabled && consent && Build.VERSION.SDK_INT >= 33) {
                     Text(
@@ -154,7 +160,7 @@ internal fun SequmioAccessSetup(
                             "This security setting cannot be changed automatically.",
                         color = SeqColors.Muted, fontSize = 12.sp
                     )
-                    SeqTextButton(onClick = onAppInfo) { Text("Open App Info") }
+                    SeqTextButton(onClick = onAppInfo) { Text("App Info (manual APK only)") }
                 }
             }
         }

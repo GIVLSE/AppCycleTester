@@ -267,7 +267,8 @@ internal fun SequmioCommunityCatalog(
                         Column(Modifier.padding(14.dp),
                             verticalArrangement = Arrangement.spacedBy(11.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                SeqAppLetter(app.packageName, app.name)
+                                SeqAppLetter(app.packageName, app.name,
+                                    refreshToken = refreshToken, publishedIcon = app.iconPng)
                                 Spacer(Modifier.width(11.dp))
                                 Column(Modifier.weight(1f)) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -343,8 +344,15 @@ internal fun SequmioCommunityCatalog(
                 Icon(Icons.Outlined.ArrowBack, null, Modifier.size(20.dp))
                 Text("App List")
             }
-            SeqSectionTitle(app.name, Icons.Outlined.Apps)
-            Text(app.packageName, color = SeqColors.Muted, fontSize = 12.sp)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                SeqAppLetter(app.packageName, app.name,
+                    refreshToken = refreshToken, publishedIcon = app.iconPng)
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(app.name, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Text(app.packageName, color = SeqColors.Muted, fontSize = 12.sp)
+                }
+            }
             Text("Complete each step in Google services. Sequmio cannot " +
                 "independently verify Google Groups or Play tester enrollment.",
                 color = SeqColors.Muted, fontSize = 12.sp)
@@ -353,16 +361,22 @@ internal fun SequmioCommunityCatalog(
                     verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     SeqSectionTitle("1. Join tester group", Icons.Outlined.Groups)
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(steps.groupConfirmed || member,
-                            onCheckedChange = { savePending(app.packageName, steps.copy(groupConfirmed = it)) },
-                            enabled = !member && !busy)
-                        SeqTextButton(onClick = { openSafeLink(context, app.googleGroupUrl) }) {
-                            Text("Open Google Group", fontSize = 13.sp)
+                        val confirmed = steps.groupConfirmed || member
+                        SeqGlassButton(
+                            title = if (confirmed) "Confirmed" else "Confirm",
+                            tint = if (confirmed) SeqColors.Success else SeqColors.Muted,
+                            onClick = { savePending(app.packageName, steps.copy(groupConfirmed = !confirmed)) },
+                            enabled = !member && !busy, compact = true,
+                            inactiveTint = if (confirmed) SeqColors.Success else SeqColors.Muted)
+                        Spacer(Modifier.width(4.dp))
+                        SeqTextButton(onClick = { openSafeLink(context, app.googleGroupUrl) },
+                            modifier = Modifier.weight(1f)) {
+                            Text("Open Google Group", fontSize = 12.sp)
                             Spacer(Modifier.width(5.dp))
                             Icon(Icons.Outlined.OpenInNew, null, Modifier.size(17.dp))
                         }
                     }
-                    Text("Check the box after joining the Google Group.",
+                    Text("Confirm after joining the Google Group.",
                         color = SeqColors.Muted, fontSize = 12.sp)
                 }
             }
@@ -371,16 +385,22 @@ internal fun SequmioCommunityCatalog(
                     verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     SeqSectionTitle("2. Become a tester", Icons.Outlined.VerifiedUser)
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(steps.optInConfirmed || member,
-                            onCheckedChange = { savePending(app.packageName, steps.copy(optInConfirmed = it)) },
-                            enabled = !member && !busy)
-                        SeqTextButton(onClick = { openSafeLink(context, app.optInUrl) }) {
-                            Text("Open Google Play opt-in", fontSize = 13.sp)
+                        val confirmed = steps.optInConfirmed || member
+                        SeqGlassButton(
+                            title = if (confirmed) "Confirmed" else "Confirm",
+                            tint = if (confirmed) SeqColors.Success else SeqColors.Muted,
+                            onClick = { savePending(app.packageName, steps.copy(optInConfirmed = !confirmed)) },
+                            enabled = !member && !busy, compact = true,
+                            inactiveTint = if (confirmed) SeqColors.Success else SeqColors.Muted)
+                        Spacer(Modifier.width(4.dp))
+                        SeqTextButton(onClick = { openSafeLink(context, app.optInUrl) },
+                            modifier = Modifier.weight(1f)) {
+                            Text("Open Google Play opt-in", fontSize = 12.sp)
                             Spacer(Modifier.width(5.dp))
                             Icon(Icons.Outlined.OpenInNew, null, Modifier.size(17.dp))
                         }
                     }
-                    Text("Check the box after accepting the invitation.",
+                    Text("Confirm after accepting the invitation.",
                         color = SeqColors.Muted, fontSize = 12.sp)
                 }
             }
@@ -411,7 +431,8 @@ internal fun SequmioCommunityCatalog(
                 }
             } else {
                 val ready = !busy && uid != null && steps.ready(local != null)
-                Button(
+                SeqGlassButton(
+                    title = "Confirm", tint = SeqColors.Success,
                     onClick = {
                         scope.launch {
                             busy = true
@@ -426,24 +447,11 @@ internal fun SequmioCommunityCatalog(
                             } finally { busy = false }
                         }
                     },
-                    enabled = ready, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-                    shape = RoundedCornerShape(50),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF207A61), contentColor = Color.White,
-                        disabledContainerColor = Color(0xFFB8C0CD),
-                        disabledContentColor = Color(0xFF303846))
-                ) {
-                    Icon(Icons.Outlined.Check, null, Modifier.size(19.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("Confirm", fontWeight = FontWeight.SemiBold)
-                }
-                Button(onClick = { cancelJoin = true }, enabled = !busy,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-                    shape = RoundedCornerShape(50),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFFAD2C49), contentColor = Color.White)) {
-                    Text("Cancel", fontWeight = FontWeight.SemiBold)
-                }
+                    enabled = ready, modifier = Modifier.fillMaxWidth()
+                )
+                SeqGlassButton("Cancel", SeqColors.Error,
+                    onClick = { cancelJoin = true }, enabled = !busy,
+                    modifier = Modifier.fillMaxWidth())
                 if (cancelJoin) {
                     AlertDialog(
                         onDismissRequest = { cancelJoin = false },
@@ -511,6 +519,7 @@ internal fun SequmioDeveloperApp(
     onTest: (MyAppDraft) -> Unit,
     onRecord: (MyAppDraft) -> Unit
 ) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val repo = remember(account) { CommunityRepository(account) }
     var form by remember(initial) { mutableStateOf(initial) }
@@ -558,7 +567,8 @@ internal fun SequmioDeveloperApp(
                         notice = ""
                         try {
                             onSave(form)
-                            repo.savePublished(form, form.scenarioJson)
+                            repo.savePublished(form, form.scenarioJson,
+                                AppIconCodec.capture(context, form.packageName))
                             published = true
                             notice = "Published successfully. Your app is now in App List."
                         } catch (error: Exception) {

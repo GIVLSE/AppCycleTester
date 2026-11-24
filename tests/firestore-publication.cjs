@@ -71,7 +71,20 @@ async function main() {
       assertSucceeds(dev.doc(path).get()));
     await check("PUB-12 other user cannot list private drafts", () =>
       assertFails(other.collection("apps").where("status", "==", "draft").get()));
-    console.log("RESULT: " + count + "/12 PASSED");
+    await check("ICON-01 owner adds optional icon", () =>
+      assertSucceeds(dev.doc(path).update({iconPng: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB"})));
+    await check("ICON-02 nonowner cannot change icon", () =>
+      assertFails(other.doc(path).update({iconPng: "different"})));
+    await check("ICON-03 oversized icon rejected", () =>
+      assertFails(dev.doc(path).update({iconPng: "A".repeat(65537)})));
+    await check("ICON-04 non-string icon rejected", () =>
+      assertFails(dev.doc(path).update({iconPng: 123})));
+    await check("ICON-05 published icon readable by guest", async () => {
+      await assertSucceeds(dev.doc(path).update({status: "published"}));
+      const doc = await assertSucceeds(guest.doc(path).get());
+      assert.equal(doc.get("iconPng"), "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB");
+    });
+    console.log("RESULT: " + count + "/17 PASSED");
   } finally { await env.cleanup(); }
 }
 main().catch(e => { console.error(e); process.exitCode = 1; });

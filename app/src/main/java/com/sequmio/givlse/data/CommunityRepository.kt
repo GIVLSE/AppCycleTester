@@ -15,7 +15,8 @@ data class PublishedApp(
     val optInUrl: String,
     val playStoreUrl: String,
     val scenarioJson: String,
-    val status: String
+    val status: String,
+    val iconPng: String = ""
 )
 
 data class JoinedTest(
@@ -59,7 +60,7 @@ class CommunityRepository(private val account: SequmioAccount) {
         return app?.takeIf { it.ownerUid == requiredUid() }
     }
 
-    suspend fun savePublished(draft: MyAppDraft, scenarioJson: String) {
+    suspend fun savePublished(draft: MyAppDraft, scenarioJson: String, iconPng: String? = null) {
         val uid = requiredUid()
         val errors = draft.validateForPublish()
         require(errors.isEmpty()) { errors.joinToString("; ") }
@@ -75,7 +76,7 @@ class CommunityRepository(private val account: SequmioAccount) {
                 existing.getString("scenarioJson") != scenarioJson
             val oldVersion = existing.getLong("scenarioVersion")?.toInt() ?: 0
             val version = if (changed) oldVersion + 1 else maxOf(oldVersion, 1)
-            val fields = mapOf(
+            val fields = mutableMapOf<String, Any>(
                 "packageName" to draft.packageName,
                 "name" to draft.appName,
                 "description" to draft.description,
@@ -89,6 +90,10 @@ class CommunityRepository(private val account: SequmioAccount) {
                 "status" to "published",
                 "updatedAt" to Timestamp.now()
             )
+            // Keep a previous icon if the developer's app is temporarily unavailable locally.
+            val publishedIcon = iconPng ?: existing.getString("iconPng")
+            if (!publishedIcon.isNullOrBlank() && publishedIcon.length <= AppIconCodec.MAX_ENCODED)
+                fields["iconPng"] = publishedIcon
             transaction.set(doc, fields)
             if (changed) {
                 val history = doc.collection("scenarioVersions")
@@ -150,7 +155,7 @@ class CommunityRepository(private val account: SequmioAccount) {
         return PublishedApp(
             id, field("name"), field("description"), field("ownerUid"), field("ownerName"),
             field("googleGroupUrl"), field("optInUrl"), field("playStoreUrl"),
-            field("scenarioJson"), field("status")
+            field("scenarioJson"), field("status"), field("iconPng")
         )
     }
 }

@@ -11,6 +11,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -76,5 +78,40 @@ internal fun SeqIconAction(
         Icon(icon, contentDescription = label,
             tint = if (enabled) tint else SeqColors.Muted,
             modifier = Modifier.size(22.dp))
+    }
+}
+
+/** Translucent tinted pill: soft highlight, restrained rim, no opaque action fill. */
+@Composable
+internal fun SeqGlassButton(
+    title: String, tint: Color, onClick: () -> Unit,
+    modifier: Modifier = Modifier, enabled: Boolean = true,
+    compact: Boolean = false, icon: ImageVector? = null,
+    inactiveTint: Color = SeqColors.Muted
+) {
+    val accent = if (enabled) tint else inactiveTint
+    val shape = RoundedCornerShape(50)
+    val fill = Brush.verticalGradient(listOf(
+        accent.copy(alpha = if (enabled) 0.22f else 0.12f),
+        accent.copy(alpha = if (enabled) 0.07f else 0.04f)))
+    val rim = Brush.verticalGradient(listOf(
+        accent.copy(alpha = 0.58f), accent.copy(alpha = 0.20f)))
+    Box(modifier.clip(shape).background(fill)) {
+        OutlinedButton(onClick = onClick, enabled = enabled,
+            modifier = Modifier.then(if (compact) Modifier.heightIn(min = 40.dp)
+                else Modifier.fillMaxWidth().heightIn(min = 48.dp)),
+            shape = shape, border = BorderStroke(1.dp, rim),
+            contentPadding = if (compact) PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                else PaddingValues(horizontal = 12.dp, vertical = 10.dp),
+            colors = ButtonDefaults.outlinedButtonColors(
+                containerColor = Color.Transparent, contentColor = accent,
+                disabledContainerColor = Color.Transparent, disabledContentColor = accent)) {
+            if (icon != null) {
+                Icon(icon, null, Modifier.size(18.dp))
+                Spacer(Modifier.width(7.dp))
+            }
+            Text(title, fontSize = if (compact) 11.sp else 14.sp,
+                fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false)
+        }
     }
 }

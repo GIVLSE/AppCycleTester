@@ -314,23 +314,9 @@ internal fun SequmioSettings(
                     }
                 }
                 if (profile != null) {
-                    Button(
-                        onClick = { confirmDeletion = true },
-                        enabled = !account.busy,
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-                        shape = RoundedCornerShape(50),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFFAD2C49),
-                            contentColor = Color.White,
-                            disabledContainerColor = SeqColors.CardRaised,
-                            disabledContentColor = SeqColors.Muted
-                        )
-                    ) {
-                        Icon(Icons.Outlined.DeleteOutline, contentDescription = null,
-                            modifier = Modifier.size(19.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("Delete my Sequmio account", fontWeight = FontWeight.SemiBold)
-                    }
+                    SeqGlassButton("Delete my Sequmio account", SeqColors.Error,
+                        onClick = { confirmDeletion = true }, enabled = !account.busy,
+                        modifier = Modifier.fillMaxWidth(), icon = Icons.Outlined.DeleteOutline)
                 } else {
                     Surface(
                         modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)
