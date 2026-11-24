@@ -81,10 +81,11 @@ internal fun SequmioApp(
     var recorderNotice by remember { mutableStateOf("") }
     var selectedScenarioIndex by remember { mutableIntStateOf(0) }
     val recorder by RecorderRuntime.state.collectAsState()
-    LaunchedEffect(permissionRefreshToken) {
-        if (!RecorderRuntime.state.value.recording &&
-            RecorderRuntime.state.value.message.startsWith("Saved ")) {
-            ownAppDraft = draftStore.load()
+    LaunchedEffect(recorder) {
+        if (!recorder.recording && recorder.message.isNotBlank()) {
+            if (recorder.message.startsWith("Test case created")) ownAppDraft = draftStore.load()
+            recorderNotice = recorder.message
+            RecorderRuntime.set(com.sequmio.givlse.runner.RecorderState())
         }
     }
     val connected = runner.accessibilityReady && CycleAccessibilityService.instance != null
@@ -231,10 +232,11 @@ internal fun SequmioApp(
                         ownAppDraft = updated
                     },
                     onOpenSettings = { openSettings() },
-                    onOpenScenarios = { draft ->
+                    onEditCase = { draft, index ->
                         draftStore.save(draft)
                         ownAppDraft = draft
-                        page = Page.SUITE_MANAGER
+                        selectedScenarioIndex = index
+                        page = Page.SCENARIO_EDITOR
                     },
                     onDashboard = { draft ->
                         draftStore.save(draft)
@@ -243,6 +245,7 @@ internal fun SequmioApp(
                     },
                     recorderState = recorder,
                     recorderNotice = recorderNotice,
+                    onDismissRecorderNotice = { recorderNotice = "" },
                     onTest = { draft ->
                         recorderNotice = ""
                         val installed = apps.firstOrNull {
@@ -292,8 +295,8 @@ internal fun SequmioApp(
                             else -> {
                                 recorderNotice = CycleAccessibilityService.instance
                                     ?.startRecording(selected).orEmpty()
-                                if (recorderNotice.isBlank())
-                                    recorderNotice = "Recording started in " + selected.label
+                                if (CycleAccessibilityService.instance == null)
+                                    recorderNotice = "Enable Sequmio Accessibility first."
                             }
                         }
                     }
@@ -329,9 +332,9 @@ internal fun SequmioApp(
                         )
                         draftStore.save(next)
                         ownAppDraft = next
-                        page = Page.SUITE_MANAGER
+                        page = Page.MY_APP
                     },
-                    onBack = { page = Page.SUITE_MANAGER }
+                    onBack = { page = Page.MY_APP }
                 )
                 Page.QA_DASHBOARD -> SequmioQaDashboard(
                     appId = ownAppDraft.packageName,

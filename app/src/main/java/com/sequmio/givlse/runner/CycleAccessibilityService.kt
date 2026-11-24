@@ -145,22 +145,26 @@ class CycleAccessibilityService : AccessibilityService() {
             return "Save your My App package name before recording"
         val instance = AccessibilityEventRecorder(this, target) { json ->
             recorder = null
-            if (json != null) {
-                val current = draftStore.load()
-                if (current.packageName == target.packageName) {
-                    val existing = runCatching {
-                        ScenarioCodec.split(current.scenarioJson)
-                    }.getOrDefault(emptyList())
-                    if (existing.size < 12) {
-                        draftStore.save(current.copy(
-                            scenarioJson = ScenarioCodec.compose(existing + json)))
-                    }
-                }
+            val result = when {
+                json == null -> "No UI actions recorded in the app."
+                else -> runCatching {
+                    val current = draftStore.load()
+                    require(current.packageName == target.packageName) { "App package changed during recording." }
+                    val existing = ScenarioCodec.split(current.scenarioJson)
+                    require(existing.size < 12) { "Maximum 12 test cases reached." }
+                    val named = org.json.JSONObject(json)
+                    named.getJSONObject("meta").put("name", "Test Case " + (existing.size + 1))
+                    val combined = ScenarioCodec.compose(existing + named.toString())
+                    require(combined.length <= 48000) { "Test cases exceed the 48 KB limit." }
+                    draftStore.save(current.copy(scenarioJson = combined))
+                    "Test case created successfully. Add an assertion before publishing."
+                }.getOrElse { "Test case not created: " + (it.message ?: "Unable to save") }
             }
             // Show the resulting scenario in My App after the user stops recording.
             val back = Intent(this, MainActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             runCatching { startActivity(back) }
+            result
         }
         recorder = instance
         val error = instance.start()

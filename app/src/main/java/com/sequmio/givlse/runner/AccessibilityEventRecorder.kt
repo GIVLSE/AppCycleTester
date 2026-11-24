@@ -43,7 +43,7 @@ object RecorderRuntime {
 class AccessibilityEventRecorder(
     private val service: AccessibilityService,
     private val app: InstalledApp,
-    private val onStopped: (String?) -> Unit
+    private val onStopped: (String?) -> String
 ) {
     private val wm = service.getSystemService(WindowManager::class.java)
     private val steps = JSONArray()
@@ -51,12 +51,16 @@ class AccessibilityEventRecorder(
     private var paused = false
     private var stopped = false
     private var lastEventAt = 0L
+    private var startedAt = 0L
+    private var pausedAt = 0L
+    private var totalPausedMs = 0L
     private var lastTextResource = ""
     private var labelView: TextView? = null
     private var pauseButton: Button? = null
 
     fun start(): String? = try {
         showOverlay()
+        startedAt = SystemClock.uptimeMillis()
         RecorderRuntime.set(RecorderState(recording = true, message = "Recording " + app.label))
         val intent = Intent.makeMainActivity(ComponentName(app.packageName, app.activityClass))
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
@@ -109,6 +113,11 @@ class AccessibilityEventRecorder(
     }
 
     private fun togglePause() {
+        val now = SystemClock.uptimeMillis()
+        if (paused) {
+            totalPausedMs += now - pausedAt
+            if (lastEventAt != 0L) lastEventAt += now - pausedAt
+        } else pausedAt = now
         paused = !paused
         pauseButton?.text = if (paused) "Resume" else "Pause"
         RecorderRuntime.set(RecorderState(recording = true, paused = paused,
@@ -189,17 +198,19 @@ class AccessibilityEventRecorder(
         stopped = true
         overlay?.let { runCatching { wm.removeView(it) } }
         overlay = null
+        val endedAt = if (paused) pausedAt else SystemClock.uptimeMillis()
+        val duration = ((endedAt - startedAt - totalPausedMs + 999L) / 1000L)
+            .coerceIn(5L, 7200L).toInt()
         val json = if (steps.length() == 0) null else JSONObject()
             .put("schema_version", 1)
             .put("meta", JSONObject().put("name", "Recorded " + app.label))
             .put("target", JSONObject().put("package_name", app.packageName))
-            .put("execution", JSONObject().put("total_duration_sec", 300)
+            .put("execution", JSONObject().put("total_duration_sec", duration)
                 .put("loop_steps", false))
             .put("steps", steps).toString(2)
-        onStopped(json)
+        val result = onStopped(json)
         RecorderRuntime.set(RecorderState(
-            message = if (json == null) "No UI actions recorded"
-            else "Saved " + steps.length() + " UI steps; review JSON before publishing",
+            message = result,
             stepCount = steps.length()
         ))
     }

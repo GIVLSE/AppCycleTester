@@ -397,232 +397,207 @@ private fun CatalogTextField(
     )
 }
 
+private fun validClosedTestLink(value: String, host: String): Boolean =
+    runCatching {
+        val uri = Uri.parse(value)
+        uri.scheme.equals("https", ignoreCase = true) &&
+            uri.host.equals(host, ignoreCase = true)
+    }.getOrDefault(false)
+
 @Composable
 internal fun SequmioDeveloperApp(
     initial: MyAppDraft,
     account: SequmioAccount,
     onSave: (MyAppDraft) -> Unit,
     onOpenSettings: () -> Unit,
-    onOpenScenarios: (MyAppDraft) -> Unit,
+    onEditCase: (MyAppDraft, Int) -> Unit,
     onDashboard: (MyAppDraft) -> Unit,
     recorderState: RecorderState,
     recorderNotice: String,
+    onDismissRecorderNotice: () -> Unit,
     onTest: (MyAppDraft) -> Unit,
     onRecord: (MyAppDraft) -> Unit
 ) {
-    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val repo = remember(account) { CommunityRepository(account) }
     var form by remember(initial) { mutableStateOf(initial) }
     var busy by remember { mutableStateOf(false) }
     var notice by remember { mutableStateOf("") }
     var published by remember { mutableStateOf(false) }
-    var detailsExpanded by rememberSaveable { mutableStateOf(true) }
-    var linksExpanded by rememberSaveable { mutableStateOf(true) }
+    var editDetails by remember { mutableStateOf(false) }
+    var editLink by remember { mutableIntStateOf(-1) }
+    var deleteCase by remember { mutableIntStateOf(-1) }
     val profile = account.profile
-    LaunchedEffect(profile?.uid, initial.packageName) {
-        if (profile != null && initial.packageName.isNotBlank()) {
-            try { published = repo.myPublishedApp(initial.packageName)?.status == "published" }
-            catch (_: Exception) { published = false }
-        } else published = false
+    LaunchedEffect(profile?.uid, form.packageName) {
+        published = if (profile != null && form.packageName.isNotBlank()) {
+            try { repo.myPublishedApp(form.packageName)?.status == "published" }
+            catch (_: Exception) { false }
+        } else false
     }
     fun save() {
         onSave(form)
         notice = "Draft saved locally."
     }
-    val cases = runCatching { ScenarioCodec.split(form.scenarioJson) }
-        .getOrDefault(emptyList())
-    val valid = runCatching {
-        ScenarioCodec.parseAll(form.scenarioJson, form.packageName)
-    }.isSuccess
+    val splitResult = runCatching { ScenarioCodec.split(form.scenarioJson) }
+    val cases = splitResult.getOrDefault(emptyList())
+    val errors = form.validateForPublish()
+    val detailsReady = errors.none {
+        it == "App name is required" || it == "Enter a valid Android package name"
+    }
+    val labels = listOf("Google Group", "Become a tester", "Google Play")
+    val hosts = listOf("groups.google.com", "play.google.com", "play.google.com")
+    val urls = listOf(form.googleGroupUrl, form.optInUrl, form.playStoreUrl)
+    val editable = !busy && !recorderState.recording
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState())
             .padding(horizontal = 18.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(13.dp)
     ) {
-        SeqSectionTitle("My App", Icons.Outlined.Code, tint = SeqColors.Primary)
-        Text("Developer workspace · Manage your app, test cases and QA coverage.",
-            color = SeqColors.Muted, fontSize = 12.sp)
         if (profile == null) {
-            SeqTextButton(onClick = onOpenSettings) {
-                Icon(Icons.Outlined.PersonOutline, null, Modifier.size(18.dp))
-                Spacer(Modifier.width(7.dp))
-                Text("Sign in to publish")
-                Icon(Icons.Outlined.ArrowForward, null, Modifier.size(16.dp))
-            }
+            SeqPrimaryButton("Sign in to publish", onClick = onOpenSettings,
+                modifier = Modifier.fillMaxWidth(), icon = Icons.Outlined.PersonOutline)
         } else {
-            SeqChip("Owner · " + profile.name.ifBlank { profile.email },
-                color = SeqColors.Teal, icon = Icons.Outlined.PersonOutline)
+            SeqPrimaryButton(if (published) "Update published app" else "Publish to App List",
+                onClick = {
+                    scope.launch {
+                        busy = true
+                        notice = ""
+                        try {
+                            onSave(form)
+                            repo.savePublished(form, form.scenarioJson)
+                            published = true
+                            notice = "Published successfully. Your app is now in App List."
+                        } catch (error: Exception) {
+                            notice = "Publish failed: " + (error.message ?: error.javaClass.simpleName)
+                        } finally { busy = false }
+                    }
+                }, modifier = Modifier.fillMaxWidth(), icon = Icons.Outlined.CloudUpload,
+                enabled = editable && errors.isEmpty())
         }
         SeqCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(15.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SeqSectionTitle("QA Overview", Icons.Outlined.Insights)
-                Text("Run results, PASS / FAIL by test case, tested Android devices " +
-                    "and app version comparison.",
-                    color = SeqColors.Muted, fontSize = 12.sp)
-                SeqPrimaryButton(
-                    "Open QA Dashboard", onClick = { onDashboard(form) },
-                    enabled = form.packageName.isNotBlank(),
-                    modifier = Modifier.fillMaxWidth(), icon = Icons.Outlined.BarChart
-                )
+            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                SeqSectionTitle("Publishing requirements", Icons.Outlined.VerifiedUser)
+                SeqChip(if (errors.isEmpty() && profile != null) "Ready to publish" else "Not ready",
+                    if (errors.isEmpty() && profile != null) SeqColors.Success else SeqColors.Error)
+                if (profile == null) Text("Sign in with Google to publish.", color = SeqColors.Muted, fontSize = 12.sp)
+                if (errors.isEmpty()) Text("App details, links and test cases are valid.",
+                    color = SeqColors.Success, fontSize = 12.sp)
+                else errors.forEach { Text("• " + it, color = SeqColors.Muted, fontSize = 12.sp) }
+            }
+        }
+        if (notice.isNotBlank()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(notice, Modifier.weight(1f),
+                    color = if (notice.contains("failed", true)) SeqColors.Error else SeqColors.Success,
+                    fontSize = 12.sp)
+                SeqIconAction(Icons.Outlined.Close, "Dismiss message", onClick = { notice = "" })
             }
         }
         SeqCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(15.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                SeqSectionTitle("App Details", Icons.Outlined.Widgets,
-                    trailing = {
-                        SeqIconAction(
-                            if (detailsExpanded) Icons.Outlined.ExpandLess
-                                else Icons.Outlined.ExpandMore,
-                            if (detailsExpanded) "Collapse app details"
-                                else "Expand app details",
-                            onClick = { detailsExpanded = !detailsExpanded }
-                        )
-                    })
-                if (detailsExpanded) {
-                    CatalogTextField("App name", form.appName) {
-                        form = form.copy(appName = it)
-                    }
-                    CatalogTextField("Package name", form.packageName) {
-                        form = form.copy(packageName = it)
-                    }
-                    CatalogTextField("Description", form.description, 3) {
-                        form = form.copy(description = it)
-                    }
-                } else {
-                    Text(form.appName.ifBlank { "Application not named yet" },
-                        fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                    Text(form.packageName.ifBlank { "Set the Android package name" },
-                        color = SeqColors.Muted, fontSize = 12.sp)
-                }
+            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                SeqSectionTitle("App Details", Icons.Outlined.Widgets, trailing = {
+                    SeqIconAction(Icons.Outlined.Edit, "Edit app details",
+                        onClick = { editDetails = true }, enabled = editable)
+                })
+                SeqChip(if (detailsReady) "Accepted" else "Need to add Info",
+                    if (detailsReady) SeqColors.Success else SeqColors.Error,
+                    icon = if (detailsReady) Icons.Outlined.CheckCircle else Icons.Outlined.ErrorOutline)
             }
         }
         SeqCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(15.dp),
-                verticalArrangement = Arrangement.spacedBy(11.dp)) {
-                SeqSectionTitle("Closed-test Links", Icons.Outlined.Link,
-                    trailing = {
-                        SeqIconAction(
-                            if (linksExpanded) Icons.Outlined.ExpandLess
-                                else Icons.Outlined.ExpandMore,
-                            if (linksExpanded) "Collapse test links" else "Expand test links",
-                            onClick = { linksExpanded = !linksExpanded }
-                        )
-                    })
-                if (linksExpanded) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Outlined.Groups, null, tint = SeqColors.Teal,
-                            modifier = Modifier.size(20.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("1. Google Group", Modifier.weight(1f),
-                            fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                        SeqIconAction(Icons.Outlined.OpenInNew, "Open Google Group",
-                            onClick = { openSafeLink(
-                                context, form.googleGroupUrl) },
-                            enabled = form.googleGroupUrl.startsWith("https://"))
+            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                SeqSectionTitle("Closed-test Links", Icons.Outlined.Link)
+                labels.forEachIndexed { index, label ->
+                    val ready = validClosedTestLink(urls[index], hosts[index])
+                    Surface(shape = RoundedCornerShape(12.dp), color = SeqColors.Background.copy(alpha = 0.35f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, SeqColors.Border)) {
+                        Row(Modifier.fillMaxWidth().padding(start = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            Icon(if (ready) Icons.Outlined.CheckCircle else Icons.Outlined.ErrorOutline,
+                                if (ready) "Link configured" else "Link missing or invalid",
+                                tint = if (ready) SeqColors.Success else SeqColors.Error,
+                                modifier = Modifier.size(21.dp))
+                            Spacer(Modifier.width(10.dp))
+                            Text(label, Modifier.weight(1f), fontSize = 14.sp)
+                            SeqIconAction(Icons.Outlined.Edit, "Edit " + label,
+                                onClick = { editLink = index }, enabled = editable)
+                        }
                     }
-                    CatalogTextField("Group URL", form.googleGroupUrl) {
-                        form = form.copy(googleGroupUrl = it)
-                    }
-                    HorizontalDivider(color = SeqColors.Border.copy(alpha = 0.5f))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Outlined.VerifiedUser, null, tint = SeqColors.Teal,
-                            modifier = Modifier.size(20.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("2. Become a Tester", Modifier.weight(1f),
-                            fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                        SeqIconAction(Icons.Outlined.OpenInNew, "Open tester opt-in",
-                            onClick = { openSafeLink(
-                                context, form.optInUrl) },
-                            enabled = form.optInUrl.startsWith("https://"))
-                    }
-                    CatalogTextField("Opt-in URL", form.optInUrl) {
-                        form = form.copy(optInUrl = it)
-                    }
-                    HorizontalDivider(color = SeqColors.Border.copy(alpha = 0.5f))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Outlined.Shop, null, tint = SeqColors.Teal,
-                            modifier = Modifier.size(20.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("3. Google Play", Modifier.weight(1f),
-                            fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                        SeqIconAction(Icons.Outlined.OpenInNew, "Open Google Play",
-                            onClick = { openSafeLink(
-                                context, form.playStoreUrl) },
-                            enabled = form.playStoreUrl.startsWith("https://"))
-                    }
-                    CatalogTextField("Play Store URL", form.playStoreUrl) {
-                        form = form.copy(playStoreUrl = it)
-                    }
-                } else {
-                    Text("Google Group · Become a Tester · Play Store",
-                        color = SeqColors.Muted, fontSize = 12.sp)
                 }
             }
         }
         SeqCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(15.dp),
-                verticalArrangement = Arrangement.spacedBy(11.dp)) {
-                SeqSectionTitle("Test Suites", Icons.Outlined.Layers,
-                    tint = SeqColors.Teal,
-                    trailing = {
-                        SeqChip(if (valid) "Valid" else "Needs QA",
-                            if (valid) SeqColors.Success else SeqColors.Error,
-                            icon = if (valid) Icons.Outlined.CheckCircle else
-                                Icons.Outlined.ErrorOutline)
-                    })
-                Text(cases.size.toString() + " test cases · Smoke / Regression / Feature",
-                    color = SeqColors.Muted, fontSize = 12.sp)
-                SeqTextButton(onClick = { onOpenScenarios(form) }) {
-                    Icon(Icons.Outlined.Edit, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Manage test cases")
-                }
-                SeqTextButton(onClick = { onTest(form) }) {
-                    Icon(Icons.Outlined.PlayArrow, null, Modifier.size(20.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Add scenarios to Runner")
-                }
-                SeqPrimaryButton("Record UI actions", onClick = { onRecord(form) },
-                    modifier = Modifier.fillMaxWidth(), icon = Icons.Outlined.FiberManualRecord,
-                    enabled = !busy && !recorderState.recording &&
-                        form.packageName.isNotBlank())
-                Text("Record taps and scrolls using the floating Pause/Stop panel. " +
-                    "Typed characters are not collected.",
-                    color = SeqColors.Muted, fontSize = 11.sp)
-                if (recorderState.message.isNotBlank()) {
-                    Text(recorderState.message, color = SeqColors.Teal, fontSize = 12.sp)
+            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                SeqSectionTitle("Test Cases", Icons.Outlined.Layers, trailing = {
+                    SeqChip(cases.size.toString() + " test cases", SeqColors.Primary)
+                })
+                SeqPrimaryButton("Add test case", onClick = {
+                    onDismissRecorderNotice()
+                    when {
+                        !detailsReady -> notice = "Add valid app details before recording."
+                        splitResult.isFailure -> notice = "Existing test cases could not be read."
+                        cases.size >= 12 -> notice = "Maximum 12 test cases reached."
+                        else -> onRecord(form)
+                    }
+                }, modifier = Modifier.fillMaxWidth(), icon = Icons.Outlined.Add,
+                    enabled = editable)
+                if (splitResult.isFailure) Text("Unable to read saved test cases.",
+                    color = SeqColors.Error, fontSize = 12.sp)
+                else if (cases.isEmpty()) Text("No test cases yet.", color = SeqColors.Muted, fontSize = 12.sp)
+                cases.forEachIndexed { index, raw ->
+                    val root = remember(raw) { runCatching { org.json.JSONObject(raw) }.getOrNull() }
+                    val name = root?.optJSONObject("meta")?.optString("name").orEmpty()
+                        .ifBlank { "Test Case " + (index + 1) }
+                    val seconds = root?.optJSONObject("execution")?.optInt("total_duration_sec", -1) ?: -1
+                    val duration = if (seconds >= 0) "${seconds / 60} min ${seconds % 60} sec" else "Duration not set"
+                    val caseValid = remember(raw, form.packageName) {
+                        runCatching { ScenarioCodec.parse(raw, form.packageName) }.isSuccess
+                    }
+                    Surface(shape = RoundedCornerShape(12.dp), color = SeqColors.Background.copy(alpha = 0.35f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, SeqColors.Border)) {
+                        Row(Modifier.fillMaxWidth().padding(start = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            SeqIconAction(Icons.Outlined.PlayArrow, "Test " + name,
+                                onClick = { onTest(form.copy(scenarioJson = raw)) },
+                                enabled = editable && caseValid, tint = SeqColors.Teal)
+                            Column(Modifier.weight(1f).padding(vertical = 9.dp)) {
+                                Text(name, fontWeight = FontWeight.SemiBold, maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis, fontSize = 14.sp)
+                                Text(duration, color = SeqColors.Muted, fontSize = 12.sp)
+                                if (!caseValid) Text("Needs QA", color = SeqColors.Error, fontSize = 11.sp)
+                            }
+                            SeqIconAction(Icons.Outlined.Edit, "Edit " + name,
+                                onClick = { onEditCase(form, index) }, enabled = editable)
+                            SeqIconAction(Icons.Outlined.DeleteOutline, "Delete " + name,
+                                onClick = { deleteCase = index }, enabled = editable, tint = SeqColors.Error)
+                        }
+                    }
                 }
                 if (recorderNotice.isNotBlank()) {
-                    Text(recorderNotice, color = SeqColors.Muted, fontSize = 12.sp)
+                    val success = recorderNotice.startsWith("Test case created")
+                    Surface(shape = RoundedCornerShape(12.dp),
+                        color = (if (success) SeqColors.Success else SeqColors.Error).copy(alpha = 0.12f)) {
+                        Row(Modifier.fillMaxWidth().padding(start = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            Icon(if (success) Icons.Outlined.CheckCircle else Icons.Outlined.ErrorOutline, null,
+                                tint = if (success) SeqColors.Success else SeqColors.Error)
+                            Spacer(Modifier.width(8.dp))
+                            Text(recorderNotice, Modifier.weight(1f), fontSize = 12.sp)
+                            SeqIconAction(Icons.Outlined.Close, "Dismiss recording result",
+                                onClick = onDismissRecorderNotice)
+                        }
+                    }
                 }
             }
         }
         SeqPrimaryButton("Save local draft", onClick = { save() },
-            modifier = Modifier.fillMaxWidth(), icon = Icons.Outlined.Save)
-        val errors = form.validateForPublish()
-        SeqPrimaryButton(if (published) "Update published app" else "Publish to App List",
-            onClick = {
-                scope.launch {
-                    busy = true
-                    notice = ""
-                    try {
-                        save()
-                        repo.savePublished(form, form.scenarioJson)
-                        published = true
-                        notice = "Published successfully. Your app is now in App List."
-                    } catch (error: Exception) {
-                        notice = "Publish failed: " + (error.message ?: error.javaClass.simpleName)
-                    } finally { busy = false }
-                }
-            },
-            modifier = Modifier.fillMaxWidth(),
-            icon = Icons.Outlined.CloudUpload,
-            enabled = profile != null && !busy && errors.isEmpty()
-        )
+            modifier = Modifier.fillMaxWidth(), icon = Icons.Outlined.Save, enabled = editable)
+        SeqTextButton(onClick = { onDashboard(form) }, enabled = editable && form.packageName.isNotBlank()) {
+            Icon(Icons.Outlined.BarChart, null, Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Text("Open QA Dashboard")
+        }
         if (published) {
             SeqTextButton(onClick = {
                 scope.launch {
@@ -635,23 +610,66 @@ internal fun SequmioDeveloperApp(
                         notice = "Unpublish failed: " + (error.message ?: "unknown")
                     } finally { busy = false }
                 }
-            }) {
+            }, enabled = editable) {
                 Icon(Icons.Outlined.VisibilityOff, null, Modifier.size(18.dp))
                 Text("Unpublish")
             }
         }
-        if (errors.isNotEmpty()) {
-            Text("Publishing requirements", fontWeight = FontWeight.SemiBold,
-                fontSize = 13.sp)
-            errors.take(6).forEach {
-                Text("• " + it, color = SeqColors.Muted, fontSize = 11.sp)
-            }
-        }
-        if (notice.isNotBlank()) {
-            Text(notice, color = if (notice.startsWith("Publish failed"))
-                SeqColors.Error else SeqColors.Success, fontSize = 12.sp)
-        }
         Spacer(Modifier.height(12.dp))
+    }
+    if (editDetails) {
+        var edited by remember { mutableStateOf(form) }
+        AlertDialog(onDismissRequest = { editDetails = false },
+            title = { Text("App Details") },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CatalogTextField("App name", edited.appName) { edited = edited.copy(appName = it) }
+                    CatalogTextField("Package name", edited.packageName) { edited = edited.copy(packageName = it) }
+                    CatalogTextField("Description", edited.description, 3) { edited = edited.copy(description = it) }
+                }
+            }, confirmButton = {
+                TextButton(onClick = {
+                    form = edited.copy(appName = edited.appName.trim(), packageName = edited.packageName.trim())
+                    editDetails = false
+                }) { Text("Save") }
+            }, dismissButton = { TextButton(onClick = { editDetails = false }) { Text("Cancel") } })
+    }
+    if (editLink in labels.indices) {
+        val index = editLink
+        var value by remember(index) { mutableStateOf(urls[index]) }
+        val acceptable = value.isBlank() || validClosedTestLink(value.trim(), hosts[index])
+        AlertDialog(onDismissRequest = { editLink = -1 },
+            title = { Text(labels[index]) },
+            text = {
+                Column {
+                    CatalogTextField("HTTPS URL", value) { value = it }
+                    if (!acceptable) Text("Use https://" + hosts[index], color = SeqColors.Error, fontSize = 12.sp)
+                }
+            }, confirmButton = {
+                TextButton(enabled = acceptable, onClick = {
+                    val url = value.trim()
+                    form = when (index) {
+                        0 -> form.copy(googleGroupUrl = url)
+                        1 -> form.copy(optInUrl = url)
+                        else -> form.copy(playStoreUrl = url)
+                    }
+                    editLink = -1
+                }) { Text("Save") }
+            }, dismissButton = { TextButton(onClick = { editLink = -1 }) { Text("Cancel") } })
+    }
+    if (deleteCase in cases.indices) {
+        val index = deleteCase
+        AlertDialog(onDismissRequest = { deleteCase = -1 },
+            title = { Text("Delete test case?") },
+            text = { Text("This removes the selected case from your local draft.") },
+            confirmButton = { TextButton(onClick = {
+                val remaining = cases.filterIndexed { i, _ -> i != index }
+                form = form.copy(scenarioJson = if (remaining.isEmpty()) "" else ScenarioCodec.compose(remaining))
+                onSave(form)
+                deleteCase = -1
+                notice = "Test case deleted."
+            }) { Text("Delete", color = SeqColors.Error) } },
+            dismissButton = { TextButton(onClick = { deleteCase = -1 }) { Text("Cancel") } })
     }
 }
 
