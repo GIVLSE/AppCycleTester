@@ -1,4 +1,4 @@
-# Sequmio V0.5 — enabling Google sign-in and user profiles
+# Sequmio V1.0 — configure sign-in and Firestore community backend
 
 **Current release builds without Firebase configuration**; its Profile screen explicitly says Google sign-in is unavailable. Do not publish a mock account or claim that community features are available.
 
@@ -7,7 +7,7 @@
 1. Open https://console.firebase.google.com/ and create a Firebase project without Analytics (not required by Sequmio).
 2. Register Android app package \`com.sequmio.givlse\`.
 3. Enable **Authentication → Sign-in method → Google**.
-4. Create a **Cloud Firestore** database and deploy the repository \`firestore.rules\`. Rules allow each authenticated user to read/write only \`users/{uid}\` and deny all other documents for now.
+4. Create a **Cloud Firestore** database and deploy the latest repository firestore.rules. Rules support owner-scoped users, published apps, private memberships and owner account deletion. Validate using two distinct users and the Firebase Emulator.
 5. In the Google Cloud Console configure OAuth consent (external), a **Web application OAuth client** and Android OAuth clients for Sequmio. Google sign-in uses the **Web OAuth client ID**, not the Android client ID.
 6. Register the **Play App Signing certificate SHA-1** from Play Console → Setup → App integrity. If testing a debug APK or sideloaded build, register each corresponding signing certificate SHA-1 too. Ensure branding, privacy URL and Terms URL are accurate.
 
@@ -52,3 +52,7 @@ When Firebase is not configured, catalog writes and login are disabled. No produ
 
 ## V0.9 online validation
 Verify deployed Firestore rules allow an owner to query their own listings (including drafts), delete their account and memberships while preventing edits to another user's listings. The Android app still needs actual Firebase identifiers in GitHub Actions Variables. Cloud integration tests with two Google users and separate devices have not been executed.
+
+## V1.0 reality check
+
+Until all four GitHub Actions variables are configured and the server rules deployed, the app deliberately disables Google sign-in and real cloud catalog features. The developer must register the Play app-signing SHA-1 and validate account deletion, including the off-app request pathway, before declaring production readiness.

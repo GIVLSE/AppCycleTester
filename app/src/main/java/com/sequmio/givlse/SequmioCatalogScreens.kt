@@ -254,6 +254,7 @@ internal fun SequmioDeveloperApp(
     onOpenScenarios: (MyAppDraft) -> Unit,
     recorderState: RecorderState,
     recorderNotice: String,
+    onTest: (MyAppDraft) -> Unit,
     onRecord: (MyAppDraft) -> Unit
 ) {
     val scope = rememberCoroutineScope()
@@ -310,7 +311,10 @@ internal fun SequmioDeveloperApp(
                 Text(if (valid) "Valid scenario defined" else "Scenario required",
                     color = if (valid) SeqColors.Success else SeqColors.Error)
                 SeqTextButton(onClick = { onOpenScenarios(form) }) {
-                    Text("Edit scenario JSON →")
+                    Text("Visual scenario editor →")
+                }
+                SeqTextButton(onClick = { onTest(form) }) {
+                    Text("Add scenario to Runner for testing")
                 }
                 SeqPrimaryButton("Record UI actions", onClick = { onRecord(form) },
                     modifier = Modifier.fillMaxWidth(),

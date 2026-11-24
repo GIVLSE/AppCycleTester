@@ -55,8 +55,9 @@ object ScenarioCodec {
                 "CLICK" -> require(validSelector(selector) || validCoordinates(fallback)) {
                     "CLICK requires selector or normalized coordinates"
                 }
-                "ASSERT_EXISTS" -> require(validSelector(selector)) {
-                    "ASSERT_EXISTS requires a UI selector"
+                "ASSERT_EXISTS" -> require(validSelector(selector) &&
+                    selector?.optString("text") != "REPLACE_WITH_VISIBLE_TEXT") {
+                    "ASSERT_EXISTS requires a real UI selector, not the template placeholder"
                 }
                 "INPUT_TEXT" -> {
                     require(validSelector(selector)) { "Text input needs a selector" }

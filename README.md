@@ -1,6 +1,6 @@
 # Sequmio
 
-Android QA cycle runner. GitHub repository remains **GIVLSE/AppCycleTester**.
+Android QA runner and community test platform. GitHub repository remains **GIVLSE/AppCycleTester**.
 
 **V1 Android QA utility** to run a user-selected sequence of installed apps, keeping each in the foreground for a configured time, then opening the next app.
 
@@ -19,11 +19,11 @@ Repository: https://github.com/GIVLSE/AppCycleTester
 - Timeout if an app's window is not confirmed within 8 seconds; retry a lost window up to twice. Other-app windows trigger recovery after 5 seconds; permissioncontroller dialogs receive up to 45 seconds for manual user action, never silent approval.
 - Kotlin + Jetpack Compose, minSdk 26, targetSdk 36.
 
-**Application ID:** `com.sequmio.givlse` · **Version:** `0.9.0` (`versionCode` 14).
+**Application ID:** `com.sequmio.givlse` · **Version:** `1.0.0` (`versionCode` 15).
 
 **Important:** This is a new Android package compared to the prototype `io.github.givlse.appcycletester`; installing Sequmio will not update the previous package in place.
 
-## Sequmio UI v0.5.0
+## Sequmio UI v1.0.0
 
 The approved dark UI is implemented in Jetpack Compose with a Sequmio vector mark and launcher icon. Tabs: Runner, App List, My App, and History. The former Scenarios placeholder is moved under My App. A top-right gear opens Settings (Profile, permissions, About, Privacy, Terms, Support). The Accessibility onboarding is a first-class screen with explicit disclosure and consent. All test-plan and runner operations remain connected to the V1 engine. Source: `SequmioApp.kt`, `SequmioTheme.kt`, `SequmioDialogs.kt`, and `SequmioAccessSetup.kt`.
 
@@ -121,3 +121,9 @@ Limitations: Accessibility events are not a universal tap/swipe recorder. Secure
 - PASS reports mark the local calendar date for any app with a confirmed foreground window, no failed launches and enough verified foreground time. App List shows the number of local QA days. This is **not verification by Google Play** and does not count opt-in enrollment.
 - Settings → Profile provides a confirm-then-delete cloud account action. It removes the user's own app listings, self-confirmed memberships and profile document before deleting Firebase Auth identity. Firebase may require a recent Google login. Local files remain until clearing app storage or uninstall.
 - For external account deletion requests, users can visit `https://givlse.github.io/AppCycleTester/delete-account.html`. This is an initial contact path and needs operational support handling before production.
+
+## V1.0 visual E2E editor and device QA
+
+My App includes a visual scenario editor with step creation, reordering, field editing, optional flags, selectors and normalized coordinates, plus Advanced JSON. The Recorder's scenarios can be reviewed without hand-editing JSON. Developers can add their own validated scenario to the local Runner without publishing. The Player retries delayed UI elements before failing.
+
+**Important:** This is a 1.0 code milestone for user acceptance, not proof of production readiness. Offline Runner works without an account. Google Sign-In/App List require the owner's actual Firebase configuration, OAuth fingerprint setup, deployed Firestore rules, security validation and Google Play review. Device QA has not yet been performed.

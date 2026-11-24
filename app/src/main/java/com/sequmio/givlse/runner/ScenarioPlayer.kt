@@ -5,6 +5,7 @@ import android.accessibilityservice.GestureDescription
 import android.graphics.Path
 import android.os.Bundle
 import android.os.Handler
+import android.os.SystemClock
 import android.view.accessibility.AccessibilityNodeInfo
 import com.sequmio.givlse.data.ScenarioSpec
 import com.sequmio.givlse.data.ScenarioStep
@@ -27,6 +28,7 @@ class ScenarioPlayer(
     var stopped: Boolean = false
         private set
     private var current = 0
+    private var stepStartedAt = 0L
     private var pending: Runnable? = null
 
     fun start() { advance() }
@@ -69,6 +71,7 @@ class ScenarioPlayer(
 
     private fun execute(step: ScenarioStep) {
         if (stopped) return
+        if (stepStartedAt == 0L) stepStartedAt = SystemClock.elapsedRealtime()
         when (step.action) {
             "WAIT" -> later(step.params.optLong("duration_ms", 500)) { complete(step) }
             "SYSTEM_BACK" -> {
@@ -78,10 +81,15 @@ class ScenarioPlayer(
             }
             "ASSERT_EXISTS" -> {
                 if (findNode(step) != null) complete(step)
-                else fail(step, "Expected UI element not found")
+                else retryMissing(step, "Expected UI element not found")
             }
             "CLICK" -> {
                 val node = findNode(step)
+                if (node == null && step.selector != null &&
+                    SystemClock.elapsedRealtime() - stepStartedAt < 2500L) {
+                    later(250) { execute(step) }
+                    return
+                }
                 var clickable = node
                 var depth = 0
                 while (clickable != null && !clickable.isClickable && depth++ < 8)
@@ -94,7 +102,7 @@ class ScenarioPlayer(
                     gesture(x, y, x, y, 90L,
                         onSuccess = { complete(step) },
                         onFail = { fail(step, "Tap gesture rejected by Android") })
-                } else fail(step, "Click target not found or not clickable")
+                } else retryMissing(step, "Click target not found or not clickable")
             }
             "SWIPE" -> {
                 val p = step.params
@@ -108,8 +116,12 @@ class ScenarioPlayer(
             }
             "INPUT_TEXT" -> {
                 val node = findNode(step)
-                if (node == null || node.isPassword) {
-                    fail(step, "Editable UI element missing or is a password field")
+                if (node == null) {
+                    retryMissing(step, "Editable UI element missing")
+                    return
+                }
+                if (node.isPassword) {
+                    fail(step, "Password fields cannot be targeted")
                     return
                 }
                 val args = Bundle().apply {
@@ -180,10 +192,19 @@ class ScenarioPlayer(
         if (!accepted) onFail()
     }
 
+    private fun retryMissing(step: ScenarioStep, message: String) {
+        if (SystemClock.elapsedRealtime() - stepStartedAt < 5000L) {
+            later(250) { execute(step) }
+        } else {
+            fail(step, message)
+        }
+    }
+
     private fun complete(step: ScenarioStep) {
         if (stopped) return
         onStep("Step " + (current + 1) + ": " + step.action + " PASS")
         current++
+        stepStartedAt = 0L
         advance()
     }
 
@@ -192,6 +213,7 @@ class ScenarioPlayer(
         if (step.optional) {
             onStep("Optional step " + (current + 1) + " skipped: " + message)
             current++
+            stepStartedAt = 0L
             advance()
         } else {
             stop()

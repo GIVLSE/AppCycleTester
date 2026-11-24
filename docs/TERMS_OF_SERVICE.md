@@ -2,7 +2,7 @@
 
 **Effective:** November 24, 2026
 
-**Scope.** Sequmio is a QA utility that launches user-selected Android applications for testing. Local Runner remains available without an online account. Community functions and shared scenarios are planned but are not active in V0.5.
+**Scope.** Sequmio is a QA utility that launches user-selected Android applications for testing. Local Runner remains available without an online account. Community features require the developer's Firebase backend and explicitly signed-in users. Enrollment in Google testing programs must be completed by the tester; Sequmio does not independently verify membership.
 
 **Responsibility.** Only test applications you own, have permission to test, or are authorized to access. Do not use Sequmio to misrepresent genuine user engagement, manipulate platform reviews or bypass rules of Google Play or third-party services.
 

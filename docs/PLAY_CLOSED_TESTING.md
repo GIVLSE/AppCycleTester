@@ -92,3 +92,7 @@ This repository currently has no connected Google Play Console integration. The 
 
 ## V0.8 Accessibility recorder disclosure
 The service now also observes click, scroll and text-field-change accessibility event types while the user explicitly records their own app. It stores UI selectors, approximate scrolls and safe text-input placeholders locally, not actual typed content. The service uses a visible Accessibility overlay with Pause/Stop. Re-record the Play Console Accessibility demonstration covering explicit V3 disclosure, Recorder controls, local save, and opt-in publishing. Review policy and user data answers before upload.
+
+## V1.0 release acceptance
+
+Use a signed AAB with versionName 1.0.0 and versionCode 15. Complete Accessibility V3 disclosure and a new video showing UI-node access, deterministic actions and opt-in Recorder; FGS specialUse; Data Safety for Google/Firebase identity, published scenarios and memberships; and account deletion URL https://givlse.github.io/AppCycleTester/delete-account.html. Run Android 11/14/16 QA and deployed Firestore rules tests. Do not interpret CI PASS as Google Play approval.

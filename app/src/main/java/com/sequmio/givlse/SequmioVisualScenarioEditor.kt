@@ -1,0 +1,338 @@
+package com.sequmio.givlse
+
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.sequmio.givlse.data.MyAppDraft
+import com.sequmio.givlse.data.ScenarioCodec
+import org.json.JSONArray
+import org.json.JSONObject
+
+private data class EditableStep(
+    val action: String,
+    val delay: String = "300",
+    val viewId: String = "",
+    val text: String = "",
+    val description: String = "",
+    val x: String = "0.5",
+    val y: String = "0.5",
+    val endX: String = "0.5",
+    val endY: String = "0.25",
+    val timeMs: String = "1000",
+    val inputText: String = "",
+    val optional: Boolean = false
+)
+
+private fun parseSteps(json: String): List<EditableStep> {
+    val root = runCatching { JSONObject(json) }.getOrNull() ?: return emptyList()
+    val arr = root.optJSONArray("steps") ?: return emptyList()
+    return (0 until arr.length()).mapNotNull { i ->
+        val step = arr.optJSONObject(i) ?: return@mapNotNull null
+        val params = step.optJSONObject("params") ?: JSONObject()
+        val selector = step.optJSONObject("selector") ?: JSONObject()
+        val coords = step.optJSONObject("fallback_coords") ?: JSONObject()
+        val action = step.optString("action", "WAIT")
+        EditableStep(
+            action = action,
+            delay = step.optInt("delay_before_ms", 300).toString(),
+            viewId = selector.optString("view_id"),
+            text = selector.optString("text"),
+            description = selector.optString("content_desc"),
+            x = if (action == "SWIPE")
+                params.optDouble("start_x_percent", 0.5).toString()
+                else coords.optDouble("x_percent", 0.5).toString(),
+            y = if (action == "SWIPE")
+                params.optDouble("start_y_percent", 0.75).toString()
+                else coords.optDouble("y_percent", 0.5).toString(),
+            endX = params.optDouble("end_x_percent", 0.5).toString(),
+            endY = params.optDouble("end_y_percent", 0.25).toString(),
+            timeMs = params.optLong("duration_ms", if (action == "SWIPE") 450 else 1000).toString(),
+            inputText = params.optString("text"),
+            optional = step.optBoolean("optional", false)
+        )
+    }
+}
+
+private fun createJson(
+    packageName: String, name: String, durationSeconds: Int,
+    loop: Boolean, steps: List<EditableStep>
+): String {
+    val arr = JSONArray()
+    steps.forEachIndexed { index, s ->
+        val obj = JSONObject()
+            .put("order", index + 1)
+            .put("action", s.action)
+            .put("delay_before_ms", s.delay.toLongOrNull() ?: 0L)
+            .put("optional", s.optional)
+        val selector = JSONObject()
+        if (s.viewId.isNotBlank()) selector.put("view_id", s.viewId.trim())
+        if (s.text.isNotBlank()) selector.put("text", s.text.trim())
+        if (s.description.isNotBlank()) selector.put("content_desc", s.description.trim())
+        if (selector.length() > 0) obj.put("selector", selector)
+        val params = JSONObject()
+        when (s.action) {
+            "WAIT" -> params.put("duration_ms", s.timeMs.toLongOrNull() ?: 1000L)
+            "SWIPE" -> {
+                params.put("start_x_percent", s.x.toDoubleOrNull() ?: -1.0)
+                    .put("start_y_percent", s.y.toDoubleOrNull() ?: -1.0)
+                    .put("end_x_percent", s.endX.toDoubleOrNull() ?: -1.0)
+                    .put("end_y_percent", s.endY.toDoubleOrNull() ?: -1.0)
+                    .put("duration_ms", s.timeMs.toLongOrNull() ?: 450L)
+            }
+            "INPUT_TEXT" -> {
+                params.put("text", s.inputText)
+                    .put("clear_before", true)
+            }
+            "CLICK" -> {
+                val coords = JSONObject()
+                    .put("x_percent", s.x.toDoubleOrNull() ?: -1.0)
+                    .put("y_percent", s.y.toDoubleOrNull() ?: -1.0)
+                obj.put("fallback_coords", coords)
+            }
+        }
+        if (params.length() > 0) obj.put("params", params)
+        arr.put(obj)
+    }
+    return JSONObject()
+        .put("schema_version", 1)
+        .put("meta", JSONObject().put("name", name))
+        .put("target", JSONObject().put("package_name", packageName))
+        .put("execution", JSONObject().put("total_duration_sec", durationSeconds)
+            .put("loop_steps", loop))
+        .put("steps", arr)
+        .toString(2)
+}
+
+@Composable
+private fun TextConfig(
+    name: String, value: String,
+    modifier: Modifier = Modifier, singleLine: Boolean = true,
+    onChange: (String) -> Unit
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onChange,
+        label = { Text(name) },
+        modifier = modifier.fillMaxWidth(),
+        singleLine = singleLine,
+        maxLines = if (singleLine) 1 else 10,
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedTextColor = SeqColors.Text,
+            unfocusedTextColor = SeqColors.Text,
+            focusedLabelColor = SeqColors.Primary,
+            unfocusedLabelColor = SeqColors.Muted,
+            focusedBorderColor = SeqColors.Primary,
+            unfocusedBorderColor = SeqColors.Border,
+            cursorColor = SeqColors.Teal
+        )
+    )
+}
+
+/**
+ * No-code editor built around the supported deterministic E2E actions.
+ * Recorded steps can be refined, reordered, or deleted without editing JSON.
+ */
+@Composable
+internal fun SequmioVisualScenarioEditor(
+    initial: MyAppDraft,
+    onSave: (MyAppDraft) -> Unit,
+    onBack: () -> Unit
+) {
+    val parsed = remember(initial.scenarioJson) {
+        runCatching { JSONObject(initial.scenarioJson) }.getOrNull()
+    }
+    var name by remember(initial.packageName) {
+        mutableStateOf(parsed?.optJSONObject("meta")?.optString("name", "UI smoke test")
+            ?: "UI smoke test")
+    }
+    var duration by remember(initial.packageName) {
+        mutableStateOf(parsed?.optJSONObject("execution")
+            ?.optInt("total_duration_sec", 300)?.toString() ?: "300")
+    }
+    var loop by remember(initial.packageName) {
+        mutableStateOf(parsed?.optJSONObject("execution")?.optBoolean("loop_steps", false) ?: false)
+    }
+    var steps by remember(initial.scenarioJson) { mutableStateOf(parseSteps(initial.scenarioJson)) }
+    var expanded by remember { mutableIntStateOf(-1) }
+    var validation by remember { mutableStateOf("") }
+    var showJson by remember { mutableStateOf(false) }
+    var rawJson by remember(initial.scenarioJson) { mutableStateOf(initial.scenarioJson) }
+
+    fun changeStep(index: Int, block: (EditableStep) -> EditableStep) {
+        steps = steps.toMutableList().apply { this[index] = block(this[index]) }
+    }
+    fun snapshot(): String = if (showJson) rawJson else createJson(
+        initial.packageName, name, duration.toIntOrNull() ?: 0, loop, steps
+    )
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        SeqTopBar("Scenario Editor", onBack)
+        Text("For " + initial.packageName, color = SeqColors.Muted, fontSize = 12.sp)
+        TextConfig("Scenario name", name) { name = it }
+        TextConfig("Total app time (seconds)", duration) { duration = it }
+        Row {
+            Switch(checked = loop, onCheckedChange = { loop = it })
+            Spacer(Modifier.width(12.dp))
+            Text("Repeat steps until app timer expires")
+        }
+        Row {
+            SeqTextButton(onClick = {
+                if (showJson) {
+                    val result = runCatching { JSONObject(rawJson) }
+                    if (result.isSuccess) {
+                        steps = parseSteps(rawJson)
+                        val obj = result.getOrThrow()
+                        name = obj.optJSONObject("meta")?.optString("name", name) ?: name
+                        duration = obj.optJSONObject("execution")
+                            ?.optInt("total_duration_sec", 300)?.toString() ?: "300"
+                        loop = obj.optJSONObject("execution")
+                            ?.optBoolean("loop_steps", false) ?: false
+                        showJson = false
+                        validation = ""
+                    } else {
+                        validation = "Invalid JSON: " + result.exceptionOrNull()?.message
+                    }
+                } else {
+                    rawJson = snapshot()
+                    showJson = true
+                }
+            }) { Text(if (showJson) "Visual editor" else "Advanced JSON") }
+        }
+        if (showJson) {
+            TextConfig("Advanced scenario JSON", rawJson, singleLine = false) { rawJson = it }
+        } else {
+            Text("Steps (" + steps.size + "/50)", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                listOf("CLICK", "WAIT", "SWIPE", "INPUT_TEXT", "ASSERT_EXISTS", "SYSTEM_BACK")
+                    .forEach { action ->
+                        SeqTextButton(
+                            onClick = {
+                                if (steps.size < 50) {
+                                    steps = steps + EditableStep(action)
+                                    expanded = steps.lastIndex
+                                }
+                            }, enabled = steps.size < 50
+                        ) { Text("+ " + action, fontSize = 12.sp) }
+                    }
+            }
+            steps.forEachIndexed { i, step ->
+                SeqCard(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                            Text((i+1).toString() + ". " + step.action,
+                                modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold)
+                            SeqTextButton(onClick = { expanded = if (expanded == i) -1 else i }) {
+                                Text(if (expanded == i) "Hide" else "Edit")
+                            }
+                        }
+                        Row {
+                            SeqTextButton(onClick = {
+                                if (i > 0) {
+                                    val mutable = steps.toMutableList()
+                                    mutable.add(i-1, mutable.removeAt(i))
+                                    steps = mutable
+                                    expanded = i-1
+                                }
+                            }, enabled = i > 0) { Text("↑") }
+                            SeqTextButton(onClick = {
+                                if (i < steps.lastIndex) {
+                                    val mutable = steps.toMutableList()
+                                    mutable.add(i+1, mutable.removeAt(i))
+                                    steps = mutable
+                                    expanded = i+1
+                                }
+                            }, enabled = i < steps.lastIndex) { Text("↓") }
+                            SeqTextButton(onClick = {
+                                steps = steps.toMutableList().apply { removeAt(i) }
+                                expanded = -1
+                            }) { Text("Remove") }
+                        }
+                        if (expanded == i) {
+                            TextConfig("Delay before (ms)", step.delay) { next ->
+                                changeStep(i) { it.copy(delay = next) }
+                            }
+                            if (step.action in listOf("CLICK","ASSERT_EXISTS","INPUT_TEXT")) {
+                                TextConfig("View ID", step.viewId) { next ->
+                                    changeStep(i) { it.copy(viewId = next) }
+                                }
+                                TextConfig("Visible text", step.text) { next ->
+                                    changeStep(i) { it.copy(text = next) }
+                                }
+                                TextConfig("Content description", step.description) { next ->
+                                    changeStep(i) { it.copy(description = next) }
+                                }
+                            }
+                            if (step.action == "CLICK" || step.action == "SWIPE") {
+                                TextConfig("Start/Fallback X [0..1]", step.x) { next ->
+                                    changeStep(i) { it.copy(x = next) }
+                                }
+                                TextConfig("Start/Fallback Y [0..1]", step.y) { next ->
+                                    changeStep(i) { it.copy(y = next) }
+                                }
+                            }
+                            if (step.action == "SWIPE") {
+                                TextConfig("End X [0..1]", step.endX) { next ->
+                                    changeStep(i) { it.copy(endX = next) }
+                                }
+                                TextConfig("End Y [0..1]", step.endY) { next ->
+                                    changeStep(i) { it.copy(endY = next) }
+                                }
+                            }
+                            if (step.action == "WAIT" || step.action == "SWIPE") {
+                                TextConfig("Duration (ms)", step.timeMs) { next ->
+                                    changeStep(i) { it.copy(timeMs = next) }
+                                }
+                            }
+                            if (step.action == "INPUT_TEXT") {
+                                Text("Use only non-sensitive test text.",
+                                    color = SeqColors.Muted, fontSize = 12.sp)
+                                TextConfig("Test text", step.inputText) { next ->
+                                    changeStep(i) { it.copy(inputText = next) }
+                                }
+                            }
+                            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                                Checkbox(checked = step.optional,
+                                    onCheckedChange = { selected ->
+                                        changeStep(i) { it.copy(optional = selected) }
+                                    })
+                                Text("Optional step", color = SeqColors.Muted)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        SeqTextButton(onClick = {
+            validation = runCatching {
+                ScenarioCodec.parse(snapshot(), initial.packageName)
+                "Valid scenario"
+            }.getOrElse { it.message ?: "Invalid scenario" }
+        }) { Text("Validate") }
+        if (validation.isNotBlank())
+            Text(validation,
+                color = if (validation == "Valid scenario") SeqColors.Success else SeqColors.Error)
+        SeqPrimaryButton("Save scenario", onClick = {
+            val json = snapshot()
+            validation = runCatching {
+                ScenarioCodec.parse(json, initial.packageName)
+                onSave(initial.copy(scenarioJson = json))
+                onBack()
+                "Saved"
+            }.getOrElse { it.message ?: "Fix scenario errors" }
+        }, modifier = Modifier.fillMaxWidth())
+        Text("Save requires a valid actionable scenario. It is stored locally " +
+            "until you explicitly publish your My App listing.",
+            color = SeqColors.Muted, fontSize = 12.sp)
+    }
+}

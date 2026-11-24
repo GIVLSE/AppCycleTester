@@ -172,3 +172,17 @@ New color tokens: content #F4F6FC; muted #ADBAD0; text links #B99AFF; filled but
 | INT-09 | Delete cloud account and confirm dialog | Owned listings, memberships, user profile and Auth identity removed |
 | INT-10 | Firebase requires recent login for delete | Visible error, no silent success |
 | INT-11 | Access external deletion page | Public link loads and directs users to request deletion |
+
+## V1.0 release candidate — manual acceptance still pending
+| ID | Scenario | Expected |
+|---|---|---|
+| RC-01 | Visual editor add/reorder/remove CLICK/WAIT/SWIPE/INPUT_TEXT/ASSERT/BACK | JSON matches UI |
+| RC-02 | Import recorded steps into visual editor | Selectors and delays editable |
+| RC-03 | Advanced JSON → Visual | Valid JSON edits preserved |
+| RC-04 | Invalid/WAIT-only scenario | Save/publish blocked |
+| RC-05 | Add own scenario to Runner | Local plan updated; test starts only at user request |
+| RC-06 | Delayed element appears after 2 seconds | Player retries then executes |
+| RC-07 | Properly signed Play AAB | Existing upload certificate, versionCode 15 |
+| RC-08 | Real Firebase backend + Android | Auth, App List, publishing, Join, sync, deletion tested |
+| RC-09 | Real device matrix Android 11/14/16 | Accessibility, Recorder, FGS, History verified |
+| RC-10 | Play Console Accessibility/FGS/Data Safety declarations | Updated and approved |

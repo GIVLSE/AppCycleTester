@@ -213,6 +213,35 @@ internal fun SequmioApp(
                     },
                     recorderState = recorder,
                     recorderNotice = recorderNotice,
+                    onTest = { draft ->
+                        recorderNotice = ""
+                        val installed = apps.firstOrNull {
+                            it.packageName == draft.packageName
+                        }
+                        val parsed = runCatching {
+                            ScenarioCodec.parse(draft.scenarioJson, draft.packageName)
+                        }
+                        when {
+                            active -> recorderNotice = "Stop the current run before editing."
+                            parsed.isFailure -> recorderNotice =
+                                "Scenario invalid: " + (parsed.exceptionOrNull()?.message ?: "")
+                            installed == null -> recorderNotice =
+                                "Your application is not installed on this device."
+                            else -> {
+                                val spec = parsed.getOrThrow()
+                                val target = TestTarget(
+                                    installed.packageName, installed.activityClass, draft.appName,
+                                    spec.totalDurationSec, draft.scenarioJson, "local"
+                                )
+                                val next = plan.targets.filterNot {
+                                    it.packageName == installed.packageName
+                                } + target
+                                setPlan(plan.copy(targets = next))
+                                page = Page.RUNNER
+                                message = "Your scenario is in Runner. Press Start to execute it."
+                            }
+                        }
+                    },
                     onRecord = { draft ->
                         recorderNotice = ""
                         draftStore.save(draft)
@@ -238,7 +267,7 @@ internal fun SequmioApp(
                         }
                     }
                 )
-                Page.SCENARIO_EDITOR -> SequmioScenarioEditor(
+                Page.SCENARIO_EDITOR -> SequmioVisualScenarioEditor(
                     initial = ownAppDraft,
                     onSave = { updated ->
                         draftStore.save(updated)
