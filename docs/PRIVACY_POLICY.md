@@ -20,7 +20,7 @@ Sequmio allows users to automate timed switching between selected Android applic
 These records are stored locally in Android SharedPreferences. They are used only for running the selected test plans and displaying results. Sequmio does not automatically send local testing data to servers or third parties, and has no analytics or ads. Optional Google sign-in uses Firebase Authentication and stores the user's basic account profile in Firebase Cloud Firestore; Google/Firebase process identity information. Sign-in is not required for local Runner. Export to other apps happens only when the user taps Share JSON/CSV for a specific report.
 
 ## Accessibility permission
-The user must explicitly consent to Sequmio's in-app disclosure and enable the Sequmio Runner service in Android Accessibility settings. The service is used to open apps and detect active app windows. It does not read screen text, record taps, capture screenshots, audio or video in the current version. The user can disable the service at any time.
+The user must explicitly consent to Sequmio's in-app disclosure and enable the Sequmio Runner service in Android Accessibility settings. The service is used to open apps, detect active windows, inspect visible UI node IDs/text/descriptions while a user-selected E2E scenario runs, and perform scripted taps, swipes, Back and predefined text input. It does not record raw taps, capture screenshots/audio/video, or automatically approve system permission dialogs. Password fields are excluded from text input. The user can disable the service at any time.
 
 ## Foreground service and display
 Tests use a user-started foreground service (Android specialUse type), optional notification access to show a Stop action, and a temporary partial CPU wake lock. These do not bypass a locked screen or keep third-party apps visible.
@@ -43,3 +43,6 @@ Sign out in Settings to clear the session on the device. Cloud profile removal m
 ## Community app listings and memberships (V0.6)
 
 If enabled by the owner, Firebase Firestore stores developer-submitted app names, package identifiers, public testing links, scenario JSON, owner user IDs and display names. Users can publish or unpublish from My App. Signed-in testers may self-confirm joining third-party tests. Sequmio stores a tester UID, app package name, join time and self-confirmed participation in Firestore; it does not independently verify Google Group membership, Play opt-in or actual testing. Local test execution logs remain on the device unless intentionally shared.
+
+## Scenario security and storage
+Published scenario definitions may contain predefined UI action parameters and selectors stored in Firestore; other testers can download them. Avoid placing secrets, passwords or personal data in published scenarios. Scenario execution runs locally, only inside the selected package, and does not upload the screen contents to a server.

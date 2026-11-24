@@ -23,8 +23,8 @@ android {
         applicationId = "com.sequmio.givlse"
         minSdk = 26
         targetSdk = 36
-        versionCode = 11
-        versionName = "0.6.0"
+        versionCode = 12
+        versionName = "0.7.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", androidString(cloudWebClientId))
         buildConfigField("String", "FIREBASE_API_KEY", androidString(cloudApiKey))

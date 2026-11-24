@@ -13,6 +13,7 @@ import android.os.PowerManager
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityEvent
 import com.sequmio.givlse.data.RunReportStore
+import com.sequmio.givlse.data.ScenarioCodec
 import com.sequmio.givlse.data.SettingsStore
 import com.sequmio.givlse.model.RunEvent
 import com.sequmio.givlse.model.RunPhase
@@ -51,6 +52,8 @@ class CycleAccessibilityService : AccessibilityService() {
     private var events: List<RunEvent> = emptyList()
     private var lastMessage = ""
     private var receiverRegistered = false
+    private var scenarioPlayer: ScenarioPlayer? = null
+    private var scenarioFailed = false
 
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -88,6 +91,7 @@ class CycleAccessibilityService : AccessibilityService() {
                 launchConfirmed = true
                 reports.confirmed(index)
                 addEvent("Foreground confirmed: " + expected)
+                startScenarioIfNeeded()
             }
         } else if (foreground != otherWindowPackage) {
             otherWindowAt = SystemClock.elapsedRealtime()
@@ -105,6 +109,7 @@ class CycleAccessibilityService : AccessibilityService() {
 
     override fun onDestroy() {
         handler.removeCallbacks(ticker)
+        scenarioPlayer?.stop()
         if (phase == RunPhase.RUNNING || phase == RunPhase.PAUSED)
             finish("FAIL: Accessibility service stopped", false)
         unregisterScreenReceiver()
@@ -148,6 +153,8 @@ class CycleAccessibilityService : AccessibilityService() {
         if (phase != RunPhase.RUNNING) return
         accumulateTime()
         checkpoint()
+        scenarioPlayer?.stop()
+        scenarioPlayer = null
         phase = RunPhase.PAUSED
         handler.removeCallbacks(ticker)
         addEvent("Paused by user")
@@ -197,6 +204,12 @@ class CycleAccessibilityService : AccessibilityService() {
         accumulateTime()
         val p = plan ?: return
         if (p.maxDurationMinutes > 0 && elapsedMs >= p.maxDurationMinutes * 60_000L) {
+            if (p.targets[index].scenarioJson != null && !scenarioFailed &&
+                (scenarioPlayer?.completedPasses ?: 0) == 0) {
+                hadFailure = true
+                reports.failure(index)
+                addEvent("FAIL: scenario did not complete before overall time cap")
+            }
             finish("Overall time limit reached", !hadFailure)
             return
         }
@@ -248,6 +261,14 @@ class CycleAccessibilityService : AccessibilityService() {
     private fun advanceToNext() {
         checkpoint()
         val p = plan ?: return
+        if (p.targets[index].scenarioJson != null && !scenarioFailed &&
+            (scenarioPlayer?.completedPasses ?: 0) == 0) {
+            hadFailure = true
+            reports.failure(index)
+            addEvent("FAIL: scenario did not complete for " + p.targets[index].label)
+        }
+        scenarioPlayer?.stop()
+        scenarioPlayer = null
         val next = RunPolicy.next(index, p.targets.size, completedCycles,
             p.repeatMode, p.repeatCount)
         completedCycles = next.completedCycles
@@ -313,6 +334,9 @@ class CycleAccessibilityService : AccessibilityService() {
     }
 
     private fun launch(target: TestTarget): Boolean = try {
+        scenarioPlayer?.stop()
+        scenarioPlayer = null
+        scenarioFailed = false
         val intent = Intent.makeMainActivity(ComponentName(target.packageName, target.activityClass))
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
         startActivity(intent)
@@ -330,6 +354,8 @@ class CycleAccessibilityService : AccessibilityService() {
 
     private fun finish(reason: String, passed: Boolean, manuallyStopped: Boolean = false) {
         handler.removeCallbacks(ticker)
+        scenarioPlayer?.stop()
+        scenarioPlayer = null
         if (phase == RunPhase.RUNNING) accumulateTime()
         checkpoint()
         phase = RunPhase.FINISHED
@@ -357,6 +383,41 @@ class CycleAccessibilityService : AccessibilityService() {
             unregisterReceiver(screenReceiver)
             receiverRegistered = false
         }
+    }
+
+    private fun startScenarioIfNeeded() {
+        val target = plan?.targets?.getOrNull(index) ?: return
+        val json = target.scenarioJson ?: return
+        val spec = runCatching { ScenarioCodec.parse(json, target.packageName) }
+            .getOrElse { error ->
+                failScenario("Invalid scenario: " + (error.message ?: "parse error"))
+                return
+            }
+        val targetPackage = target.packageName
+        val player = ScenarioPlayer(
+            service = this,
+            handler = handler,
+            scenario = spec,
+            mayRun = {
+                phase == RunPhase.RUNNING && launchConfirmed &&
+                    otherWindowAt == 0L &&
+                    plan?.targets?.getOrNull(index)?.packageName == targetPackage
+            },
+            onStep = { event -> addEvent(event) },
+            onFailure = { error -> failScenario(error) }
+        )
+        scenarioPlayer = player
+        addEvent("Executing scenario " + spec.name + " (" + spec.steps.size + " steps)")
+        player.start()
+    }
+
+    private fun failScenario(error: String) {
+        if (phase != RunPhase.RUNNING) return
+        scenarioFailed = true
+        hadFailure = true
+        reports.failure(index)
+        addEvent("FAIL: " + error)
+        advanceToNext()
     }
 
     private fun addEvent(message: String) {

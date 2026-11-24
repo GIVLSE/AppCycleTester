@@ -72,15 +72,19 @@ internal fun SequmioAccessSetup(
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                 Text("1. Your consent", fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
                 Text(
-                    "Sequmio uses Android Accessibility Service to open apps you choose and " +
-                        "observe which app is in the foreground. The service accesses the " +
-                        "active app package name and window-change timestamps. Plans, " +
-                        "consent and run history stay on your device.",
+                    "Sequmio uses Accessibility to launch selected apps, detect active " +
+                        "windows and perform user-approved automated UI tests. While " +
+                        "a scenario runs, Sequmio can inspect visible UI text, view IDs, " +
+                        "and accessibility descriptions, and perform taps, swipes, Back " +
+                        "and predefined text input. It never auto-approves permission dialogs.",
                     color = SeqColors.Muted, fontSize = 14.sp
                 )
                 Text(
-                    "Sequmio does not read screen text, record taps or screenshots, " +
-                        "or send test data to the developer or third parties.",
+                    "UI content is inspected on this device during a test. Password " +
+                        "fields cannot be targeted by text entry. Sequmio does not " +
+                        "record raw touches, take screenshots or upload screen content. " +
+                        "Public scenarios are stored in Firebase; execution reports " +
+                        "remain local unless you explicitly share them.",
                     color = SeqColors.Muted, fontSize = 14.sp
                 )
                 Row(

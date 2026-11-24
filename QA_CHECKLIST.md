@@ -123,3 +123,21 @@ New color tokens: content #F4F6FC; muted #ADBAD0; text links #B99AFF; filled but
 | CAT-10 | Android 11,14,16 | All external intents open safely; app list refreshing on return |
 | CAT-11 | Account switches user | Cloud membership scoped by authenticated UID |
 | CAT-12 | Without scenario | Publish disabled (no WAIT-only scripts) |
+
+## V0.7 scenario execution (device tests pending)
+
+| ID | Scenario | Expected |
+|---|---|---|
+| E2E-01 | WAIT + ASSERT_EXISTS visible selector | PASS recorded after entire scenario pass |
+| E2E-02 | CLICK via view ID | Only selected app targeted; click dispatched |
+| E2E-03 | CLICK with fallback x/y | Normalized tap within device display |
+| E2E-04 | SWIPE relative coords | Android gesture completes before next action |
+| E2E-05 | INPUT_TEXT editable text field | Predefined text entered; value not logged |
+| E2E-06 | INPUT_TEXT password field | Step fails, input not injected |
+| E2E-07 | ASSERT_EXISTS missing required element | FAIL; next app runs with failure flag |
+| E2E-08 | Optional missing selector | Log skip and continue |
+| E2E-09 | loop_steps true | Repeats until per-app timer expires |
+| E2E-10 | App changes foreground mid scenario | No action injected into wrong package; recovery invoked |
+| E2E-11 | Pause/resume during scenario | In-flight actions stop; replay restarts safely on resume |
+| E2E-12 | Existing consent from v0.6 | V2 disclosure required before starting |
+| E2E-13 | Play Accessibility declaration video | Shows consent, UI content access, taps and test execution |

@@ -13,3 +13,5 @@
 **Third-party links.** Google Groups, Play opt-in and Play Store links, when available in future versions, are controlled by their owners and subject to their respective terms.
 
 **Support.** Contact the developer through https://github.com/GIVLSE/AppCycleTester/issues.
+
+**Automated E2E playback.** Developers must publish only deterministic, authorized test scenarios. Do not include account passwords, payment steps, personal information or instructions to consent to system permissions without human action. Other testers initiate test execution themselves and may stop it.

@@ -70,7 +70,7 @@ Show a video of the user starting a test, the notification and Stop action, and 
 
 V1 is **not** a disability-support accessibility tool; the project's `isAccessibilityTool=false` flag is intentional.
 
-The Play reviewer must see the prominent disclosure/consent dialog before any use of Accessibility. The service observes foreground window package IDs and time; run history and the plan are kept on-device. There is no screen-text collection, screenshots, tap recording, analytics, advertising or server upload in V1. The consent screen must be updated when V2 functionality adds more capabilities.
+The Play reviewer must see the prominent disclosure/consent dialog before any use of Accessibility. The service observes foreground window package IDs and time; run history and the plan are kept on-device. In V0.7 the service can inspect visible UI node text/IDs during an active scenario and inject deterministic test actions (taps, swipes, text entry). It does not record screen content or raw taps, take screenshots, or upload UI content. The existing V1 disclosure video and Play declaration must be updated to demonstrate these new capabilities. The consent screen must be updated when V2 functionality adds more capabilities.
 
 Provide an in-console Accessibility declaration and video. The service performs deterministic, user-configured app switching (not autonomous decisions).
 

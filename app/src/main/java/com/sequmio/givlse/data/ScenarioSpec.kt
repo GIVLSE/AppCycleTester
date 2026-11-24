@@ -52,8 +52,11 @@ object ScenarioCodec {
                 "WAIT" -> require(params.optLong("duration_ms", 0) in 100..30_000) {
                     "WAIT duration must be 100–30,000 ms"
                 }
-                "CLICK", "ASSERT_EXISTS" -> require(validSelector(selector) || validCoordinates(fallback)) {
-                    "$action requires selector or normalized coordinates"
+                "CLICK" -> require(validSelector(selector) || validCoordinates(fallback)) {
+                    "CLICK requires selector or normalized coordinates"
+                }
+                "ASSERT_EXISTS" -> require(validSelector(selector)) {
+                    "ASSERT_EXISTS requires a UI selector"
                 }
                 "INPUT_TEXT" -> {
                     require(validSelector(selector)) { "Text input needs a selector" }

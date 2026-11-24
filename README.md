@@ -19,7 +19,7 @@ Repository: https://github.com/GIVLSE/AppCycleTester
 - Timeout if an app's window is not confirmed within 8 seconds; retry a lost window up to twice. Other-app windows trigger recovery after 5 seconds; permissioncontroller dialogs receive up to 45 seconds for manual user action, never silent approval.
 - Kotlin + Jetpack Compose, minSdk 26, targetSdk 36.
 
-**Application ID:** `com.sequmio.givlse` · **Version:** `0.6.0` (`versionCode` 11).
+**Application ID:** `com.sequmio.givlse` · **Version:** `0.7.0` (`versionCode` 12).
 
 **Important:** This is a new Android package compared to the prototype `io.github.givlse.appcycletester`; installing Sequmio will not update the previous package in place.
 
@@ -59,7 +59,7 @@ There is no gradle-wrapper.jar in this initial repository: Android Studio must u
 - On Android 13+ sideloaded builds may need an additional manual **Allow restricted settings** confirmation in Settings → App info. Some ROMs hide/relocate this action; the app cannot force it.
 - Android 11–16 behavior varies by OEM; UI guidance cannot guarantee access is granted.
 - Android FLAG_KEEP_SCREEN_ON only applies to Sequmio's own Activity; it cannot keep OTHER apps on-screen. The runner stops with FAIL if screen-off is observed. Configure timeout/Stay awake while charging for reliable long tests.
-- Accessibility is used to detect window changes only. This version does not capture UI content or gestures.
+- With V0.7 consent, Accessibility can inspect visible UI node text/IDs and perform deterministic actions in the selected foreground package. No screen recording, raw touch collection or automatic system permission grants.
 - The Android process or Accessibility service may be stopped by the OS, ending the run. A pending report is marked INTERRUPTED on next launch; the app does not silently resume.
 - V1 is a prototype, not a validated commercial release; the debug APK requires CI verification and Android device testing.
 - A plan currently permits one entry per application package.
@@ -102,3 +102,9 @@ Follow `docs/FIREBASE_SETUP.md` to configure the project, OAuth SHA-1 fingerprin
 - Join shows Group → Become a Tester → Install. Membership in Google Group or Play testing cannot be externally verified by Sequmio; the user explicitly self-confirms the first two steps. Install is checked against launchable apps installed on device.
 - On Join, the selected app and its owner's scenario JSON are added to the local Runner plan. Executing UI actions from those JSON scenarios requires V0.7; current runner still performs timed foreground verification.
 - This feature is *not operational* without Firebase/OAuth settings plus deployed Firestore security rules. Never treat CI PASS as cloud integration proof.
+
+## V0.7: deterministic E2E scenario playback
+
+The V1 JSON schema supports `WAIT`, `CLICK`, `SWIPE`, `INPUT_TEXT`, `SYSTEM_BACK`, `ASSERT_EXISTS` and `optional` steps. The player uses Accessibility node selectors before normalized coordinates, runs only against the expected package, rejects password-field text input and requires the user to start the run. It fails a scenario on a missing required UI element. The original timed runner still works without scenarios.
+
+Because Android permission scope changed, explicit Accessibility consent was versioned to V2 and now explains UI text inspection and simulated gestures. Review the latest Play Console Accessibility declaration and record a new demo video before submitting. The on-device code has CI coverage only; device verification and OEM compatibility remain open. Recorder remains out of scope.
