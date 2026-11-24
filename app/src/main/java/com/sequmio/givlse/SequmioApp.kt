@@ -22,6 +22,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -58,6 +59,7 @@ private enum class Page { RUNNER, APP_LIST, MY_APP, HISTORY, PLAN, SETUP,
 @Composable
 internal fun SequmioApp(
     permissionRefreshToken: Int,
+    resultOpenVersion: Int,
     requestNotificationPermission: () -> Unit,
     openAccessibility: () -> Unit,
     openDisplaySettings: () -> Unit,
@@ -78,6 +80,14 @@ internal fun SequmioApp(
     var picker by remember { mutableStateOf(false) }
     var durationTarget by remember { mutableStateOf<TestTarget?>(null) }
     var message by remember { mutableStateOf("") }
+    LaunchedEffect(runner.phase, resultOpenVersion) {
+        if (runner.phase == RunPhase.FINISHED) {
+            page = Page.RUNNER
+            message = ""
+        } else if (resultOpenVersion > 0 && runner.phase == RunPhase.IDLE) {
+            page = Page.HISTORY
+        }
+    }
     var recorderNotice by remember { mutableStateOf("") }
     var selectedScenarioIndex by remember { mutableIntStateOf(0) }
     val recorder by RecorderRuntime.state.collectAsState()
@@ -445,6 +455,10 @@ private fun SequmioHome(
 ) {
     val active = runner.phase == RunPhase.RUNNING || runner.phase == RunPhase.PAUSED
     var appsCollapsed by rememberSaveable { mutableStateOf(false) }
+    val listState = rememberLazyListState()
+    LaunchedEffect(runner.phase) {
+        if (runner.phase == RunPhase.FINISHED) listState.scrollToItem(0)
+    }
     val cycleSeconds = plan.targets.sumOf { it.durationSeconds }.toLong()
     val planned = when (plan.repeatMode) {
         RepeatMode.ONCE -> cycleSeconds
@@ -455,10 +469,37 @@ private fun SequmioHome(
         planned?.coerceAtMost(plan.maxDurationMinutes * 60L) ?: plan.maxDurationMinutes * 60L
     } else planned
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 18.dp, end = 18.dp, bottom = 26.dp, top = 3.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        if (runner.phase == RunPhase.FINISHED) item {
+            val status = runner.terminalStatus ?: if (runner.success == true) "PASS" else "FAIL"
+            val tint = when (status) {
+                "PASS" -> SeqColors.Success
+                "STOPPED" -> SeqColors.Primary
+                else -> SeqColors.Error
+            }
+            SeqCard(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(if (status == "PASS") Icons.Outlined.CheckCircle
+                            else if (status == "STOPPED") Icons.Outlined.StopCircle
+                            else Icons.Outlined.ErrorOutline, null,
+                            tint = tint, modifier = Modifier.size(30.dp))
+                        Spacer(Modifier.width(10.dp))
+                        Text("Run finished", Modifier.weight(1f),
+                            fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                        SeqChip(status, tint)
+                    }
+                    Text(runner.message, color = SeqColors.Text, fontSize = 13.sp)
+                    Text("Elapsed " + duration(runner.elapsedSeconds) + "  •  " +
+                        runner.completedCycles + " completed cycles",
+                        color = SeqColors.Muted, fontSize = 12.sp)
+                }
+            }
+        }
         item {
             Column(
                 modifier = Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 2.dp),
@@ -625,10 +666,12 @@ private fun SequmioHome(
                         SeqTextButton(onClick = onSetup) { Text("Manage permissions") }
                     } else if (runner.phase == RunPhase.FINISHED) {
                         Text(
-                            if (runner.success == true) "Last run: PASS"
-                            else "Last run: FAIL / STOP",
-                            color = if (runner.success == true) SeqColors.Success
-                            else SeqColors.Error,
+                            "Last run: " + (runner.terminalStatus ?: if (runner.success == true) "PASS" else "FAIL"),
+                            color = when (runner.terminalStatus) {
+                                "STOPPED" -> SeqColors.Primary
+                                "PASS" -> SeqColors.Success
+                                else -> if (runner.success == true) SeqColors.Success else SeqColors.Error
+                            },
                             fontSize = 17.sp, fontWeight = FontWeight.SemiBold
                         )
                         Text(

@@ -27,6 +27,17 @@ import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 
 class MainActivity : ComponentActivity() {
+    companion object {
+        const val ACTION_SHOW_RUN_RESULT = "com.sequmio.givlse.SHOW_RUN_RESULT"
+    }
+
+    private val runResultOpenVersion = MutableStateFlow(0)
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.action == ACTION_SHOW_RUN_RESULT) runResultOpenVersion.value += 1
+    }
+
     private val settingsReturnVersion = MutableStateFlow(0)
     private val notificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) {
@@ -55,6 +66,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (intent?.action == ACTION_SHOW_RUN_RESULT) runResultOpenVersion.value += 1
         if (CycleAccessibilityService.instance == null) {
             RunReportStore(this).recoverInterrupted()
         }
@@ -64,6 +76,7 @@ class MainActivity : ComponentActivity() {
         window.decorView.systemUiVisibility = 0
         setContent {
             val permissionRefresh by settingsReturnVersion.collectAsState()
+            val resultOpenVersion by runResultOpenVersion.collectAsState()
             val run by RunnerRuntime.state.collectAsState()
             SideEffect {
                 if (run.phase == RunPhase.RUNNING || run.phase == RunPhase.PAUSED)
@@ -82,6 +95,7 @@ class MainActivity : ComponentActivity() {
                     Box(Modifier.fillMaxSize().background(SeqBackground)) {
                         SequmioApp(
                             permissionRefreshToken = permissionRefresh,
+                            resultOpenVersion = resultOpenVersion,
                             requestNotificationPermission = {
                                 if (Build.VERSION.SDK_INT >= 33)
                                     notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)

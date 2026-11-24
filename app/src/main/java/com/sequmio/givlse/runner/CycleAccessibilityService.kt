@@ -2,6 +2,10 @@ package com.sequmio.givlse.runner
 
 import android.accessibilityservice.AccessibilityService
 import android.app.KeyguardManager
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
@@ -53,6 +57,7 @@ class CycleAccessibilityService : AccessibilityService() {
     private var otherWindowPackage = ""
     private var hadFailure = false
     private var success: Boolean? = null
+    private var terminalStatus: String? = null
     private var events: List<RunEvent> = emptyList()
     private var lastMessage = ""
     private var receiverRegistered = false
@@ -191,6 +196,8 @@ class CycleAccessibilityService : AccessibilityService() {
         lastTickMs = SystemClock.elapsedRealtime()
         hadFailure = false
         success = null
+        terminalStatus = null
+        runCatching { getSystemService(NotificationManager::class.java).cancel(411) }
         events = emptyList()
         lastMessage = ""
         reports.begin(newPlan)
@@ -415,6 +422,7 @@ class CycleAccessibilityService : AccessibilityService() {
     }
 
     private fun finish(reason: String, passed: Boolean, manuallyStopped: Boolean = false) {
+        if (phase != RunPhase.RUNNING && phase != RunPhase.PAUSED) return
         handler.removeCallbacks(ticker)
         scenarioPlayer?.stop()
         scenarioPlayer = null
@@ -422,15 +430,51 @@ class CycleAccessibilityService : AccessibilityService() {
         checkpoint()
         phase = RunPhase.FINISHED
         success = passed
+        terminalStatus = if (manuallyStopped) "STOPPED" else if (passed) "PASS" else "FAIL"
         lastMessage = reason
         addEvent(reason)
         reports.finish(
-            if (manuallyStopped) "STOPPED" else if (passed) "PASS" else "FAIL",
+            requireNotNull(terminalStatus),
             reason, elapsedMs / 1000L, completedCycles
         )
         unregisterScreenReceiver()
         RunnerForegroundService.stop(this)
         publish()
+        presentRunResult(reason, requireNotNull(terminalStatus))
+    }
+
+    /** Return only after the terminal report is committed. Never unlock or wake the device. */
+    private fun presentRunResult(reason: String, status: String) {
+        val intent = Intent(this, MainActivity::class.java)
+            .setAction(MainActivity.ACTION_SHOW_RUN_RESULT)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        // Notification is also a fallback when Android/OEM background launch is restricted.
+        runCatching {
+            val manager = getSystemService(NotificationManager::class.java)
+            if (manager.areNotificationsEnabled()) {
+                val channel = "sequmio_run_results"
+                manager.createNotificationChannel(NotificationChannel(
+                    channel, "Sequmio test results", NotificationManager.IMPORTANCE_DEFAULT
+                ))
+                val open = PendingIntent.getActivity(this, 411, intent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+                manager.notify(411, Notification.Builder(this, channel)
+                    .setSmallIcon(android.R.drawable.ic_menu_info_details)
+                    .setContentTitle("Run finished · " + status)
+                    .setContentText(reason)
+                    .setStyle(Notification.BigTextStyle().bigText(reason))
+                    .setVisibility(Notification.VISIBILITY_PRIVATE)
+                    .setContentIntent(open)
+                    .setAutoCancel(true)
+                    .build())
+            }
+        }
+        val power = getSystemService(POWER_SERVICE) as PowerManager
+        val keyguard = getSystemService(KEYGUARD_SERVICE) as KeyguardManager
+        if (power.isInteractive && !keyguard.isKeyguardLocked) {
+            runCatching { startActivity(intent) }
+        }
     }
 
     private fun registerScreenReceiver() {
@@ -539,7 +583,8 @@ class CycleAccessibilityService : AccessibilityService() {
                 else 0L,
             message = lastMessage,
             success = success,
-            events = events
+            events = events,
+            terminalStatus = terminalStatus
         ))
     }
 }

@@ -34,5 +34,6 @@ data class RunSnapshot(
     val remainingSeconds: Long = 0,
     val message: String = "",
     val success: Boolean? = null,
-    val events: List<RunEvent> = emptyList()
+    val events: List<RunEvent> = emptyList(),
+    val terminalStatus: String? = null
 )
