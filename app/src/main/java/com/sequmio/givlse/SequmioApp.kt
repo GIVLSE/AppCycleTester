@@ -330,7 +330,9 @@ internal fun SequmioApp(
                         }
                     },
                     onRemove = { pkg ->
-                        if (publishedOwned.any { it.packageName == pkg }) setOwnedExcluded(pkg, true)
+                        if (publishedOwned.any { it.packageName == pkg } ||
+                            plan.targets.any { it.packageName == pkg && it.origin == "owner" })
+                            setOwnedExcluded(pkg, true)
                         setPlan(plan.copy(targets = plan.targets.filterNot { it.packageName == pkg }))
                     },
                     onRepeat = { setPlan(plan.copy(repeatMode = it)) },
@@ -349,8 +351,10 @@ internal fun SequmioApp(
                     onSync = { list -> mergeCommunity(list, false) },
                     onOwnedTest = { published, installed ->
                         if (!active && ownerUid != null && published.ownerUid == ownerUid) {
+                            val draft = published.toDraft()
+                            publishedOwned = publishedOwned.filterNot { it.packageName == draft.packageName } + draft
                             setOwnedExcluded(installed.packageName, false)
-                            setPlan(OwnerPlanSync.addExplicit(plan, ownerUid, published.toDraft(), installed))
+                            setPlan(OwnerPlanSync.addExplicit(plan, ownerUid, draft, installed))
                             page = Page.RUNNER
                         }
                     },
