@@ -1,179 +1,95 @@
 package com.sequmio.givlse
 
-import android.content.Intent
+import android.app.Activity
 import android.content.ComponentName
-import android.widget.Toast
-import android.content.ActivityNotFoundException
-import com.sequmio.givlse.runner.CycleAccessibilityService
-import kotlinx.coroutines.flow.MutableStateFlow
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
+import android.content.Intent
+import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
-import android.os.Build
-import android.Manifest
-import android.view.WindowManager
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.runtime.SideEffect
-import com.sequmio.givlse.runner.RunnerRuntime
-import com.sequmio.givlse.model.RunPhase
-import com.sequmio.givlse.data.RunReportStore
+import android.os.Process
 import android.provider.Settings
-import android.database.ContentObserver
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.Surface
-import androidx.compose.ui.Modifier
+import android.view.ViewGroup
+import android.widget.Button
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.TextView
+import com.sequmio.givlse.runner.CycleAccessibilityService
 
-class MainActivity : ComponentActivity() {
+/** Diagnostic-only launcher. No test execution, cloud requests, or permanent IPC binding. */
+class MainActivity : Activity() {
     companion object {
         const val ACTION_SHOW_RUN_RESULT = "com.sequmio.givlse.SHOW_RUN_RESULT"
     }
-
-    private val runResultOpenVersion = MutableStateFlow(0)
-    override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent)
-        setIntent(intent)
-        if (intent.action == ACTION_SHOW_RUN_RESULT) {
-            runResultOpenVersion.value += 1
-            Log.i("SequmioRunner", "Result intent received; windowFocus=" + hasWindowFocus())
-            if (hasWindowFocus()) CycleAccessibilityService.instance?.acknowledgeResultVisible()
-        }
-    }
-
-    private val settingsReturnVersion = MutableStateFlow(0)
-    private val accessibilityEnabled = MutableStateFlow(false)
-    private val permissionObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
-        override fun onChange(selfChange: Boolean) { refreshAccessibility() }
-    }
-    private fun refreshAccessibility() {
-        accessibilityEnabled.value = isSequmioAccessibilityEnabled(this)
-        if (accessibilityEnabled.value) CycleAccessibilityService.refreshConnection()
-        Log.d("SequmioRunner", "Activity permission=" + accessibilityEnabled.value +
-            " connection=" + (CycleAccessibilityService.instance != null) +
-            " pid=" + android.os.Process.myPid())
-    }
-    override fun onStart() {
-        super.onStart()
-        contentResolver.registerContentObserver(
-            Settings.Secure.getUriFor(Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES),
-            false, permissionObserver)
-        refreshAccessibility()
-    }
-    override fun onStop() {
-        contentResolver.unregisterContentObserver(permissionObserver)
-        super.onStop()
-    }
-    private val notificationPermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) {
-            settingsReturnVersion.value += 1
-        }
-
-    override fun onResume() {
-        super.onResume()
-        refreshAccessibility()
-        settingsReturnVersion.value += 1
-        if (hasWindowFocus()) CycleAccessibilityService.instance?.acknowledgeResultVisible()
-    }
-
-    override fun onWindowFocusChanged(hasFocus: Boolean) {
-        super.onWindowFocusChanged(hasFocus)
-        if (hasFocus) {
-            refreshAccessibility()
-            if (RunnerRuntime.state.value.phase == RunPhase.FINISHED)
-                CycleAccessibilityService.instance?.acknowledgeResultVisible()
-        }
-    }
-
-    private fun tryOpenSettings(intent: Intent): Boolean {
-        return try {
-            startActivity(intent)
-            true
-        } catch (_: ActivityNotFoundException) {
-            false
-        } catch (_: SecurityException) {
-            false
-        }
-    }
-
-    private fun showAccessibilitySettings() {
-        if (!tryOpenSettings(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) &&
-            !tryOpenSettings(Intent(Settings.ACTION_SETTINGS))) {
-            Toast.makeText(this, "Open Android Settings > Accessibility manually.",
-                Toast.LENGTH_LONG).show()
-        }
-    }
-
-    private fun showAccessibilityServiceSettings() {
-        // AOSP has a service-specific system action, but it is not a public SDK
-        // contract and vendors may not expose it. The ordinary settings route
-        // remains independently available, even if a vendor opens the wrong screen.
-        val service = ComponentName(this, CycleAccessibilityService::class.java)
-        val details = Intent("android.settings.ACCESSIBILITY_DETAILS_SETTINGS")
-            .putExtra(Intent.EXTRA_COMPONENT_NAME, service.flattenToString())
-        if (!tryOpenSettings(details)) showAccessibilitySettings()
-    }
+    private lateinit var status: TextView
+    private var generation = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (intent?.action == ACTION_SHOW_RUN_RESULT) runResultOpenVersion.value += 1
-        if (CycleAccessibilityService.instance == null) {
-            RunReportStore(this).recoverInterrupted()
+        val column = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(24, 48, 24, 32)
+            setBackgroundColor(Color.rgb(13,20,36))
         }
-        window.statusBarColor = android.graphics.Color.rgb(13, 20, 36)
-        window.navigationBarColor = android.graphics.Color.rgb(13, 20, 36)
-        @Suppress("DEPRECATION")
-        window.decorView.systemUiVisibility = 0
-        setContent {
-            val permissionRefresh by settingsReturnVersion.collectAsState()
-            val systemEnabled by accessibilityEnabled.collectAsState()
-            val resultOpenVersion by runResultOpenVersion.collectAsState()
-            val run by RunnerRuntime.state.collectAsState()
-            SideEffect {
-                if (run.phase == RunPhase.RUNNING || run.phase == RunPhase.PAUSED)
-                    window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-                else
-                    window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            }
-            SequmioTheme {
-                // Unlike Box.background(), Surface propagates the foreground text color
-                // to every Compose Text, including content outside custom cards.
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = SeqColors.Background,
-                    contentColor = SeqColors.Text
-                ) {
-                    Box(Modifier.fillMaxSize().background(SeqBackground)) {
-                        SequmioApp(
-                            permissionRefreshToken = permissionRefresh,
-                            systemAccessibilityEnabled = systemEnabled,
-                            resultOpenVersion = resultOpenVersion,
-                            requestNotificationPermission = {
-                                if (Build.VERSION.SDK_INT >= 33)
-                                    notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                            },
-                            refreshRunnerConnection = { refreshAccessibility() },
-                            openAccessibility = { showAccessibilityServiceSettings() },
-                            openAccessibilityList = { showAccessibilitySettings() },
-                            openDisplaySettings = {
-                                startActivity(Intent(Settings.ACTION_DISPLAY_SETTINGS))
-                            },
-                            openAppDetails = {
-                                startActivity(Intent(
-                                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                                    Uri.parse("package:$packageName")
-                                ))
-                            }
-                        )
-                    }
-                }
+        fun label(value: String, size: Float): TextView = TextView(this).apply {
+            text = value
+            textSize = size
+            setTextColor(Color.rgb(230,237,255))
+            setPadding(0,12,0,12)
+            column.addView(this, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        }
+        fun button(value: String, action: () -> Unit) {
+            column.addView(Button(this).apply { text = value; setOnClickListener { action() } })
+        }
+        label("Sequmio 1.2.9", 26f)
+        label("Process Isolation Debug", 20f)
+        label("Diagnostic only. No test runs or cloud access. Enable Sequmio Runner manually. Close this app by swiping it out of Recents, then reopen and compare the PIDs.", 16f)
+        status = label("Checking…", 18f)
+        button("Open Accessibility settings") {
+            val component = ComponentName(this, CycleAccessibilityService::class.java)
+            val intent = Intent("android.settings.ACCESSIBILITY_DETAILS_SETTINGS")
+                .putExtra(Intent.EXTRA_COMPONENT_NAME, component.flattenToString())
+            try { startActivity(intent) } catch (_: Exception) {
+                startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
             }
         }
+        button("Open Accessibility menu") {
+            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+        }
+        button("Refresh connection / PIDs") { refresh() }
+        label("The probe can start an empty :runner process if Android killed it. CONNECTED means a real framework-bound AccessibilityService, not just a running process. A changed PID means the original process did not survive.", 14f)
+        setContentView(ScrollView(this).apply { addView(column) })
+        Log.i("SequmioIsolation", "UI created pid=" + Process.myPid())
+    }
+
+    override fun onResume() { super.onResume(); refresh() }
+    override fun onDestroy() { generation++; super.onDestroy() }
+
+    private fun refresh() {
+        val token = ++generation
+        val permission = isSequmioAccessibilityEnabled(this)
+        status.text = "Accessibility: " + (if (permission) "ENABLED" else "DISABLED") +
+            "\nService connection: CHECKING\nUI PID: " + Process.myPid()
+        val ctx = applicationContext
+        Thread {
+            val result = runCatching {
+                ctx.contentResolver.call(Uri.parse("content://" + ctx.packageName +
+                    ".isolation-probe"), "status", null, null)
+            }
+            runOnUiThread {
+                if (isDestroyed || token != generation) return@runOnUiThread
+                val data = result.getOrNull()
+                val error = data?.getString("error") ?: result.exceptionOrNull()?.javaClass?.simpleName
+                val ready = data?.getBoolean("connected") == true
+                val enabled = isSequmioAccessibilityEnabled(this)
+                status.text = "Accessibility: " + (if (enabled) "ENABLED" else "DISABLED") +
+                    "\nService connection: " + (if (error != null || data == null) "UNKNOWN" else if (ready && enabled) "CONNECTED" else "DISCONNECTED") +
+                    "\nUI PID: " + Process.myPid() +
+                    "\nRunner PID: " + (data?.getInt("runnerPid")?.takeIf { it > 0 }?.toString() ?: "unknown") +
+                    (error?.let { "\nProbe error: " + it } ?: "")
+                Log.i("SequmioIsolation", status.text.toString().replace('\n', ' '))
+            }
+        }.start()
     }
 }

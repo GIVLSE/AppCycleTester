@@ -15,7 +15,7 @@
     <application
         android:allowBackup="false"
         android:icon="@drawable/ic_launcher"
-        android:label="@string/app_name"
+        android:label="Sequmio Isolation Debug"
         android:supportsRtl="true"
         android:theme="@style/Theme.Sequmio">
         <activity android:name=".MainActivity" android:exported="true">
@@ -31,7 +31,12 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="User-initiated local app QA test cycles; visible notification with stop action"/>
         </service>
+        <provider android:name=".runner.IsolationProbeProvider"
+            android:authorities="${applicationId}.isolation-probe"
+            android:exported="false"
+            android:process=":runner" />
         <service android:name=".runner.CycleAccessibilityService"
+            android:process=":runner"
             android:exported="true"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
             android:label="@string/accessibility_service_name"
