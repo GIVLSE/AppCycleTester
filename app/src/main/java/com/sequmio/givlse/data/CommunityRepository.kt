@@ -19,6 +19,12 @@ data class PublishedApp(
     val iconPng: String = ""
 )
 
+internal fun PublishedApp.toDraft() = MyAppDraft(
+    appName = name, packageName = packageName, description = description,
+    googleGroupUrl = googleGroupUrl, optInUrl = optInUrl,
+    playStoreUrl = playStoreUrl, scenarioJson = scenarioJson
+)
+
 data class JoinedTest(
     val packageName: String,
     val joinedAt: Long,
@@ -52,6 +58,17 @@ class CommunityRepository(private val account: SequmioAccount) {
         val doc = db().collection("apps").document(packageName).get().await()
         val result = fromDocument(doc.data.orEmpty())
         return result?.takeIf { it.status == "published" }
+    }
+
+    /** Include unpublished listings; server query must be scoped to the signed-in owner. */
+    suspend fun myApps(uid: String): List<PublishedApp> {
+        require(uid == requiredUid()) { "Account changed" }
+        val snapshot = db().collection("apps").whereEqualTo("ownerUid", uid)
+            .get(com.google.firebase.firestore.Source.SERVER).await()
+        require(uid == requiredUid()) { "Account changed" }
+        return snapshot.documents.mapNotNull { fromDocument(it.data.orEmpty()) }
+            .filter { it.ownerUid == uid }
+            .sortedWith(compareBy<PublishedApp> { it.name.lowercase() }.thenBy { it.packageName })
     }
 
     suspend fun myPublishedApp(packageName: String): PublishedApp? {

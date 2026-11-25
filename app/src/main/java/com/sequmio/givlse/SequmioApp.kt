@@ -90,8 +90,46 @@ internal fun SequmioApp(
     var settingsReturnPage by remember { mutableStateOf(Page.RUNNER) }
     var setupReturnPage by remember { mutableStateOf(Page.RUNNER) }
     val account = remember { SequmioAccount(context) }
-    val draftStore = remember { MyAppDraftStore(context) }
-    var ownAppDraft by remember { mutableStateOf(draftStore.load()) }
+    val ownerUid = account.profile?.uid
+    val draftStore = remember(ownerUid) { MyAppDraftStore(context, ownerUid) }
+    var ownAppDraft by remember(ownerUid) { mutableStateOf(draftStore.load()) }
+    var ownedChoices by remember(ownerUid) { mutableStateOf(draftStore.choices()) }
+    var draftRevision by remember(ownerUid) { mutableIntStateOf(0) }
+    var restoreRevision by remember(ownerUid) { mutableIntStateOf(0) }
+    val onMyApp = page == Page.MY_APP
+    var restoring by remember(ownerUid, onMyApp, restoreRevision) {
+        mutableStateOf(ownerUid != null && onMyApp)
+    }
+    var restoreError by remember(ownerUid, onMyApp, restoreRevision) { mutableStateOf(false) }
+    fun reloadDraft() {
+        ownAppDraft = draftStore.load()
+        ownedChoices = draftStore.choices()
+        draftRevision++
+    }
+    fun saveDraft(updated: com.sequmio.givlse.data.MyAppDraft) {
+        draftStore.save(updated)
+        ownAppDraft = updated
+        ownedChoices = draftStore.choices()
+    }
+    LaunchedEffect(ownerUid, onMyApp, restoreRevision) {
+        if (ownerUid != null && onMyApp) {
+            try {
+                val owned = com.sequmio.givlse.data.CommunityRepository(account).myApps(ownerUid)
+                if (account.profile?.uid == ownerUid) {
+                    draftStore.restoreOwned(owned)
+                    reloadDraft()
+                }
+            } catch (cancel: kotlinx.coroutines.CancellationException) {
+                throw cancel
+            } catch (_: Exception) {
+                restoreError = true
+            } finally { restoring = false }
+        }
+    }
+    LaunchedEffect(ownerUid) {
+        if (page in listOf(Page.SCENARIO_EDITOR, Page.SUITE_MANAGER, Page.QA_DASHBOARD))
+            page = Page.MY_APP
+    }
     var picker by remember { mutableStateOf(false) }
     var durationTarget by remember { mutableStateOf<TestTarget?>(null) }
     var message by remember { mutableStateOf("") }
@@ -106,12 +144,12 @@ internal fun SequmioApp(
     LaunchedEffect(resultOpenVersion) {
         if (resultOpenVersion > 0) page = Page.RUNNER
     }
-    var recorderNotice by remember { mutableStateOf("") }
-    var selectedScenarioIndex by remember { mutableIntStateOf(0) }
+    var recorderNotice by remember(ownerUid) { mutableStateOf("") }
+    var selectedScenarioIndex by remember(ownerUid) { mutableIntStateOf(0) }
     val recorder by RecorderRuntime.state.collectAsState()
     LaunchedEffect(recorder) {
         if (!recorder.recording && recorder.message.isNotBlank()) {
-            if (recorder.message.startsWith("Test case created")) ownAppDraft = draftStore.load()
+            if (recorder.message.startsWith("Test case created")) reloadDraft()
             recorderNotice = recorder.message
             RecorderRuntime.set(com.sequmio.givlse.runner.RecorderState())
         }
@@ -279,23 +317,39 @@ internal fun SequmioApp(
                         page = Page.RUNNER
                     }
                 )
-                Page.MY_APP -> SequmioDeveloperApp(
+                Page.MY_APP -> if (restoring) {
+                    Column(Modifier.fillMaxSize().padding(18.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        SeqNeonHeader(SeqHeroKind.DEVELOPER, "My App", "Developer listing")
+                        LinearProgressIndicator(Modifier.fillMaxWidth())
+                        Text("Restoring your apps from your Google account…", color = SeqColors.Muted)
+                    }
+                } else key(ownerUid, ownAppDraft.packageName, draftRevision) {
+                    SequmioDeveloperApp(
                     initial = ownAppDraft,
                     account = account,
-                    onSave = { updated ->
-                        draftStore.save(updated)
-                        ownAppDraft = updated
+                    ownedChoices = ownedChoices,
+                    publicationStatus = draftStore.publicationStatus(ownAppDraft.packageName),
+                    restoreError = restoreError,
+                    onRetryRestore = { restoreRevision++ },
+                    onSelectApp = { pkg -> draftStore.select(pkg); reloadDraft() },
+                    hasDeviceDraft = draftStore.hasDeviceDraft(),
+                    onImportDeviceDraft = {
+                        val imported = draftStore.importDeviceDraft()
+                        if (imported != null) reloadDraft()
+                        imported != null
                     },
+                    onPublished = { draft -> draftStore.markPublished(draft) },
+                    onUnpublished = { pkg -> draftStore.markUnpublished(pkg) },
+                    onSave = { updated -> saveDraft(updated) },
                     onOpenSettings = { openSettings() },
                     onEditCase = { draft, index ->
-                        draftStore.save(draft)
-                        ownAppDraft = draft
+                        saveDraft(draft)
                         selectedScenarioIndex = index
                         page = Page.SCENARIO_EDITOR
                     },
                     onDashboard = { draft ->
-                        draftStore.save(draft)
-                        ownAppDraft = draft
+                        saveDraft(draft)
                         page = Page.QA_DASHBOARD
                     },
                     recorderState = recorder,
@@ -333,8 +387,7 @@ internal fun SequmioApp(
                     },
                     onRecord = { draft ->
                         recorderNotice = ""
-                        draftStore.save(draft)
-                        ownAppDraft = draft
+                        saveDraft(draft)
                         val selected = apps.firstOrNull { it.packageName == draft.packageName }
                         when {
                             !consent -> {
@@ -352,18 +405,18 @@ internal fun SequmioApp(
                                 "Install your app on this device before recording."
                             else -> {
                                 recorderNotice = CycleAccessibilityService.instance
-                                    ?.startRecording(selected).orEmpty()
+                                    ?.startRecording(selected, ownerUid).orEmpty()
                                 if (CycleAccessibilityService.instance == null)
                                     recorderNotice = "Enable Sequmio Accessibility first."
                             }
                         }
                     }
                 )
+                }
                 Page.SUITE_MANAGER -> SequmioSuiteManager(
                     initial = ownAppDraft,
                     onSave = { updated ->
-                        draftStore.save(updated)
-                        ownAppDraft = updated
+                        saveDraft(updated)
                     },
                     onEdit = { chosen ->
                         selectedScenarioIndex = chosen
@@ -390,8 +443,7 @@ internal fun SequmioApp(
                         val next = ownAppDraft.copy(
                             scenarioJson = ScenarioCodec.compose(cases)
                         )
-                        draftStore.save(next)
-                        ownAppDraft = next
+                        saveDraft(next)
                         page = Page.MY_APP
                     },
                     onBack = { page = Page.MY_APP }

@@ -500,6 +500,15 @@ private fun CatalogTextField(
 internal fun SequmioDeveloperApp(
     initial: MyAppDraft,
     account: SequmioAccount,
+    ownedChoices: List<MyAppDraft>,
+    publicationStatus: String?,
+    restoreError: Boolean,
+    onRetryRestore: () -> Unit,
+    onSelectApp: (String) -> Unit,
+    hasDeviceDraft: Boolean,
+    onImportDeviceDraft: () -> Boolean,
+    onPublished: (MyAppDraft) -> Unit,
+    onUnpublished: (String) -> Unit,
     onSave: (MyAppDraft) -> Unit,
     onOpenSettings: () -> Unit,
     onEditCase: (MyAppDraft, Int) -> Unit,
@@ -516,7 +525,9 @@ internal fun SequmioDeveloperApp(
     var form by remember(initial) { mutableStateOf(initial) }
     var busy by remember { mutableStateOf(false) }
     var notice by remember { mutableStateOf("") }
-    var published by remember(account.profile?.uid, form.packageName) { mutableStateOf(false) }
+    var published by remember(account.profile?.uid, form.packageName, publicationStatus) {
+        mutableStateOf(publicationStatus == "published")
+    }
     var editDetails by remember(initial) { mutableStateOf(initial.validateDetails().isNotEmpty()) }
     var edited by remember(initial) { mutableStateOf(initial) }
     var requirementsOpen by remember { mutableStateOf(false) }
@@ -525,16 +536,8 @@ internal fun SequmioDeveloperApp(
     var previewRefresh by remember { mutableIntStateOf(0) }
     var deleteCase by remember { mutableIntStateOf(-1) }
     val profile = account.profile
-    LaunchedEffect(profile?.uid, form.packageName) {
-        published = false
-        if (profile != null && form.packageName.isNotBlank()) {
-            try {
-                val listing = repo.myPublishedApp(form.packageName)
-                published = listing?.status == "published"
-            } catch (cancel: CancellationException) { throw cancel }
-            catch (_: Exception) { notice = "Could not load publication status." }
-        }
-    }
+    var appPicker by remember { mutableStateOf(false) }
+    var importConfirm by remember { mutableStateOf(false) }
     val dashboardRepo = remember(account) { QaDashboardRepository(account) }
     var preview by remember(profile?.uid, form.packageName) { mutableStateOf<QaTodaySummary?>(null) }
     var joinedCount by remember(profile?.uid, form.packageName) { mutableStateOf<Long?>(null) }
@@ -572,6 +575,46 @@ internal fun SequmioDeveloperApp(
         verticalArrangement = Arrangement.spacedBy(13.dp)
     ) {
         SeqNeonHeader(SeqHeroKind.DEVELOPER, "My App", "Developer listing")
+        val canSwitch = editable && (!editDetails || edited == form)
+        if (restoreError) {
+            Text("Could not sync your apps. Showing saved data for this account.",
+                color = SeqColors.Muted, fontSize = 12.sp)
+            SeqGlassButton("Retry sync", SeqColors.Sky, onClick = onRetryRestore,
+                enabled = canSwitch, modifier = Modifier.fillMaxWidth())
+        }
+        if (profile != null && ownedChoices.isNotEmpty()) {
+            SeqGlassButton("Select app · " + form.appName.ifBlank { "New app" },
+                SeqColors.Teal, onClick = { appPicker = true },
+                enabled = canSwitch, modifier = Modifier.fillMaxWidth())
+            if (appPicker) AlertDialog(onDismissRequest = { appPicker = false },
+                title = { Text("Your apps") },
+                text = {
+                    Column(Modifier.verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        ownedChoices.forEach { app ->
+                            TextButton(onClick = { appPicker = false; onSelectApp(app.packageName) }) {
+                                Text(app.appName + "\n" + app.packageName)
+                            }
+                        }
+                        TextButton(onClick = { appPicker = false; onSelectApp("") }) {
+                            Text("New app")
+                        }
+                    }
+                }, confirmButton = { TextButton(onClick = { appPicker = false }) { Text("Close") } })
+        }
+        if (profile != null && hasDeviceDraft) {
+            SeqGlassButton("Import previous device draft", SeqColors.Sky,
+                onClick = { importConfirm = true }, enabled = canSwitch,
+                modifier = Modifier.fillMaxWidth())
+        }
+        if (importConfirm) AlertDialog(onDismissRequest = { importConfirm = false },
+            title = { Text("Import local draft?") },
+            text = { Text("This device contains an older draft without a linked account. Import it into your current account only if it belongs to you. Existing drafts will not be replaced.") },
+            confirmButton = { TextButton(onClick = {
+                importConfirm = false
+                if (!onImportDeviceDraft()) notice = "Import failed: an account draft already exists or no device draft is available."
+            }) { Text("Import") } },
+            dismissButton = { TextButton(onClick = { importConfirm = false }) { Text("Cancel") } })
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(if (readyToPublish) "Ready to publish" else "Not ready to publish",
@@ -596,10 +639,12 @@ internal fun SequmioDeveloperApp(
                             onSave(form)
                             repo.savePublished(form, form.scenarioJson,
                                 AppIconCodec.capture(context, form.packageName))
+                            onPublished(form)
                             published = true
                             previewRefresh++
                             notice = "Published successfully. Your app is now in App List."
-                        } catch (error: Exception) {
+                        } catch (cancel: CancellationException) { throw cancel }
+                        catch (error: Exception) {
                             notice = "Publish failed: " + (error.message ?: error.javaClass.simpleName)
                         } finally { busy = false }
                     }
@@ -808,6 +853,7 @@ internal fun SequmioDeveloperApp(
                     busy = true
                     try {
                         repo.unpublish(form.packageName)
+                        onUnpublished(form.packageName)
                         published = false
                         notice = "Listing unpublished."
                     } catch (cancel: CancellationException) { throw cancel }

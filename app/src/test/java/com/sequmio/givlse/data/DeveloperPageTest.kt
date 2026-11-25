@@ -23,6 +23,28 @@ class DeveloperPageTest {
     @Test fun wrongLinkTypeIsRejected() {
         assertTrue(valid.copy(optInUrl = valid.playStoreUrl).validateDetails().isNotEmpty())
     }
+    @Test fun cloudRestoreUsesRemoteWhenNoLocalDraft() {
+        assertEquals(valid, reconcileOwnedDraft(null, null, valid))
+    }
+    @Test fun cloudRestoreRefreshesCleanCopy() {
+        val remote = valid.copy(description = "Updated on another device")
+        assertEquals(remote, reconcileOwnedDraft(valid, valid, remote))
+    }
+    @Test fun cloudRestorePreservesLocalEdits() {
+        val local = valid.copy(description = "Unpublished local changes")
+        val remote = valid.copy(description = "Cloud changes")
+        assertEquals(local, reconcileOwnedDraft(local, valid, remote))
+        assertEquals(local, reconcileOwnedDraft(local, null, remote))
+    }
+    @Test fun cloudRestorePreservesRecordedCases() {
+        val local = valid.copy(scenarioJson = "local case")
+        assertEquals(local, reconcileOwnedDraft(local, valid, valid))
+    }
+    @Test fun publishedAppRestoresAllEditableFields() {
+        val app = PublishedApp(valid.packageName, valid.appName, valid.description, "uid", "Owner",
+            valid.googleGroupUrl, valid.optInUrl, valid.playStoreUrl, "case json", "draft")
+        assertEquals(valid.copy(scenarioJson = "case json"), app.toDraft())
+    }
     @Test fun sharedCaseRowsAreGroupedIntoTesterRuns() {
         val summary = QaTodaySummary.fromCases(listOf(
             QaPreviewCase("a","1","PASS"), QaPreviewCase("a","1","FAIL"),

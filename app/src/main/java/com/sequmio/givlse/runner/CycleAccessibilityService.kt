@@ -242,15 +242,15 @@ class CycleAccessibilityService : AccessibilityService() {
      * A local recorder starts only on explicit user request from My App.
      * It cannot run concurrently with the timed runner or target other packages.
      */
-    fun startRecording(target: InstalledApp): String? {
+    fun startRecording(target: InstalledApp, ownerUid: String? = null): String? {
         check(Looper.myLooper() == Looper.getMainLooper())
         if (instance !== this || !hasSystemConnection()) return "Runner service is disconnected"
         if (!store.accessConsentGiven()) return "Review and accept the updated Accessibility disclosure"
         if (phase == RunPhase.RUNNING || phase == RunPhase.PAUSED)
             return "Stop the running test before recording"
         if (recorder != null) return "Recorder is already active"
-        val draftStore = MyAppDraftStore(this)
-        val draft = draftStore.load()
+        val draftStore = MyAppDraftStore(this, ownerUid)
+        val draft = draftStore.loadPackage(target.packageName) ?: MyAppDraftStore(this, ownerUid).load()
         if (target.packageName != draft.packageName)
             return "Save your My App package name before recording"
         val instance = AccessibilityEventRecorder(this, target) { json ->
@@ -258,7 +258,7 @@ class CycleAccessibilityService : AccessibilityService() {
             val result = when {
                 json == null -> "No UI actions recorded in the app."
                 else -> runCatching {
-                    val current = draftStore.load()
+                    val current = requireNotNull(draftStore.loadPackage(target.packageName)) { "Original draft no longer exists." }
                     require(current.packageName == target.packageName) { "App package changed during recording." }
                     val existing = ScenarioCodec.split(current.scenarioJson)
                     require(existing.size < 12) { "Maximum 12 test cases reached." }
@@ -266,7 +266,7 @@ class CycleAccessibilityService : AccessibilityService() {
                     named.getJSONObject("meta").put("name", "Test Case " + (existing.size + 1))
                     val combined = ScenarioCodec.compose(existing + named.toString())
                     require(combined.length <= 48000) { "Test cases exceed the 48 KB limit." }
-                    draftStore.save(current.copy(scenarioJson = combined))
+                    draftStore.saveForPackage(current.copy(scenarioJson = combined))
                     "Test case created successfully. Add an assertion before publishing."
                 }.getOrElse { "Test case not created: " + (it.message ?: "Unable to save") }
             }
