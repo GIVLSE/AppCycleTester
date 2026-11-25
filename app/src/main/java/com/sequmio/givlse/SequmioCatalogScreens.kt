@@ -51,7 +51,6 @@ internal fun SequmioCommunityCatalog(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val repo = remember(account) { CommunityRepository(account) }
-    val progress = remember(context) { RunProgressStore(context) }
     var published by remember { mutableStateOf<List<PublishedApp>>(emptyList()) }
     val uid = account.profile?.uid
     val joinStore = remember(context, uid) { uid?.let { PendingJoinStore(context, it) } }
@@ -261,11 +260,10 @@ internal fun SequmioCommunityCatalog(
                     }
                 }
                 matches.forEach { app ->
-                    val local = installed.firstOrNull { it.packageName == app.packageName }
                     val member = app.packageName in joined
                     SeqCard(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(14.dp),
-                            verticalArrangement = Arrangement.spacedBy(11.dp)) {
+                            verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 SeqAppLetter(app.packageName, app.name,
                                     refreshToken = refreshToken, publishedIcon = app.iconPng)
@@ -279,9 +277,6 @@ internal fun SequmioCommunityCatalog(
                                             onClick = { openSafeLink(context, app.playStoreUrl) },
                                             modifier = Modifier.size(34.dp))
                                     }
-                                    Text(app.packageName, color = SeqColors.Muted,
-                                        fontSize = 11.sp, maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis)
                                 }
                                 if (uid == app.ownerUid) {
                                     SeqChip("My App", SeqColors.Teal)
@@ -319,18 +314,6 @@ internal fun SequmioCommunityCatalog(
                                 Text(app.description, color = SeqColors.Muted,
                                     fontSize = 12.sp, maxLines = 3,
                                     overflow = TextOverflow.Ellipsis)
-                            Text("Developer · " + app.ownerName,
-                                color = SeqColors.Muted, fontSize = 11.sp)
-                            if (member) Text(
-                                progress.days(app.packageName).toString() +
-                                    " local QA days (not Google-verified)",
-                                color = SeqColors.Muted, fontSize = 11.sp)
-                            if (member && local != null) {
-                                SeqTextButton(onClick = { onJoined(app, local) }) {
-                                    Icon(Icons.Outlined.PlayArrow, null, Modifier.size(18.dp))
-                                    Text("Test", fontSize = 12.sp)
-                                }
-                            }
                         }
                     }
                 }
