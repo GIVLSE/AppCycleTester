@@ -1,6 +1,8 @@
 name: Sequmio Play closed-test AAB
 on:
   workflow_dispatch:
+  push:
+    branches: ['release-build/1.2.9']
 permissions:
   contents: read
 jobs:
