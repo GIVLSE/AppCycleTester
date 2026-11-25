@@ -114,7 +114,9 @@ internal fun SequmioApp(
     LaunchedEffect(ownerUid, onMyApp, restoreRevision) {
         if (ownerUid != null && onMyApp) {
             try {
-                val owned = com.sequmio.givlse.data.CommunityRepository(account).myApps(ownerUid)
+                val owned = kotlinx.coroutines.withTimeoutOrNull(10_000L) {
+                    com.sequmio.givlse.data.CommunityRepository(account).myApps(ownerUid)
+                } ?: error("Cloud sync timed out")
                 if (account.profile?.uid == ownerUid) {
                     draftStore.restoreOwned(owned)
                     reloadDraft()

@@ -146,7 +146,7 @@ class MyAppDraftStore(context: Context, private val uid: String? = null) {
             editor.putString(draftKey(pkg), encode(next))
                 .putString(baselineKey(pkg), encode(remote))
                 .putString(statusKey(pkg), app.status)
-            if (legacyMatch != null) editor.remove("draft")
+            if (legacyMatch != null && (previous == null || previous == legacyMatch)) editor.remove("draft")
         }
         if (!prefs.contains(selection)) {
             val first = verified.sortedWith(compareBy<PublishedApp> { it.name.lowercase() }.thenBy { it.packageName })

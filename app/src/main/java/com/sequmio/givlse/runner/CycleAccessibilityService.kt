@@ -250,7 +250,8 @@ class CycleAccessibilityService : AccessibilityService() {
             return "Stop the running test before recording"
         if (recorder != null) return "Recorder is already active"
         val draftStore = MyAppDraftStore(this, ownerUid)
-        val draft = draftStore.loadPackage(target.packageName) ?: MyAppDraftStore(this, ownerUid).load()
+        val draft = draftStore.loadPackage(target.packageName)
+            ?: return "Save your My App package name before recording"
         if (target.packageName != draft.packageName)
             return "Save your My App package name before recording"
         val instance = AccessibilityEventRecorder(this, target) { json ->
