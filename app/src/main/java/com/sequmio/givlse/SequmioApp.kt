@@ -690,8 +690,8 @@ private fun SequmioHome(
 @Composable
 private fun RunCompletionDialog(result: RunCompletion, onDismiss: () -> Unit) {
     fun tint(status: String): Color = when (status) {
-        "PASS" -> SeqColors.Success
-        "FAIL", "BLOCKED", "TIMEOUT" -> SeqColors.Error
+        "FINISHED", "PASSED" -> SeqColors.Success
+        "FAILED", "BLOCKED", "ERROR" -> SeqColors.Error
         "NOT_EXECUTED" -> SeqColors.Muted
         else -> SeqColors.Primary
     }
@@ -706,11 +706,11 @@ private fun RunCompletionDialog(result: RunCompletion, onDismiss: () -> Unit) {
         ) {
             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(if (result.status == "PASS") Icons.Outlined.CheckCircle
+                    Icon(if (result.status == "FINISHED") Icons.Outlined.CheckCircle
                         else Icons.Outlined.ErrorOutline, null,
                         tint = tint(result.status), modifier = Modifier.size(28.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("Run finished", Modifier.weight(1f), fontSize = 20.sp,
+                    Text("Run " + result.status.lowercase(Locale.ROOT), Modifier.weight(1f), fontSize = 20.sp,
                         fontWeight = FontWeight.Bold)
                     SeqChip(result.status, tint(result.status))
                 }
@@ -976,14 +976,15 @@ private fun SequmioHistory(history: List<RunEvent>, reports: List<RunReport>) {
             }
         }
         items(reports, key = { it.id }) { report ->
-            val tint = when (report.status) {
-                "PASS" -> SeqColors.Success
-                "STOPPED" -> SeqColors.Primary
+            val displayStatus = report.displayStatus
+            val tint = when (displayStatus) {
+                "FINISHED" -> SeqColors.Success
+                "CANCELLED" -> SeqColors.Primary
                 else -> SeqColors.Error
             }
-            val statusIcon = when (report.status) {
-                "PASS" -> Icons.Outlined.CheckCircle
-                "STOPPED" -> Icons.Outlined.StopCircle
+            val statusIcon = when (displayStatus) {
+                "FINISHED" -> Icons.Outlined.CheckCircle
+                "CANCELLED" -> Icons.Outlined.StopCircle
                 else -> Icons.Outlined.ErrorOutline
             }
             Surface(
@@ -999,10 +1000,10 @@ private fun SequmioHistory(history: List<RunEvent>, reports: List<RunReport>) {
                     verticalArrangement = Arrangement.spacedBy(11.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(statusIcon, contentDescription = report.status,
+                        Icon(statusIcon, contentDescription = displayStatus,
                             tint = tint, modifier = Modifier.size(26.dp))
                         Spacer(Modifier.width(9.dp))
-                        Text(report.status, color = tint,
+                        Text(displayStatus, color = tint,
                             fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         Spacer(Modifier.weight(1f))
                         Text(
@@ -1075,8 +1076,18 @@ private fun SequmioHistory(history: List<RunEvent>, reports: List<RunReport>) {
                             val target = targets.optJSONObject(i) ?: continue
                             HorizontalDivider(
                                 color = SeqColors.Border.copy(alpha = 0.55f))
-                            Text(target.optString("label"),
-                                fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                            val appOutcome = com.sequmio.givlse.data.ReportDetails.appOutcome(target)
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                Text(target.optString("label"), Modifier.weight(1f),
+                                    fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                                SeqChip(appOutcome.name, when (appOutcome) {
+                                    AppPoolOutcome.PASSED -> SeqColors.Success
+                                    AppPoolOutcome.NOT_EXECUTED -> SeqColors.Muted
+                                    else -> SeqColors.Error
+                                })
+                            }
+                            if (target.optString("reason").isNotBlank())
+                                Text(target.optString("reason"), color = SeqColors.Muted, fontSize = 11.sp)
                             val scenarios = target.optJSONArray("scenarios") ?: JSONArray()
                             if (scenarios.length() == 0) {
                                 Text("No structured E2E steps for this target",

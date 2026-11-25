@@ -33,6 +33,7 @@ import com.sequmio.givlse.model.TestPlan
 import com.sequmio.givlse.model.TestTarget
 import com.sequmio.givlse.model.ExecutionMode
 import com.sequmio.givlse.model.ExecutionPolicy
+import com.sequmio.givlse.model.RunStatus
 
 /**
  * V0.4 foreground app runner. No UI-content reading, gesture injection, or
@@ -73,7 +74,6 @@ class CycleAccessibilityService : AccessibilityService() {
     private var launchConfirmed = false
     private var otherWindowAt = 0L
     private var otherWindowPackage = ""
-    private var hadFailure = false
     private var success: Boolean? = null
     private var terminalStatus: String? = null
     private var events: List<RunEvent> = emptyList()
@@ -87,7 +87,6 @@ class CycleAccessibilityService : AccessibilityService() {
     private var scenarioStartedAt = 0L
     private var scenarioDeadline = 0L
     private var scenarioIteration = 1
-    private var worstStatus = "PASS"
     private var runGeneration = 0
     private var resultPresented = false
     private var completionResults: RunCompletionAccumulator? = null
@@ -130,7 +129,7 @@ class CycleAccessibilityService : AccessibilityService() {
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == Intent.ACTION_SCREEN_OFF && phase == RunPhase.RUNNING) {
-                finish("Screen switched off or locked during an active test", false, status = "BLOCKED")
+                finish("Screen switched off or locked during an active test", RunStatus.BLOCKED)
             }
         }
     }
@@ -138,7 +137,7 @@ class CycleAccessibilityService : AccessibilityService() {
         override fun run() {
             try { tick() } catch (e: Exception) {
                 Log.e("SequmioRunner", "Runner tick failed", e)
-                finish("Runner error: " + e.javaClass.simpleName, false, status = "BLOCKED")
+                finish("Runner error: " + e.javaClass.simpleName, RunStatus.BLOCKED)
             }
             if (phase == RunPhase.RUNNING) handler.postDelayed(this, 500L)
         }
@@ -175,7 +174,7 @@ class CycleAccessibilityService : AccessibilityService() {
             Log.e("SequmioRunner", "Accessibility event handling failed", e)
             runCatching { recorder?.stop() }
             if (phase == RunPhase.RUNNING || phase == RunPhase.PAUSED)
-                runCatching { finish("Accessibility event handling failed", false, status = "BLOCKED") }
+                runCatching { finish("Accessibility event handling failed", RunStatus.BLOCKED) }
         }
     }
 
@@ -205,7 +204,7 @@ class CycleAccessibilityService : AccessibilityService() {
     override fun onInterrupt() {
         runCatching { recorder?.stop() }
         if (phase == RunPhase.RUNNING || phase == RunPhase.PAUSED)
-            finish("Accessibility service interrupted", false, status = "BLOCKED")
+            finish("Accessibility service interrupted", RunStatus.BLOCKED)
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
@@ -214,7 +213,7 @@ class CycleAccessibilityService : AccessibilityService() {
         try {
             runCatching { recorder?.stop() }
             if (phase == RunPhase.RUNNING || phase == RunPhase.PAUSED)
-                finish("Accessibility service disconnected", false, status = "BLOCKED")
+                finish("Accessibility service disconnected", RunStatus.BLOCKED)
         } finally {
             if (registry.detach(this)) publishConnectionState()
         }
@@ -228,7 +227,7 @@ class CycleAccessibilityService : AccessibilityService() {
         try {
             runCatching { recorder?.stop() }
             if (phase == RunPhase.RUNNING || phase == RunPhase.PAUSED)
-                finish("Accessibility service stopped", false, status = "BLOCKED")
+                finish("Accessibility service stopped", RunStatus.BLOCKED)
         } finally {
             handler.removeCallbacksAndMessages(null)
             scenarioPlayer?.stop()
@@ -305,8 +304,6 @@ class CycleAccessibilityService : AccessibilityService() {
         recordedAppSeconds = 0L
         lastTickMs = SystemClock.elapsedRealtime()
         lastCheckpointSecond = -1L
-        hadFailure = false
-        worstStatus = "PASS"
         runGeneration++
         resultPresented = false
         success = null
@@ -342,7 +339,7 @@ class CycleAccessibilityService : AccessibilityService() {
         if (phase != RunPhase.PAUSED) return
         val power = getSystemService(POWER_SERVICE) as PowerManager
         if (!power.isInteractive) {
-            finish("Device screen is off; unlock before resuming", false, status = "BLOCKED")
+            finish("Device screen is off; unlock before resuming", RunStatus.BLOCKED)
             return
         }
         phase = RunPhase.RUNNING
@@ -350,7 +347,7 @@ class CycleAccessibilityService : AccessibilityService() {
         addEvent("Resumed")
         val target = plan?.targets?.getOrNull(index)
         if (target == null) {
-            finish("FAIL: no current app to resume", false)
+            finish("No current app to resume", RunStatus.BLOCKED)
             return
         }
         if (!launch(target)) retryCurrent("Could not relaunch after pause")
@@ -363,11 +360,11 @@ class CycleAccessibilityService : AccessibilityService() {
 
     fun stop() {
         if (phase == RunPhase.RUNNING || phase == RunPhase.PAUSED)
-            finish("Stopped by user", false, manuallyStopped = true)
+            finish("Stopped by user", RunStatus.CANCELLED)
     }
 
     fun abort(reason: String) {
-        if (phase == RunPhase.RUNNING || phase == RunPhase.PAUSED) finish(reason, false, status = "BLOCKED")
+        if (phase == RunPhase.RUNNING || phase == RunPhase.PAUSED) finish(reason, RunStatus.BLOCKED)
     }
 
     private fun tick() {
@@ -375,13 +372,13 @@ class CycleAccessibilityService : AccessibilityService() {
         val power = getSystemService(POWER_SERVICE) as PowerManager
         val keyguard = getSystemService(KEYGUARD_SERVICE) as KeyguardManager
         if (!power.isInteractive || keyguard.isKeyguardLocked) {
-            finish("Screen off or locked, foreground test cannot continue", false, status = "BLOCKED")
+            finish("Screen off or locked, foreground test cannot continue", RunStatus.BLOCKED)
             return
         }
         accumulateTime()
         val p = plan ?: return
         if (p.maxDurationMinutes > 0 && elapsedMs >= p.maxDurationMinutes * 60_000L) {
-            finish("Overall time limit reached", false, status = "TIMEOUT")
+            finish("Overall time limit reached", RunStatus.BLOCKED)
             return
         }
         val target = p.targets[index]
@@ -465,8 +462,7 @@ class CycleAccessibilityService : AccessibilityService() {
             p.repeatMode, p.repeatCount)
         completedCycles = next.completedCycles
         if (next.index == null) {
-            finish(if (hadFailure) "Completed with app failures" else "All cycles completed",
-                !hadFailure)
+            finish("All planned cycles processed", RunStatus.FINISHED)
             return
         }
         index = next.index
@@ -490,7 +486,6 @@ class CycleAccessibilityService : AccessibilityService() {
                 addEvent("Retry " + retries + " for " + target.label)
                 if (launch(target)) return true
             }
-            noteFailure("BLOCKED")
             reports.failure(index)
             recordTargetOutcome(index, "BLOCKED", "Could not launch application")
             addEvent("BLOCKED: could not launch " + target.label)
@@ -499,14 +494,14 @@ class CycleAccessibilityService : AccessibilityService() {
                 p.repeatMode, p.repeatCount)
             completedCycles = next.completedCycles
             if (next.index == null) {
-                finish("No more launchable test targets", false)
+                finish("All planned cycles processed", RunStatus.FINISHED)
                 return false
             }
             index = next.index
             appElapsedMs = 0L
             recordedAppSeconds = 0L
         }
-        if (phase == RunPhase.RUNNING) finish("No test target could launch", false)
+        if (phase == RunPhase.RUNNING) finish("No test target could launch; remaining cycles cannot proceed", RunStatus.BLOCKED)
         return false
     }
 
@@ -523,7 +518,6 @@ class CycleAccessibilityService : AccessibilityService() {
                 " for " + target.label + ": " + reason)
             if (!launch(target)) retryCurrent("Relaunch failed")
         } else {
-            noteFailure("BLOCKED")
             reports.failure(index)
             recordTargetOutcome(index, "BLOCKED", reason)
             addEvent("BLOCKED: " + target.label + " after recovery attempts: " + reason)
@@ -561,35 +555,31 @@ class CycleAccessibilityService : AccessibilityService() {
         reports.targetOutcome(index, status, reason)
     }
 
-    private fun noteFailure(status: String) {
-        hadFailure = true
-        worstStatus = ExecutionPolicy.combine(worstStatus, status)
-    }
-
-    private fun finish(reason: String, passed: Boolean, manuallyStopped: Boolean = false,
-        status: String? = null) {
+    private fun finish(reason: String, status: RunStatus) {
         if (phase != RunPhase.RUNNING && phase != RunPhase.PAUSED) return
         handler.removeCallbacks(ticker)
         handler.removeCallbacks(scenarioTimeout)
-        val outcome = if (manuallyStopped) "STOPPED" else status
-            ?: if (passed) "PASS" else if (worstStatus == "PASS") "BLOCKED" else worstStatus
+        val outcome = status.name
+        val interruptedCaseStatus = if (status == RunStatus.CANCELLED) "STOPPED" else "BLOCKED"
         if (phase == RunPhase.RUNNING) accumulateTime()
         // Terminal phase set before callbacks to make finalization idempotent.
         phase = RunPhase.FINISHED
         terminalStatus = outcome
-        success = outcome == "PASS"
+        // This flag represents orchestration completion, never assertion success.
+        success = status == RunStatus.FINISHED
         lastMessage = reason
         val generation = runGeneration
         try {
-            scenarioPlayer?.interrupt(outcome, reason)
+            scenarioPlayer?.interrupt(interruptedCaseStatus, reason)
             if (scenarioPlayer != null) {
-                reports.scenarioEnded(index, outcome, reason,
+                reports.scenarioEnded(index, interruptedCaseStatus, reason,
                     SystemClock.elapsedRealtime() - scenarioStartedAt)
                 recordUnstartedCases(reason)
             }
             checkpoint()
             // Do not overwrite a successfully completed target with a different target's failure.
-            if (status != null || manuallyStopped) recordTargetOutcome(index, outcome, reason)
+            if (status != RunStatus.FINISHED)
+                recordTargetOutcome(index, interruptedCaseStatus, reason)
             addEvent(reason)
         } catch (e: Exception) {
             Log.e("SequmioRunner", "Finalization metadata failed", e)
@@ -646,7 +636,7 @@ class CycleAccessibilityService : AccessibilityService() {
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
                 manager.notify(411, Notification.Builder(this, channel)
                     .setSmallIcon(android.R.drawable.ic_menu_info_details)
-                    .setContentTitle("Run finished · " + status)
+                    .setContentTitle("Run " + status.lowercase(java.util.Locale.ROOT))
                     .setContentText(reason)
                     .setStyle(Notification.BigTextStyle().bigText(reason))
                     .setVisibility(Notification.VISIBILITY_PRIVATE)
@@ -717,7 +707,7 @@ class CycleAccessibilityService : AccessibilityService() {
         val targetPackage = target.packageName
         val timeout = ExecutionPolicy.timeout(spec.totalDurationSec, target.scenarioTimeoutSeconds)
         if (!reports.scenarioStarted(index, spec, completedCycles + 1, scenarioIteration, timeout)) {
-            finish("Local report capacity reached; start a new plan", false, status = "BLOCKED")
+            finish("Local report capacity reached; start a new plan", RunStatus.BLOCKED)
             return
         }
         scenarioStartedAt = SystemClock.elapsedRealtime()
@@ -779,14 +769,14 @@ class CycleAccessibilityService : AccessibilityService() {
             if (scenarioStartedAt > 0) SystemClock.elapsedRealtime() - scenarioStartedAt else 0L)
         scenarioPlayer = null
         scenarioFailed = true
-        noteFailure(status)
         reports.failure(index)
         recordTargetOutcome(index, status, error)
         addEvent(status + ": " + error)
-        // Continue independent cases after an ordinary test failure when still in
-        // the target app, but do not restart a failed loop iteration.
+        // Continue independent selected cases if the target is still available.
+        // A local test error does not prevent scheduling subsequent applications.
         val target = plan?.targets?.getOrNull(index)
-        if (status == "FAIL" && target?.executionMode == ExecutionMode.RUN_TEST_CASES &&
+        if (status in listOf("FAIL", "TIMEOUT", "BLOCKED") &&
+            target?.executionMode == ExecutionMode.RUN_TEST_CASES &&
             scenarioPosition + 1 < scenarioQueue.size &&
             rootInActiveWindow?.packageName?.toString() == target.packageName) {
             scenarioPosition++

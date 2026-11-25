@@ -2,6 +2,8 @@ package com.sequmio.givlse.data
 
 import org.json.JSONArray
 import org.json.JSONObject
+import com.sequmio.givlse.model.AppPoolOutcome
+import com.sequmio.givlse.model.RunStatus
 
 /** Semantically useful AR/ER without selector strings, input text or captured screen values. */
 object StepOutcome {
@@ -44,6 +46,35 @@ object ReportDetails {
         s.remove("expectedSteps")
     }
 
+    /** Legacy rows may lack an explicit target outcome. Never inherit session verdict. */
+    fun appOutcome(target: JSONObject): AppPoolOutcome {
+        var outcome = AppPoolOutcome.fromExecution(target.optString("outcome"))
+        val cases = target.optJSONArray("scenarios") ?: JSONArray()
+        for (i in 0 until cases.length()) {
+            val status = AppPoolOutcome.fromExecution(cases.optJSONObject(i)?.optString("status").orEmpty())
+            if (status.ordinal > outcome.ordinal) outcome = status
+        }
+        if (target.optInt("failures") > 0 && outcome.ordinal < AppPoolOutcome.ERROR.ordinal)
+            outcome = AppPoolOutcome.ERROR
+        if (outcome == AppPoolOutcome.NOT_EXECUTED &&
+            (target.optInt("launches") > 0 || target.optInt("confirmed") > 0)) {
+            outcome = if (cases.length() == 0 && target.optInt("confirmed") > 0 &&
+                target.optLong("foregroundSeconds") >= target.optLong("durationSeconds") &&
+                target.optLong("durationSeconds") > 0 &&
+                target.optString("scenarioName").isBlank()) AppPoolOutcome.PASSED
+                else AppPoolOutcome.ERROR
+        }
+        return outcome
+    }
+
+    fun finalizeTargetOutcomes(json: JSONObject) {
+        val targets = json.optJSONArray("targets") ?: JSONArray()
+        for (i in 0 until targets.length()) {
+            val target = targets.optJSONObject(i) ?: continue
+            target.put("outcome", appOutcome(target).name)
+        }
+    }
+
     fun toCsv(json: JSONObject): String {
         fun cell(value: Any?): String {
             val raw = value?.toString().orEmpty()
@@ -51,7 +82,7 @@ object ReportDetails {
             val safe = if (raw.trimStart().firstOrNull() in listOf('=', '+', '-', '@')) "'" + raw else raw
             return "\"" + safe.replace("\"", "\"\"") + "\""
         }
-        val header = "session_id,session_status,cycle_number,iteration_number,app_name,package_name,app_version,test_case_name,test_case_version,scenario_status,estimated_duration_seconds,actual_duration_seconds,timeout_seconds,step_index,step_action,expected_result,actual_result,step_status,step_duration_ms,error_code,error_message,started_at,ended_at"
+        val header = "session_id,session_status,cycle_number,iteration_number,app_name,package_name,app_version,app_status,test_case_name,test_case_version,scenario_status,estimated_duration_seconds,actual_duration_seconds,timeout_seconds,step_index,step_action,expected_result,actual_result,step_status,step_duration_ms,error_code,error_message,started_at,ended_at"
         val lines = mutableListOf(header)
         val targets = json.optJSONArray("targets") ?: JSONArray()
         for (i in 0 until targets.length()) {
@@ -59,21 +90,21 @@ object ReportDetails {
             val cases = t.optJSONArray("scenarios") ?: JSONArray()
             fun row(s: JSONObject?, step: JSONObject?) {
                 val status = s?.optString("status")?.let { if (it == "RUNNING") "INCOMPLETE" else it }
-                    ?: t.optString("outcome", json.optString("status"))
+                    ?: appOutcome(t).name
                 val start = s?.optLong("startedAt") ?: json.optLong("startedAt")
                 val end = s?.optLong("endedAt")?.takeIf { it > 0 } ?: json.optLong("endedAt")
                 val reason = s?.optString("reason").orEmpty().ifBlank {
-                    if (status != "PASS") t.optString("reason").ifBlank { json.optString("reason") } else ""
+                    if (status != "PASS" && status != "PASSED") t.optString("reason").ifBlank { json.optString("reason") } else ""
                 }
                 val actual = if (s == null) t.optLong("foregroundSeconds") else
                     s.optLong("actualSeconds", ((end-start).coerceAtLeast(0L))/1000L)
-                lines.add(listOf(json.optString("id"), json.optString("status"),
+                lines.add(listOf(json.optString("id"), RunStatus.fromStored(json.optString("status"), json.optString("reason")),
                     s?.opt("cycle"), s?.opt("iteration"), t.optString("label"), t.optString("packageName"),
-                    t.optString("appVersion"), s?.optString("name"), s?.opt("version"), status,
+                    t.optString("appVersion"), appOutcome(t).name, s?.optString("name"), s?.opt("version"), status,
                     s?.opt("estimatedSeconds") ?: t.opt("durationSeconds"), actual, s?.opt("timeoutSeconds"),
                     step?.opt("stepIndex"), step?.optString("action") ?: "SUMMARY",
                     step?.optString("expectedResult"), step?.optString("actualResult"), step?.optString("status"),
-                    step?.opt("durationMs"), step?.optString("errorCode") ?: status.takeIf { it != "PASS" },
+                    step?.opt("durationMs"), step?.optString("errorCode") ?: status.takeIf { it != "PASS" && it != "PASSED" },
                     step?.optString("message") ?: reason, start, end
                 ).joinToString(",") { cell(it) })
             }

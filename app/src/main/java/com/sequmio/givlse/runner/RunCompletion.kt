@@ -1,6 +1,7 @@
 package com.sequmio.givlse.runner
 
 import com.sequmio.givlse.model.TestTarget
+import com.sequmio.givlse.model.AppPoolOutcome
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -16,13 +17,13 @@ data class RunCompletion(val id: String, val status: String, val reason: String,
 internal class RunCompletionAccumulator(targets: List<TestTarget>) {
     private val id = UUID.randomUUID().toString()
     private val apps = targets.map { AppRunCompletion(it.packageName, it.label) }.toMutableList()
-    private val severity = listOf("NOT_EXECUTED", "PASS", "STOPPED", "BLOCKED", "TIMEOUT", "FAIL")
 
     fun record(index: Int, status: String, reason: String) {
         val old = apps.getOrNull(index) ?: return
         // A later successful cycle cannot hide an earlier failure.
-        if (severity.indexOf(status) >= severity.indexOf(old.status))
-            apps[index] = old.copy(status = status, reason = reason)
+        val incoming = AppPoolOutcome.fromExecution(status)
+        if (incoming.ordinal >= AppPoolOutcome.fromExecution(old.status).ordinal)
+            apps[index] = old.copy(status = incoming.name, reason = reason)
     }
 
     fun finish(status: String, reason: String, elapsedSeconds: Long, cycles: Int) =

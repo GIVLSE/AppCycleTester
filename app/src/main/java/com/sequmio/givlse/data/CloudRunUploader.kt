@@ -94,6 +94,8 @@ class RunUploadWorker(context: Context, params: WorkerParameters) :
                         scenario.optString("status") == "FAIL" -> "FAIL"
                         scenario.optString("status") == "PASS" -> "PASS"
                         scenario.optString("status") == "STOPPED" -> "STOPPED"
+                        // Keep the legacy immutable payload for old sessions.
+                        // In new sessions, only the actually interrupted case is STOPPED.
                         report.status == "STOPPED" -> "STOPPED"
                         report.status == "INTERRUPTED" -> "INTERRUPTED"
                         else -> "INCOMPLETE"

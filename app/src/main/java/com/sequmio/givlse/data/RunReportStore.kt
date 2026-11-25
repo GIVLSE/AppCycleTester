@@ -3,6 +3,8 @@ package com.sequmio.givlse.data
 import android.content.Context
 import android.os.Build
 import com.sequmio.givlse.model.TestPlan
+import com.sequmio.givlse.model.AppPoolOutcome
+import com.sequmio.givlse.model.RunStatus
 import com.sequmio.givlse.data.StepExecutionResult
 import org.json.JSONArray
 import org.json.JSONObject
@@ -25,6 +27,8 @@ data class RunReport(
 ) {
     // Only generate the selected report's CSV when requested.
     val csv: String by lazy { ReportDetails.toCsv(JSONObject(rawJson)) }
+    // Do not rewrite historical cloud payloads; normalize legacy status for display.
+    val displayStatus: String get() = RunStatus.fromStored(status, reason)
 }
 
 /** Bounded local structured reports. Sessions interrupted by a process kill never become PASS. */
@@ -82,10 +86,11 @@ class RunReportStore(private val context: Context) {
         val state = json.optString("status")
         if (state == "RUNNING" || state.isBlank()) {
             finalizeActive(json, "BLOCKED", "Process or Accessibility service interrupted")
-            json.put("status", "INTERRUPTED")
+            json.put("status", if (json.optInt("schema") >= 3) "BLOCKED" else "INTERRUPTED")
                 .put("endedAt", System.currentTimeMillis())
                 .put("reason", "Process or Accessibility service interrupted")
         }
+        if (json.optInt("schema") >= 3) ReportDetails.finalizeTargetOutcomes(json)
         if (!archive(json)) storageError = true
     }
 
@@ -104,6 +109,7 @@ class RunReportStore(private val context: Context) {
                 .put("durationSeconds", t.durationSeconds)
                 .put("origin", t.origin)
                 .put("executionMode", t.executionMode.name)
+                .put("outcome", AppPoolOutcome.NOT_EXECUTED.name)
                 .put("scenarioName", t.scenarioJson?.let {
                     runCatching { ScenarioCodec.parseAll(it, t.packageName)
                         .joinToString(" + ") { spec -> spec.name } }.getOrDefault("")
@@ -123,7 +129,7 @@ class RunReportStore(private val context: Context) {
                 .put("retries", 0).put("failures", 0).put("foregroundSeconds", 0))
         }
         save(JSONObject()
-            .put("schema", 2).put("id", UUID.randomUUID().toString())
+            .put("schema", 3).put("id", UUID.randomUUID().toString())
             .put("status", "RUNNING").put("startedAt", System.currentTimeMillis())
             .put("endedAt", 0L).put("elapsedSeconds", 0L)
             .put("completedCycles", 0).put("repeatMode", plan.repeatMode.name)
@@ -193,7 +199,10 @@ class RunReportStore(private val context: Context) {
 
     fun targetOutcome(index: Int, status: String, reason: String) {
         change { json -> item(json, index)?.let {
-            it.put("outcome", status).put("reason", reason.take(220))
+            val next = AppPoolOutcome.fromExecution(status)
+            val previous = AppPoolOutcome.fromExecution(it.optString("outcome"))
+            if (next.ordinal >= previous.ordinal)
+                it.put("outcome", next.name).put("reason", reason.take(220))
         } }
     }
 
@@ -222,7 +231,8 @@ class RunReportStore(private val context: Context) {
                 val scenario = cases.optJSONObject(j) ?: continue
                 if (scenario.optString("status") == "RUNNING")
                     ReportDetails.finalizeScenario(scenario,
-                        if (status == "PASS") "BLOCKED" else status, reason, System.currentTimeMillis())
+                        if (status == "CANCELLED" || status == "STOPPED") "STOPPED" else "BLOCKED",
+                        reason, System.currentTimeMillis())
             }
             target.put("activeScenarioIndex", -1)
         }
@@ -278,13 +288,14 @@ class RunReportStore(private val context: Context) {
                 val json = activeJson ?: pending()
                 if (json != null) {
                     finalizeActive(json, status, reason)
+                    ReportDetails.finalizeTargetOutcomes(json)
                     json.put("status", status).put("reason", reason)
                         .put("endedAt", endedAt)
                         .put("elapsedSeconds", seconds).put("completedCycles", cycles)
                     // Keep a terminal checkpoint if archiving fails or process dies.
                     save(json, force = true)
                     saved = archive(json)
-                    if (saved && status == "PASS")
+                    if (saved)
                         RunProgressStore(context).recordPassedApps(json.optJSONArray("targets") ?: JSONArray())
                 }
             } catch (e: Exception) {

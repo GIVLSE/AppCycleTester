@@ -32,7 +32,8 @@ class RunProgressStore(context: Context) {
             val timedAppPassed = cases.length() == 0 &&
                 item.optLong("foregroundSeconds") >= item.optLong("durationSeconds")
             if (id.isBlank() || item.optInt("confirmed") == 0 ||
-                item.optInt("failures") != 0 || !(casesPassed || timedAppPassed)) continue
+                item.optInt("failures") != 0 || !(casesPassed || timedAppPassed) ||
+                ReportDetails.appOutcome(item) != com.sequmio.givlse.model.AppPoolOutcome.PASSED) continue
             val old = runCatching { JSONArray(prefs.getString(id, "[]")) }
                 .getOrDefault(JSONArray())
             val set = mutableSetOf<String>()

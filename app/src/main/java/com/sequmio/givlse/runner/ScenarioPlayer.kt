@@ -8,6 +8,7 @@ import android.os.Handler
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityNodeInfo
 import com.sequmio.givlse.data.ScenarioSpec
+import com.sequmio.givlse.data.ScenarioCodec
 import com.sequmio.givlse.data.ScenarioStep
 import com.sequmio.givlse.data.StepExecutionResult
 import com.sequmio.givlse.data.StepOutcome
@@ -274,12 +275,17 @@ class ScenarioPlayer(
             stepStartedAt = 0L
             advance()
         } else {
-            record(step, "FAIL", message)
+            // A failed assertion is a product verdict. An action which could not
+            // be executed is an automation error, not proof of a product defect.
+            val verdict = if (step.action in ScenarioCodec.assertionActions &&
+                isCorrectForeground() && service.rootInActiveWindow != null) "FAIL" else "BLOCKED"
+            record(step, verdict, message)
             val failedIndex = current + 1
             current++
             stepStartedAt = 0L
-            interrupt("FAIL", "Not executed after required step failed")
-            onFailure("Step " + failedIndex + " " + step.action + " FAIL: " + message)
+            interrupt(verdict, "Not executed after required step did not complete")
+            val detail = "Step " + failedIndex + " " + step.action + " " + verdict + ": " + message
+            if (verdict == "FAIL") onFailure(detail) else onError(detail)
         }
     }
 
@@ -297,7 +303,7 @@ class ScenarioPlayer(
             at = System.currentTimeMillis(),
             expectedResult = StepOutcome.expected(step.action),
             actualResult = if (status == "PASS") StepOutcome.passed(step.action) else message.take(220),
-            errorCode = if (status == "PASS") "" else if (step.action.startsWith("ASSERT_"))
+            errorCode = if (status == "PASS") "" else if (status == "FAIL" && step.action.startsWith("ASSERT_"))
                 "ASSERTION_NOT_MET" else "ACTION_NOT_COMPLETED"
         ))
     }

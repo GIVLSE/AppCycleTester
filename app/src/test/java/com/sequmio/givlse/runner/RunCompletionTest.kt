@@ -14,15 +14,15 @@ class RunCompletionTest {
         a.record(0, "PASS", "")
         a.record(1, "FAIL", "Assertion failed")
         a.record(1, "PASS", "")
-        val result = a.finish("FAIL", "Completed with app failures", 21, 1)
-        assertEquals(listOf("PASS", "FAIL", "NOT_EXECUTED"), result.apps.map { it.status })
+        val result = a.finish("FINISHED", "Completed with app failures", 21, 1)
+        assertEquals(listOf("PASSED", "FAILED", "NOT_EXECUTED"), result.apps.map { it.status })
         assertEquals("Assertion failed", result.apps[1].reason)
     }
 
     @Test fun dismissalConsumesOnlyMatchingSession() {
         val pending = PendingRunCompletion()
-        val first = accumulator().finish("PASS", "Finished", 10, 1)
-        val second = accumulator().finish("STOPPED", "Stopped", 4, 0)
+        val first = accumulator().finish("FINISHED", "Finished", 10, 1)
+        val second = accumulator().finish("CANCELLED", "Stopped", 4, 0)
         pending.show(first)
         assertTrue(pending.dismiss(first.id))
         assertNull(pending.state.value)
@@ -37,7 +37,7 @@ class RunCompletionTest {
         val a = accumulator()
         a.record(0, "PASS", "")
         a.record(1, "STOPPED", "Stopped by user")
-        val result = a.finish("STOPPED", "Stopped by user", 8, 0)
-        assertEquals(listOf("PASS", "STOPPED", "NOT_EXECUTED"), result.apps.map { it.status })
+        val result = a.finish("CANCELLED", "Stopped by user", 8, 0)
+        assertEquals(listOf("PASSED", "ERROR", "NOT_EXECUTED"), result.apps.map { it.status })
     }
 }
