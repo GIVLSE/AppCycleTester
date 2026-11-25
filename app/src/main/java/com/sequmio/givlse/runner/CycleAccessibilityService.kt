@@ -15,6 +15,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
+import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import com.sequmio.givlse.data.RunReportStore
 import com.sequmio.givlse.data.ScenarioCodec
@@ -74,6 +75,8 @@ class CycleAccessibilityService : AccessibilityService() {
     private var worstStatus = "PASS"
     private var runGeneration = 0
     private var resultPresented = false
+    private var lastCheckpointSecond = -1L
+    private var destroying = false
     private val scenarioTimeout = Runnable {
         if (phase == RunPhase.RUNNING && scenarioPlayer != null) {
             val now = SystemClock.elapsedRealtime()
@@ -91,18 +94,22 @@ class CycleAccessibilityService : AccessibilityService() {
     }
     private val ticker = object : Runnable {
         override fun run() {
-            tick()
-            if (phase == RunPhase.RUNNING) handler.postDelayed(this, 250L)
+            try { tick() } catch (e: Exception) {
+                Log.e("SequmioRunner", "Runner tick failed", e)
+                finish("Runner error: " + e.javaClass.simpleName, false, status = "BLOCKED")
+            }
+            if (phase == RunPhase.RUNNING) handler.postDelayed(this, 500L)
         }
     }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
-        if (reports.recoverInterrupted()) {
-            store.appendHistory(RunEvent(System.currentTimeMillis(),
-                "FAIL: previous test interrupted by Android or a process restart"))
-        }
+        val fresh = instance !== this
         instance = this
+        destroying = false
+        Log.i("SequmioRunner", "Accessibility service connected")
+        // Report recovery is queued off the main thread and cannot prevent binding.
+        if (fresh && phase == RunPhase.IDLE) reports.recoverInterrupted()
         publish()
     }
 
@@ -137,15 +144,23 @@ class CycleAccessibilityService : AccessibilityService() {
     }
 
     override fun onDestroy() {
-        recorder?.stop()
-        handler.removeCallbacks(ticker)
-        scenarioPlayer?.stop()
-        if (phase == RunPhase.RUNNING || phase == RunPhase.PAUSED)
-            finish("Accessibility service stopped", false, status = "BLOCKED")
-        unregisterScreenReceiver()
-        instance = null
-        publish()
-        super.onDestroy()
+        destroying = true
+        Log.w("SequmioRunner", "Accessibility service destroyed")
+        try {
+            runCatching { recorder?.stop() }
+            if (phase == RunPhase.RUNNING || phase == RunPhase.PAUSED)
+                finish("Accessibility service stopped", false, status = "BLOCKED")
+        } finally {
+            handler.removeCallbacksAndMessages(null)
+            scenarioPlayer?.stop()
+            scenarioPlayer = null
+            runCatching { unregisterScreenReceiver() }
+            if (instance === this) {
+                instance = null
+                publish()
+            }
+            super.onDestroy()
+        }
     }
 
     /**
@@ -208,6 +223,7 @@ class CycleAccessibilityService : AccessibilityService() {
         appElapsedMs = 0L
         recordedAppSeconds = 0L
         lastTickMs = SystemClock.elapsedRealtime()
+        lastCheckpointSecond = -1L
         hadFailure = false
         worstStatus = "PASS"
         runGeneration++
@@ -319,13 +335,17 @@ class CycleAccessibilityService : AccessibilityService() {
                 else "Unexpected foreground app " + otherWindowPackage
             )
         } else if (target.executionMode == ExecutionMode.FIXED_DURATION &&
-            appElapsedMs >= target.durationSeconds * 1000L) {
+            launchConfirmed && appElapsedMs >= target.durationSeconds * 1000L) {
             reports.targetOutcome(index, "PASS", "")
             addEvent("Completed foreground time for " + target.label)
             advanceToNext()
         }
         if (phase == RunPhase.RUNNING) {
-            if (elapsedMs / 1000L % 5L == 0L) checkpoint()
+            val second = elapsedMs / 1000L
+            if (second - lastCheckpointSecond >= 5L) {
+                lastCheckpointSecond = second
+                checkpoint()
+            }
             publish()
         }
     }
@@ -467,32 +487,56 @@ class CycleAccessibilityService : AccessibilityService() {
         handler.removeCallbacks(scenarioTimeout)
         val outcome = if (manuallyStopped) "STOPPED" else status
             ?: if (passed) "PASS" else if (worstStatus == "PASS") "BLOCKED" else worstStatus
-        if (scenarioPlayer != null) {
-            scenarioPlayer?.interrupt(outcome, reason)
-            reports.scenarioEnded(index, outcome, reason,
-                SystemClock.elapsedRealtime() - scenarioStartedAt)
-            recordUnstartedCases(reason)
-        }
-        scenarioPlayer = null
         if (phase == RunPhase.RUNNING) accumulateTime()
-        checkpoint()
+        // Terminal phase set before callbacks to make finalization idempotent.
         phase = RunPhase.FINISHED
-        success = passed
         terminalStatus = outcome
-        if (outcome != "PASS") reports.targetOutcome(index, outcome, reason)
+        success = outcome == "PASS"
         lastMessage = reason
-        addEvent(reason)
-        reports.finish(
-            requireNotNull(terminalStatus),
-            reason, elapsedMs / 1000L, completedCycles
-        )
-        unregisterScreenReceiver()
-        publish()
-        presentRunResult(reason, requireNotNull(terminalStatus))
-        RunnerForegroundService.stop(this)
+        val generation = runGeneration
+        try {
+            scenarioPlayer?.interrupt(outcome, reason)
+            if (scenarioPlayer != null) {
+                reports.scenarioEnded(index, outcome, reason,
+                    SystemClock.elapsedRealtime() - scenarioStartedAt)
+                recordUnstartedCases(reason)
+            }
+            checkpoint()
+            // Do not overwrite a successfully completed target with a different target's failure.
+            if (status != null || manuallyStopped) reports.targetOutcome(index, outcome, reason)
+            addEvent(reason)
+        } catch (e: Exception) {
+            Log.e("SequmioRunner", "Finalization metadata failed", e)
+            terminalStatus = "BLOCKED"
+            success = false
+            lastMessage = "Runner finalization error: " + e.javaClass.simpleName
+        } finally {
+            scenarioPlayer?.stop()
+            scenarioPlayer = null
+            runCatching { unregisterScreenReceiver() }
+            val finalStatus = terminalStatus ?: "BLOCKED"
+            val finalReason = lastMessage
+            reports.finish(finalStatus, finalReason, elapsedMs / 1000L, completedCycles) { saved ->
+                if (!saved) handler.post {
+                    if (runGeneration == generation && phase == RunPhase.FINISHED) {
+                        lastMessage = finalReason + " · Local report could not be saved completely"
+                        publish()
+                        Log.e("SequmioRunner", "Final report persistence failed")
+                    }
+                }
+            }
+            publish()
+            try {
+                presentRunResult(finalReason, finalStatus)
+            } catch (e: Exception) {
+                Log.e("SequmioRunner", "Result presentation failed", e)
+            } finally {
+                runCatching { RunnerForegroundService.stop(this) }
+            }
+        }
     }
 
-    /** Return only after the terminal report is committed. Never unlock or wake the device. */
+    /** Return promptly; durable report writing continues on the ordered IO worker. */
     private fun presentRunResult(reason: String, status: String) {
         val intent = Intent(this, MainActivity::class.java)
             .setAction(MainActivity.ACTION_SHOW_RUN_RESULT)
@@ -517,24 +561,31 @@ class CycleAccessibilityService : AccessibilityService() {
                     .setContentIntent(open)
                     .setAutoCancel(true)
                     .build())
-            }
-        }
+            } else Log.w("SequmioRunner", "Result notifications disabled by Android")
+        }.onFailure { Log.e("SequmioRunner", "Result notification failed", it) }
         val power = getSystemService(POWER_SERVICE) as PowerManager
         val keyguard = getSystemService(KEYGUARD_SERVICE) as KeyguardManager
-        if (power.isInteractive && !keyguard.isKeyguardLocked) {
+        if (!destroying && power.isInteractive && !keyguard.isKeyguardLocked) {
+            Log.i("SequmioRunner", "Requesting return to Sequmio")
             runCatching { startActivity(intent) }
+                .onFailure { Log.e("SequmioRunner", "Return request failed", it) }
             val generation = runGeneration
             handler.postDelayed({
                 if (phase == RunPhase.FINISHED && runGeneration == generation &&
                     !resultPresented && rootInActiveWindow?.packageName?.toString() != packageName &&
                     power.isInteractive && !keyguard.isKeyguardLocked) {
+                    Log.w("SequmioRunner", "Return not observed; retry once")
                     runCatching { startActivity(intent) }
+                        .onFailure { Log.e("SequmioRunner", "Return retry failed", it) }
                 }
-            }, 750L)
+            }, 1000L)
         }
     }
 
-    fun acknowledgeResultVisible() { resultPresented = true }
+    fun acknowledgeResultVisible() {
+        resultPresented = true
+        Log.i("SequmioRunner", "Result activity visible")
+    }
 
     private fun registerScreenReceiver() {
         if (!receiverRegistered) {
@@ -674,6 +725,11 @@ class CycleAccessibilityService : AccessibilityService() {
 
     private fun publish() {
         val target = plan?.targets?.getOrNull(index)
+        val previous = RunnerRuntime.state.value
+        if (phase == RunPhase.IDLE && previous.phase == RunPhase.FINISHED) {
+            RunnerRuntime.publish(previous.copy(accessibilityReady = instance != null))
+            return
+        }
         RunnerRuntime.publish(RunSnapshot(
             phase = phase,
             accessibilityReady = instance != null,

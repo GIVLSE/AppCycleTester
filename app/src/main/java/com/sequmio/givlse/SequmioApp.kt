@@ -51,6 +51,10 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import org.json.JSONObject
 import org.json.JSONArray
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
+import com.sequmio.givlse.data.MyAppDraft
 import java.util.Locale
 
 private enum class Page { RUNNER, APP_LIST, MY_APP, HISTORY, PLAN, SETUP,
@@ -59,6 +63,7 @@ private enum class Page { RUNNER, APP_LIST, MY_APP, HISTORY, PLAN, SETUP,
 @Composable
 internal fun SequmioApp(
     permissionRefreshToken: Int,
+    systemAccessibilityEnabled: Boolean,
     resultOpenVersion: Int,
     requestNotificationPermission: () -> Unit,
     openAccessibility: () -> Unit,
@@ -86,7 +91,7 @@ internal fun SequmioApp(
             page = Page.RUNNER
             message = ""
         } else if (resultOpenVersion > 0 && runner.phase == RunPhase.IDLE) {
-            page = Page.HISTORY
+            page = Page.RUNNER
         }
     }
     var recorderNotice by remember { mutableStateOf("") }
@@ -99,28 +104,62 @@ internal fun SequmioApp(
             RecorderRuntime.set(com.sequmio.givlse.runner.RecorderState())
         }
     }
-    val connected = runner.accessibilityReady && CycleAccessibilityService.instance != null
+    val connected = runner.accessibilityReady && CycleAccessibilityService.instance != null &&
+        systemAccessibilityEnabled
     val notificationsGranted = Build.VERSION.SDK_INT < 33 ||
         ContextCompat.checkSelfPermission(
             context, Manifest.permission.POST_NOTIFICATIONS
         ) == PackageManager.PERMISSION_GRANTED
-    // Reflect actual Android service enablement, independently from local consent.
-    val systemAccessibilityEnabled = remember(permissionRefreshToken, runner.accessibilityReady) {
-        isSequmioAccessibilityEnabled(context)
-    } || connected
     val openPrivacy = {
         context.startActivity(
             Intent(Intent.ACTION_VIEW, Uri.parse("https://givlse.github.io/AppCycleTester/privacy.html"))
         )
     }
     val active = runner.phase == RunPhase.RUNNING || runner.phase == RunPhase.PAUSED
-    val history = remember(runner.events.lastOrNull()?.timestampMillis, runner.phase, page) {
-        store.readHistory().takeLast(120).reversed()
+    val reportRevision by RunReportStore.revision.collectAsState()
+    val history by produceState(emptyList<RunEvent>(), page, reportRevision) {
+        if (page == Page.HISTORY) value = withContext(Dispatchers.IO) {
+            store.readHistory().takeLast(120).reversed()
+        }
     }
-    val runReports = remember(runner.phase, page, runner.events.lastOrNull()?.timestampMillis) {
-        RunReportStore(context).recent()
+    val runReports by produceState(emptyList<RunReport>(), page, reportRevision, runner.phase) {
+        if (page == Page.HISTORY || (page == Page.RUNNER && !active))
+            value = withContext(Dispatchers.IO) { RunReportStore(context.applicationContext).recent() }
     }
+    val visibleRunner = if (runner.phase == RunPhase.IDLE && runReports.isNotEmpty()) {
+        val last = runReports.first()
+        runner.copy(phase = RunPhase.FINISHED, terminalStatus = last.status,
+            success = last.status == "PASS", message = last.reason,
+            elapsedSeconds = last.durationSeconds, completedCycles = last.completedCycles)
+    } else runner
     fun setPlan(p: TestPlan) { plan = p; store.savePlan(p) }
+    fun syncEditedCase(oldRaw: String, newRaw: String, packageName: String) {
+        if (active || oldRaw.isBlank()) return
+        val next = plan.targets.map { target ->
+            if (target.origin != "local" || target.packageName != packageName ||
+                target.scenarioJson.isNullOrBlank()) target
+            else runCatching {
+                val cases = ScenarioCodec.split(target.scenarioJson).toMutableList()
+                val position = cases.indexOfFirst { JSONObject(it).toString() == JSONObject(oldRaw).toString() }
+                if (position < 0) target else {
+                    val oldSpec = ScenarioCodec.parse(cases[position], packageName)
+                    val newSpec = ScenarioCodec.parse(newRaw, packageName)
+                    cases[position] = newRaw
+                    val raw = ScenarioCodec.compose(cases)
+                    val keys = target.selectedCaseKeys?.map {
+                        if (it == ScenarioCodec.caseKey(position, oldSpec))
+                            ScenarioCodec.caseKey(position, newSpec) else it
+                    }
+                    target.copy(scenarioJson = raw, selectedCaseKeys = keys,
+                        durationSeconds = if (target.executionMode == ExecutionMode.RUN_TEST_CASES)
+                            ScenarioCodec.selectCases(raw, packageName, keys)
+                                .sumOf { it.totalDurationSec }.coerceIn(1, 7200)
+                        else target.durationSeconds)
+                }
+            }.getOrDefault(target)
+        }
+        if (next != plan.targets) setPlan(plan.copy(targets = next))
+    }
     fun mergeCommunity(
         changes: List<Pair<PublishedApp, InstalledApp>>,
         explicitJoin: Boolean
@@ -194,7 +233,7 @@ internal fun SequmioApp(
                 Page.RUNNER -> Box(Modifier.fillMaxSize()) {
                     SeqRunnerAtmosphere(Modifier.matchParentSize())
                     SequmioHome(
-                    plan, runner, connected, message,
+                    plan, visibleRunner, connected, systemAccessibilityEnabled, message,
                     onStart = { requestStart() },
                     onEdit = { page = Page.PLAN },
                     onSetup = { openPermissions(Page.RUNNER) },
@@ -306,7 +345,8 @@ internal fun SequmioApp(
                                 openPermissions(Page.MY_APP)
                             }
                             !connected -> {
-                                recorderNotice = "Enable Sequmio Accessibility first."
+                                recorderNotice = if (systemAccessibilityEnabled)
+                                    "Runner service not connected yet." else "Enable Sequmio Accessibility first."
                                 openPermissions(Page.MY_APP)
                             }
                             selected == null -> recorderNotice =
@@ -343,8 +383,10 @@ internal fun SequmioApp(
                         val cases = runCatching {
                             ScenarioCodec.split(ownAppDraft.scenarioJson).toMutableList()
                         }.getOrElse { mutableListOf() }
-                        if (selectedScenarioIndex in cases.indices)
+                        if (selectedScenarioIndex in cases.indices) {
+                            syncEditedCase(cases[selectedScenarioIndex], updated.scenarioJson, ownAppDraft.packageName)
                             cases[selectedScenarioIndex] = updated.scenarioJson
+                        }
                         else cases.add(updated.scenarioJson)
                         val next = ownAppDraft.copy(
                             scenarioJson = ScenarioCodec.compose(cases)
@@ -419,7 +461,7 @@ internal fun SequmioApp(
 
 @Composable
 private fun SequmioHome(
-    plan: TestPlan, runner: RunSnapshot, connected: Boolean, message: String,
+    plan: TestPlan, runner: RunSnapshot, connected: Boolean, systemEnabled: Boolean, message: String,
     onStart: () -> Unit, onEdit: () -> Unit, onSetup: () -> Unit,
     onPause: () -> Unit, onResume: () -> Unit, onStop: () -> Unit
 ) {
@@ -625,13 +667,15 @@ private fun SequmioHome(
                         "Runner Status", Icons.Outlined.Timeline,
                         trailing = {
                             SeqChip(
-                                if (connected) "Connected" else "Setup required",
-                                if (connected) SeqColors.Success else SeqColors.Error
+                                if (connected) "Connected" else if (systemEnabled) "Disconnected" else "Setup required",
+                                if (connected) SeqColors.Success else if (systemEnabled) SeqColors.Primary else SeqColors.Error
                             )
                         }
                     )
                     if (!connected) {
-                        Text("Accessibility access is needed to run test plans.",
+                        Text(if (systemEnabled)
+                            "Android access is enabled. Waiting for the Runner service to connect."
+                            else "Accessibility access is needed to run test plans.",
                             color = SeqColors.Muted, fontSize = 12.sp)
                         SeqTextButton(onClick = onSetup) { Text("Manage permissions") }
                     } else if (runner.phase == RunPhase.FINISHED) {
@@ -869,14 +913,17 @@ private fun SequmioHistory(history: List<RunEvent>, reports: List<RunReport>) {
     val context = LocalContext.current
     var expandedReportId by remember { mutableStateOf<String?>(null) }
     var showAllEvents by rememberSaveable { mutableStateOf(false) }
+    val exportScope = rememberCoroutineScope()
     fun share(report: RunReport, csv: Boolean) {
-        val data = if (csv) report.csv else report.rawJson
+        exportScope.launch {
+        val data = withContext(Dispatchers.IO) { if (csv) report.csv else report.rawJson }
         val intent = Intent(Intent.ACTION_SEND).apply {
             type = if (csv) "text/csv" else "application/json"
             putExtra(Intent.EXTRA_SUBJECT, "Sequmio QA session " + report.id)
             putExtra(Intent.EXTRA_TEXT, data)
         }
         context.startActivity(Intent.createChooser(intent, "Share local QA report"))
+        }
     }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),

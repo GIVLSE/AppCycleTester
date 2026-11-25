@@ -86,9 +86,7 @@ class ScenarioPlayer(
         }
         val step = scenario.steps[current]
         later(step.delayBeforeMs) {
-            if (!mayRun()) {
-                advance()
-            } else execute(step)
+            execute(step)
         }
     }
 

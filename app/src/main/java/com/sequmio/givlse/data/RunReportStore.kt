@@ -7,6 +7,11 @@ import com.sequmio.givlse.data.StepExecutionResult
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
+import java.util.concurrent.Executors
+import android.os.SystemClock
+import android.util.Log
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 
 data class RunReport(
     val id: String,
@@ -16,34 +21,79 @@ data class RunReport(
     val durationSeconds: Long,
     val completedCycles: Int,
     val reason: String,
-    val rawJson: String,
-    val csv: String
-)
+    val rawJson: String
+) {
+    // Only generate the selected report's CSV when requested.
+    val csv: String by lazy { ReportDetails.toCsv(JSONObject(rawJson)) }
+}
 
 /** Bounded local structured reports. Sessions interrupted by a process kill never become PASS. */
 class RunReportStore(private val context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences("sequmio_run_reports_v1", Context.MODE_PRIVATE)
-    private fun pending() = prefs.getString("active", null)?.let { runCatching { JSONObject(it) }.getOrNull() }
-    private fun save(json: JSONObject) { prefs.edit().putString("active", json.toString()).apply() }
-    private fun item(json: JSONObject, index: Int) = json.optJSONArray("targets")?.optJSONObject(index)
-    private fun change(block: (JSONObject) -> Unit) {
-        val json = pending() ?: return
-        block(json)
-        save(json)
+    companion object {
+        // All report mutations and disk commits are ordered across service instances.
+        private val io = Executors.newSingleThreadExecutor()
+        private val revisionState = MutableStateFlow(0L)
+        val revision: StateFlow<Long> = revisionState
     }
 
-    fun recoverInterrupted(): Boolean {
-        val json = pending() ?: return false
-        finalizeActive(json, "BLOCKED", "Process or Accessibility service interrupted")
-        json.put("status", "INTERRUPTED")
-            .put("endedAt", System.currentTimeMillis())
-            .put("reason", "Process or Accessibility service interrupted")
-        archive(json)
-        return true
+    // Worker-thread confined. Main-thread calls only enqueue small immutable inputs.
+    private var activeJson: JSONObject? = null
+    private var lastSave = 0L
+    private var storageError = false
+    private val caseCounts = mutableMapOf<Int, Int>()
+
+    private fun dispatch(block: () -> Unit) {
+        io.execute {
+            try { block() } catch (e: Exception) {
+                storageError = true
+                Log.e("SequmioReports", "Report operation failed", e)
+            }
+        }
+    }
+
+    private fun pending() = prefs.getString("active", null)?.let { runCatching { JSONObject(it) }.getOrNull() }
+    private fun save(json: JSONObject, force: Boolean = false) {
+        activeJson = json
+        val now = SystemClock.elapsedRealtime()
+        if (force || now - lastSave >= 2000L) {
+            if (!prefs.edit().putString("active", json.toString()).commit()) {
+                storageError = true
+                Log.e("SequmioReports", "Active report checkpoint failed")
+            }
+            lastSave = now
+        }
+    }
+    private fun item(json: JSONObject, index: Int) = json.optJSONArray("targets")?.optJSONObject(index)
+    private fun change(block: (JSONObject) -> Unit) {
+        dispatch {
+            val json = activeJson ?: return@dispatch
+            block(json)
+            save(json)
+        }
+    }
+
+    fun recoverInterrupted() {
+        dispatch { recoverInterruptedOnWorker() }
+    }
+
+    private fun recoverInterruptedOnWorker() {
+        val json = pending() ?: return
+        val state = json.optString("status")
+        if (state == "RUNNING" || state.isBlank()) {
+            finalizeActive(json, "BLOCKED", "Process or Accessibility service interrupted")
+            json.put("status", "INTERRUPTED")
+                .put("endedAt", System.currentTimeMillis())
+                .put("reason", "Process or Accessibility service interrupted")
+        }
+        if (!archive(json)) storageError = true
     }
 
     fun begin(plan: TestPlan) {
-        recoverInterrupted()
+        caseCounts.clear()
+        dispatch {
+        storageError = false
+        recoverInterruptedOnWorker()
         val targets = JSONArray()
         plan.targets.forEach { t ->
             val version = installedVersion(t.packageName)
@@ -77,7 +127,8 @@ class RunReportStore(private val context: Context) {
             .put("status", "RUNNING").put("startedAt", System.currentTimeMillis())
             .put("endedAt", 0L).put("elapsedSeconds", 0L)
             .put("completedCycles", 0).put("repeatMode", plan.repeatMode.name)
-            .put("reason", "").put("targets", targets).put("events", JSONArray()))
+            .put("reason", "").put("targets", targets).put("events", JSONArray()), force = true)
+        }
     }
 
     @Suppress("DEPRECATION")
@@ -111,7 +162,10 @@ class RunReportStore(private val context: Context) {
 
     fun scenarioStarted(index: Int, spec: ScenarioSpec, cycle: Int, iteration: Int,
         timeout: Int): Boolean {
-        var accepted = false
+        val count = caseCounts[index] ?: 0
+        if (count >= 150) return false
+        caseCounts[index] = count + 1
+        val startedAt = System.currentTimeMillis()
         change { json ->
             item(json, index)?.let { target ->
                 val arr = target.optJSONArray("scenarios") ?: JSONArray()
@@ -127,15 +181,14 @@ class RunReportStore(private val context: Context) {
                         .put("cycle", cycle).put("iteration", iteration)
                         .put("estimatedSeconds", spec.totalDurationSec).put("timeoutSeconds", timeout)
                         .put("status", "RUNNING").put("reason", "")
-                        .put("startedAt", System.currentTimeMillis()).put("endedAt", 0L)
+                        .put("startedAt", startedAt).put("endedAt", 0L)
                         .put("expectedSteps", expectedSteps).put("steps", JSONArray()))
                     target.put("scenarios", arr)
                     target.put("activeScenarioIndex", arr.length() - 1)
-                    accepted = true
                 }
             }
         }
-        return accepted
+        return true
     }
 
     fun targetOutcome(index: Int, status: String, reason: String) {
@@ -145,12 +198,13 @@ class RunReportStore(private val context: Context) {
     }
 
     fun scenarioEnded(index: Int, status: String, reason: String, actualMs: Long? = null) {
+        val endedAt = System.currentTimeMillis()
         change { json ->
             item(json, index)?.let { target ->
                 val current = target.optInt("activeScenarioIndex", -1)
                 target.optJSONArray("scenarios")?.optJSONObject(current)?.let {
                     if (it.optString("status") == "RUNNING") {
-                        ReportDetails.finalizeScenario(it, status, reason, System.currentTimeMillis())
+                        ReportDetails.finalizeScenario(it, status, reason, endedAt)
                         actualMs?.let { ms -> it.put("actualSeconds", ms.coerceAtLeast(0L) / 1000L) }
                     }
                 }
@@ -199,10 +253,11 @@ class RunReportStore(private val context: Context) {
     }
 
     fun event(message: String) {
+        val at = System.currentTimeMillis()
         change { json ->
             val events = json.optJSONArray("events") ?: JSONArray()
             if (events.length() < 250) {
-                events.put(JSONObject().put("at", System.currentTimeMillis()).put("message", message))
+                events.put(JSONObject().put("at", at).put("message", message))
             }
             json.put("events", events)
         }
@@ -212,28 +267,53 @@ class RunReportStore(private val context: Context) {
         change { it.put("elapsedSeconds", seconds).put("completedCycles", cycles) }
     }
 
-    fun finish(status: String, reason: String, seconds: Long, cycles: Int) {
-        val json = pending() ?: return
-        finalizeActive(json, status, reason)
-        json.put("status", status).put("reason", reason)
-            .put("endedAt", System.currentTimeMillis())
-            .put("elapsedSeconds", seconds).put("completedCycles", cycles)
-        if (status == "PASS") {
-            RunProgressStore(context).recordPassedApps(
-                json.optJSONArray("targets") ?: JSONArray()
-            )
+    fun finish(status: String, reason: String, seconds: Long, cycles: Int,
+        onSaved: (Boolean) -> Unit = {}) {
+        val endedAt = System.currentTimeMillis()
+        // Never hold the main thread waiting for the historical report archive.
+        io.execute {
+            var saved = false
+            try {
+                val json = activeJson ?: pending()
+                if (json != null) {
+                    finalizeActive(json, status, reason)
+                    json.put("status", status).put("reason", reason)
+                        .put("endedAt", endedAt)
+                        .put("elapsedSeconds", seconds).put("completedCycles", cycles)
+                    // Keep a terminal checkpoint if archiving fails or process dies.
+                    save(json, force = true)
+                    saved = archive(json)
+                    if (saved && status == "PASS")
+                        RunProgressStore(context).recordPassedApps(json.optJSONArray("targets") ?: JSONArray())
+                }
+            } catch (e: Exception) {
+                Log.e("SequmioReports", "Final report failed", e)
+                saved = false
+            } finally {
+                activeJson = null
+                onSaved(saved && !storageError)
+            }
         }
-        archive(json)
     }
 
-    private fun archive(json: JSONObject) {
+    private fun archive(json: JSONObject): Boolean {
         val arr = JSONArray().put(json)
         val old = runCatching { JSONArray(prefs.getString("history", "[]")) }.getOrDefault(JSONArray())
-        for (i in 0 until minOf(old.length(), 39)) old.optJSONObject(i)?.let { arr.put(it) }
-        prefs.edit().remove("active").putString("history", arr.toString()).commit()
-        if (CloudUploadPrefs(context).enabled) {
-            runCatching { CloudRunUploader.enqueue(context, json.optString("id")) }
+        val id = json.optString("id")
+        for (i in 0 until minOf(old.length(), 39)) {
+            old.optJSONObject(i)?.takeIf { it.optString("id") != id }?.let { arr.put(it) }
         }
+        val saved = prefs.edit().remove("active").putString("history", arr.toString()).commit()
+        if (!saved) {
+            Log.e("SequmioReports", "History archive commit failed")
+            return false
+        }
+        revisionState.value += 1
+        if (CloudUploadPrefs(context).enabled) {
+            runCatching { CloudRunUploader.enqueue(context, id) }
+                .onFailure { Log.e("SequmioReports", "Upload scheduling failed", it) }
+        }
+        return true
     }
 
     fun recent(): List<RunReport> {
@@ -257,7 +337,7 @@ class RunReportStore(private val context: Context) {
                     json.optString("id"), json.optString("status"),
                     json.optLong("startedAt"), json.optLong("endedAt"),
                     json.optLong("elapsedSeconds"), json.optInt("completedCycles"),
-                    json.optString("reason"), json.toString(2), ReportDetails.toCsv(json)
+                    json.optString("reason"), json.toString()
                 )
             }
         }

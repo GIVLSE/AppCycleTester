@@ -219,12 +219,13 @@ internal fun SequmioVisualScenarioEditor(
                 "re-run it and approve again from Test Suites.",
             color = SeqColors.Muted, fontSize = 12.sp)
         TextConfig("Scenario name", name) { name = it }
-        TextConfig("Total app time (seconds)", duration) { duration = it }
-        Row {
-            Switch(checked = loop, onCheckedChange = { loop = it })
-            Spacer(Modifier.width(12.dp))
-            Text("Repeat steps until app timer expires")
-        }
+        TextConfig("Estimated Duration (seconds)", duration) { duration = it }
+        val estimated = duration.toIntOrNull()
+        Text("Automatic Timeout: " + (if (estimated != null && estimated in 5..7200)
+            targetTimeLabel(com.sequmio.givlse.model.ExecutionPolicy.timeout(estimated, 0)) else "Not set"),
+            color = SeqColors.Teal, fontSize = 14.sp)
+        Text("Recording time is an estimate, not a hard limit. Override the timeout and choose looping in Test Plan.",
+            color = SeqColors.Muted, fontSize = 12.sp)
         Row {
             SeqTextButton(onClick = {
                 if (showJson) {

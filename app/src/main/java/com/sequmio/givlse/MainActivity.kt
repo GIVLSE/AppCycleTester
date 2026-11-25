@@ -19,6 +19,9 @@ import com.sequmio.givlse.runner.RunnerRuntime
 import com.sequmio.givlse.model.RunPhase
 import com.sequmio.givlse.data.RunReportStore
 import android.provider.Settings
+import android.database.ContentObserver
+import android.os.Handler
+import android.os.Looper
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -40,6 +43,24 @@ class MainActivity : ComponentActivity() {
     }
 
     private val settingsReturnVersion = MutableStateFlow(0)
+    private val accessibilityEnabled = MutableStateFlow(false)
+    private val permissionObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
+        override fun onChange(selfChange: Boolean) { refreshAccessibility() }
+    }
+    private fun refreshAccessibility() {
+        accessibilityEnabled.value = isSequmioAccessibilityEnabled(this)
+    }
+    override fun onStart() {
+        super.onStart()
+        contentResolver.registerContentObserver(
+            Settings.Secure.getUriFor(Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES),
+            false, permissionObserver)
+        refreshAccessibility()
+    }
+    override fun onStop() {
+        contentResolver.unregisterContentObserver(permissionObserver)
+        super.onStop()
+    }
     private val notificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) {
             settingsReturnVersion.value += 1
@@ -47,6 +68,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        refreshAccessibility()
         settingsReturnVersion.value += 1
     }
 
@@ -97,6 +119,7 @@ class MainActivity : ComponentActivity() {
         window.decorView.systemUiVisibility = 0
         setContent {
             val permissionRefresh by settingsReturnVersion.collectAsState()
+            val systemEnabled by accessibilityEnabled.collectAsState()
             val resultOpenVersion by runResultOpenVersion.collectAsState()
             val run by RunnerRuntime.state.collectAsState()
             SideEffect {
@@ -116,6 +139,7 @@ class MainActivity : ComponentActivity() {
                     Box(Modifier.fillMaxSize().background(SeqBackground)) {
                         SequmioApp(
                             permissionRefreshToken = permissionRefresh,
+                            systemAccessibilityEnabled = systemEnabled,
                             resultOpenVersion = resultOpenVersion,
                             requestNotificationPermission = {
                                 if (Build.VERSION.SDK_INT >= 33)

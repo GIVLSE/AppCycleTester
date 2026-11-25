@@ -1,0 +1,3 @@
+# Sequmio 1.2.7 (28) — Stability hotfix
+
+Separate Android permission from service binding. Read enabled component from secure settings and observe changes. Serialized report IO, throttled durable checkpoints, lazy CSV, async history, immediate guarded terminal UI/notification/return, preserve result on reconnect, explicit estimated duration and automatic timeout in My App and editor, local exact-match scenario edit sync, visible plan parse errors. No new permissions or Firestore rules. Crash recovery may lose up to the latest checkpoint interval; never report interrupted tests as PASS. Android controls service binding and activity launch; device acceptance required. Stable cross-version case IDs and full cloud status schema deferred.

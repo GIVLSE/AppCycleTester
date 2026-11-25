@@ -131,10 +131,10 @@ internal fun executionLabel(target: TestTarget): String = when (target.execution
 internal fun SequmioDurationDialog(
     target: TestTarget, onDismiss: () -> Unit, onSave: (TestTarget) -> Unit
 ) {
-    val cases = remember(target.scenarioJson) {
+    val parsed = remember(target.scenarioJson, target.packageName) {
         runCatching { ScenarioCodec.parseAll(target.scenarioJson.orEmpty(), target.packageName) }
-            .getOrDefault(emptyList())
     }
+    val cases = parsed.getOrDefault(emptyList())
     val allKeys = cases.mapIndexed { i, spec -> ScenarioCodec.caseKey(i, spec) }
     var selectedKeys by remember(target) { mutableStateOf(
         target.selectedCaseKeys?.toSet()?.intersect(allKeys.toSet()) ?: allKeys.toSet()) }
@@ -156,6 +156,9 @@ internal fun SequmioDurationDialog(
             Column(Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Execution mode")
+                if (!target.scenarioJson.isNullOrBlank() && parsed.isFailure)
+                    Text("Test cases invalid: " + (parsed.exceptionOrNull()?.message ?: "Review source scenario"),
+                        color = SeqColors.Error, fontSize = 12.sp)
                 listOf(ExecutionMode.FIXED_DURATION to "Fixed Duration",
                     ExecutionMode.RUN_TEST_CASES to "Run Test Cases",
                     ExecutionMode.LOOP_TEST_CASES to "Loop Test Cases").forEach { (option, label) ->
@@ -173,10 +176,12 @@ internal fun SequmioDurationDialog(
                             Checkbox(checked = key in selectedKeys, onCheckedChange = {
                                 selectedKeys = if (it) selectedKeys + key else selectedKeys - key
                             })
-                            Text(spec.name + " v" + spec.version + " · " +
-                                targetTimeLabel(spec.totalDurationSec) + " estimated · " +
-                                targetTimeLabel(ExecutionPolicy.timeout(spec.totalDurationSec,
-                                    if (auto) 0 else timeout ?: 300)) + " timeout", fontSize = 12.sp)
+                            Column {
+                                Text(spec.name + " v" + spec.version, fontSize = 13.sp)
+                                Text("Estimated Duration: " + targetTimeLabel(spec.totalDurationSec), fontSize = 12.sp)
+                                Text("Timeout: " + targetTimeLabel(ExecutionPolicy.timeout(spec.totalDurationSec,
+                                    if (auto) 0 else timeout ?: 300)), fontSize = 12.sp)
+                            }
                         }
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {

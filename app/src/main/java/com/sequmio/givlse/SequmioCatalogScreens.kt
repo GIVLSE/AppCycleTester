@@ -666,7 +666,9 @@ internal fun SequmioDeveloperApp(
                     val name = root?.optJSONObject("meta")?.optString("name").orEmpty()
                         .ifBlank { "Test Case " + (index + 1) }
                     val seconds = root?.optJSONObject("execution")?.optInt("total_duration_sec", -1) ?: -1
-                    val duration = if (seconds >= 0) "${seconds / 60} min ${seconds % 60} sec" else "Duration not set"
+                    val duration = if (seconds in 5..7200) targetTimeLabel(seconds) else "Not set"
+                    val timeout = if (seconds in 5..7200)
+                        targetTimeLabel(com.sequmio.givlse.model.ExecutionPolicy.timeout(seconds, 0)) else "Not set"
                     val caseValid = remember(raw, form.packageName) {
                         runCatching { ScenarioCodec.parse(raw, form.packageName) }.isSuccess
                     }
@@ -680,7 +682,8 @@ internal fun SequmioDeveloperApp(
                             Column(Modifier.weight(1f).padding(vertical = 9.dp)) {
                                 Text(name, fontWeight = FontWeight.SemiBold, maxLines = 2,
                                     overflow = TextOverflow.Ellipsis, fontSize = 14.sp)
-                                Text(duration, color = SeqColors.Muted, fontSize = 12.sp)
+                                Text("Estimated Duration: " + duration, color = SeqColors.Muted, fontSize = 12.sp)
+                                Text("Automatic Timeout: " + timeout, color = SeqColors.Muted, fontSize = 12.sp)
                                 if (!caseValid) Text("Needs QA", color = SeqColors.Error, fontSize = 11.sp)
                             }
                             SeqIconAction(Icons.Outlined.Edit, "Edit " + name,
