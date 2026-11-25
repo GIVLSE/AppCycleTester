@@ -24,6 +24,11 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import com.sequmio.givlse.runner.RunCompletion
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -90,13 +95,16 @@ internal fun SequmioApp(
     var picker by remember { mutableStateOf(false) }
     var durationTarget by remember { mutableStateOf<TestTarget?>(null) }
     var message by remember { mutableStateOf("") }
-    LaunchedEffect(runner.phase, resultOpenVersion) {
-        if (runner.phase == RunPhase.FINISHED) {
+    val completion by RunnerRuntime.completion.collectAsState()
+    LaunchedEffect(completion?.id) {
+        if (completion != null) {
             page = Page.RUNNER
             message = ""
-        } else if (resultOpenVersion > 0 && runner.phase == RunPhase.IDLE) {
-            page = Page.RUNNER
         }
+    }
+    // A notification may reopen the Activity, but never resurrect an old popup.
+    LaunchedEffect(resultOpenVersion) {
+        if (resultOpenVersion > 0) page = Page.RUNNER
     }
     var recorderNotice by remember { mutableStateOf("") }
     var selectedScenarioIndex by remember { mutableIntStateOf(0) }
@@ -131,16 +139,10 @@ internal fun SequmioApp(
             store.readHistory().takeLast(120).reversed()
         }
     }
-    val runReports by produceState(emptyList<RunReport>(), page, reportRevision, runner.phase) {
-        if (page == Page.HISTORY || (page == Page.RUNNER && !active))
+    val runReports by produceState(emptyList<RunReport>(), page, reportRevision) {
+        if (page == Page.HISTORY)
             value = withContext(Dispatchers.IO) { RunReportStore(context.applicationContext).recent() }
     }
-    val visibleRunner = if (runner.phase == RunPhase.IDLE && runReports.isNotEmpty()) {
-        val last = runReports.first()
-        runner.copy(phase = RunPhase.FINISHED, terminalStatus = last.status,
-            success = last.status == "PASS", message = last.reason,
-            elapsedSeconds = last.durationSeconds, completedCycles = last.completedCycles)
-    } else runner
     fun setPlan(p: TestPlan) { plan = p; store.savePlan(p) }
     fun syncEditedCase(oldRaw: String, newRaw: String, packageName: String) {
         if (active || oldRaw.isBlank()) return
@@ -227,7 +229,7 @@ internal fun SequmioApp(
                 Page.RUNNER -> Box(Modifier.fillMaxSize()) {
                     SeqRunnerAtmosphere(Modifier.matchParentSize())
                     SequmioHome(
-                    plan, visibleRunner, connected, systemAccessibilityEnabled, message,
+                    plan, runner, connected, systemAccessibilityEnabled, message,
                     onStart = { requestStart() },
                     onEdit = { page = Page.PLAN },
                     onSetup = { openPermissions(Page.RUNNER) },
@@ -436,6 +438,15 @@ internal fun SequmioApp(
             )
         }
     }
+    completion?.let { result ->
+        if (page == Page.RUNNER) RunCompletionDialog(result) {
+            if (RunnerRuntime.dismissCompletion(result.id)) {
+                runCatching {
+                    context.getSystemService(android.app.NotificationManager::class.java).cancel(411)
+                }
+            }
+        }
+    }
     if (picker) SequmioAppPicker(
         apps, plan.targets.map { it.packageName }.toSet(),
         onDismiss = { picker = false },
@@ -467,9 +478,6 @@ private fun SequmioHome(
     val active = runner.phase == RunPhase.RUNNING || runner.phase == RunPhase.PAUSED
     var appsCollapsed by rememberSaveable { mutableStateOf(false) }
     val listState = rememberLazyListState()
-    LaunchedEffect(runner.phase) {
-        if (runner.phase == RunPhase.FINISHED) listState.scrollToItem(0)
-    }
     val cycleSeconds = plan.targets.sumOf { target ->
         if (target.executionMode == ExecutionMode.RUN_TEST_CASES)
             runCatching { ScenarioCodec.selectCases(target.scenarioJson.orEmpty(), target.packageName, target.selectedCaseKeys)
@@ -490,32 +498,6 @@ private fun SequmioHome(
         contentPadding = PaddingValues(start = 18.dp, end = 18.dp, bottom = 26.dp, top = 3.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        if (runner.phase == RunPhase.FINISHED) item {
-            val status = runner.terminalStatus ?: if (runner.success == true) "PASS" else "FAIL"
-            val tint = when (status) {
-                "PASS" -> SeqColors.Success
-                "STOPPED" -> SeqColors.Primary
-                else -> SeqColors.Error
-            }
-            SeqCard(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(if (status == "PASS") Icons.Outlined.CheckCircle
-                            else if (status == "STOPPED") Icons.Outlined.StopCircle
-                            else Icons.Outlined.ErrorOutline, null,
-                            tint = tint, modifier = Modifier.size(30.dp))
-                        Spacer(Modifier.width(10.dp))
-                        Text("Run finished", Modifier.weight(1f),
-                            fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                        SeqChip(status, tint)
-                    }
-                    Text(runner.message, color = SeqColors.Text, fontSize = 13.sp)
-                    Text("Elapsed " + duration(runner.elapsedSeconds) + "  •  " +
-                        runner.completedCycles + " completed cycles",
-                        color = SeqColors.Muted, fontSize = 12.sp)
-                }
-            }
-        }
         item {
             SeqRunnerHero()
         }
@@ -681,21 +663,6 @@ private fun SequmioHome(
                         if (systemEnabled)
                             SeqTextButton(onClick = onRetryConnection) { Text("Retry connection") }
                         SeqTextButton(onClick = onSetup) { Text("Manage permissions") }
-                    } else if (runner.phase == RunPhase.FINISHED) {
-                        Text(
-                            "Last run: " + (runner.terminalStatus ?: if (runner.success == true) "PASS" else "FAIL"),
-                            color = when (runner.terminalStatus) {
-                                "STOPPED" -> SeqColors.Primary
-                                "PASS" -> SeqColors.Success
-                                else -> if (runner.success == true) SeqColors.Success else SeqColors.Error
-                            },
-                            fontSize = 17.sp, fontWeight = FontWeight.SemiBold
-                        )
-                        Text(
-                            "Elapsed " + duration(runner.elapsedSeconds) + "  •  " +
-                                runner.completedCycles + " completed cycles",
-                            color = SeqColors.Muted, fontSize = 12.sp
-                        )
                     } else {
                         Text(
                             if (active) "Running • " + duration(runner.elapsedSeconds)
@@ -715,6 +682,61 @@ private fun SequmioHome(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RunCompletionDialog(result: RunCompletion, onDismiss: () -> Unit) {
+    fun tint(status: String): Color = when (status) {
+        "PASS" -> SeqColors.Success
+        "FAIL", "BLOCKED", "TIMEOUT" -> SeqColors.Error
+        "NOT_EXECUTED" -> SeqColors.Muted
+        else -> SeqColors.Primary
+    }
+    Dialog(onDismissRequest = onDismiss,
+        properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true)) {
+        Surface(
+            modifier = Modifier.fillMaxWidth().clickable(onClickLabel = "Dismiss run results",
+                onClick = onDismiss),
+            shape = RoundedCornerShape(22.dp),
+            color = SeqColors.CardRaised,
+            border = BorderStroke(1.dp, SeqColors.Border)
+        ) {
+            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(if (result.status == "PASS") Icons.Outlined.CheckCircle
+                        else Icons.Outlined.ErrorOutline, null,
+                        tint = tint(result.status), modifier = Modifier.size(28.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Run finished", Modifier.weight(1f), fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold)
+                    SeqChip(result.status, tint(result.status))
+                }
+                Text(duration(result.elapsedSeconds) + " · " + result.completedCycles + " completed cycles",
+                    color = SeqColors.Muted, fontSize = 12.sp)
+                Text(result.reason, color = SeqColors.Text, fontSize = 13.sp)
+                HorizontalDivider(color = SeqColors.Border)
+                Column(Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    result.apps.forEach { app ->
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            SeqAppLetter(app.packageName, app.label)
+                            Spacer(Modifier.width(8.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(app.label, fontWeight = FontWeight.Medium,
+                                    maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                if (app.reason.isNotBlank())
+                                    Text(app.reason, color = SeqColors.Muted, fontSize = 11.sp)
+                            }
+                            SeqChip(app.status, tint(app.status))
+                        }
+                    }
+                }
+                HorizontalDivider(color = SeqColors.Border)
+                Text("Tap to dismiss · Details in History", color = SeqColors.Muted,
+                    fontSize = 12.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
             }
         }
     }

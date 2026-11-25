@@ -90,6 +90,7 @@ class CycleAccessibilityService : AccessibilityService() {
     private var worstStatus = "PASS"
     private var runGeneration = 0
     private var resultPresented = false
+    private var completionResults: RunCompletionAccumulator? = null
     private var lastCheckpointSecond = -1L
     private var destroying = false
     private var destroyed = false
@@ -292,6 +293,8 @@ class CycleAccessibilityService : AccessibilityService() {
         if (!RunnerForegroundService.start(this))
             return "Android refused the foreground test service. Open Sequmio and retry."
 
+        RunnerRuntime.clearCompletion()
+        completionResults = RunCompletionAccumulator(newPlan.targets)
         plan = newPlan.copy(targets = newPlan.targets.toList())
         phase = RunPhase.RUNNING
         index = 0
@@ -414,7 +417,7 @@ class CycleAccessibilityService : AccessibilityService() {
             )
         } else if (target.executionMode == ExecutionMode.FIXED_DURATION &&
             launchConfirmed && appElapsedMs >= target.durationSeconds * 1000L) {
-            reports.targetOutcome(index, "PASS", "")
+            recordTargetOutcome(index, "PASS", "")
             addEvent("Completed foreground time for " + target.label)
             advanceToNext()
         }
@@ -489,7 +492,7 @@ class CycleAccessibilityService : AccessibilityService() {
             }
             noteFailure("BLOCKED")
             reports.failure(index)
-            reports.targetOutcome(index, "BLOCKED", "Could not launch application")
+            recordTargetOutcome(index, "BLOCKED", "Could not launch application")
             addEvent("BLOCKED: could not launch " + target.label)
             inspected++
             val next = RunPolicy.next(index, p.targets.size, completedCycles,
@@ -522,7 +525,7 @@ class CycleAccessibilityService : AccessibilityService() {
         } else {
             noteFailure("BLOCKED")
             reports.failure(index)
-            reports.targetOutcome(index, "BLOCKED", reason)
+            recordTargetOutcome(index, "BLOCKED", reason)
             addEvent("BLOCKED: " + target.label + " after recovery attempts: " + reason)
             advanceToNext()
         }
@@ -553,6 +556,11 @@ class CycleAccessibilityService : AccessibilityService() {
         false
     }
 
+    private fun recordTargetOutcome(index: Int, status: String, reason: String) {
+        completionResults?.record(index, status, reason)
+        reports.targetOutcome(index, status, reason)
+    }
+
     private fun noteFailure(status: String) {
         hadFailure = true
         worstStatus = ExecutionPolicy.combine(worstStatus, status)
@@ -581,13 +589,14 @@ class CycleAccessibilityService : AccessibilityService() {
             }
             checkpoint()
             // Do not overwrite a successfully completed target with a different target's failure.
-            if (status != null || manuallyStopped) reports.targetOutcome(index, outcome, reason)
+            if (status != null || manuallyStopped) recordTargetOutcome(index, outcome, reason)
             addEvent(reason)
         } catch (e: Exception) {
             Log.e("SequmioRunner", "Finalization metadata failed", e)
             terminalStatus = "BLOCKED"
             success = false
             lastMessage = "Runner finalization error: " + e.javaClass.simpleName
+            completionResults?.record(index, "BLOCKED", lastMessage)
         } finally {
             scenarioPlayer?.stop()
             scenarioPlayer = null
@@ -604,6 +613,11 @@ class CycleAccessibilityService : AccessibilityService() {
                 }
             }
             publish()
+            completionResults?.let { results ->
+                RunnerRuntime.showCompletion(results.finish(finalStatus, finalReason,
+                    elapsedMs / 1000L, completedCycles))
+            }
+            completionResults = null
             try {
                 presentRunResult(finalReason, finalStatus)
             } catch (e: Exception) {
@@ -745,7 +759,7 @@ class CycleAccessibilityService : AccessibilityService() {
                         scenarioIteration++
                         startNextScenario()
                     } else {
-                        if (!scenarioFailed) reports.targetOutcome(index, "PASS", "")
+                        if (!scenarioFailed) recordTargetOutcome(index, "PASS", "")
                         advanceToNext()
                     }
                 }
@@ -767,7 +781,7 @@ class CycleAccessibilityService : AccessibilityService() {
         scenarioFailed = true
         noteFailure(status)
         reports.failure(index)
-        reports.targetOutcome(index, status, error)
+        recordTargetOutcome(index, status, error)
         addEvent(status + ": " + error)
         // Continue independent cases after an ordinary test failure when still in
         // the target app, but do not restart a failed loop iteration.
