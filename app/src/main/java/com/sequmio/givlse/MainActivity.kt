@@ -22,6 +22,7 @@ import android.provider.Settings
 import android.database.ContentObserver
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -49,6 +50,10 @@ class MainActivity : ComponentActivity() {
     }
     private fun refreshAccessibility() {
         accessibilityEnabled.value = isSequmioAccessibilityEnabled(this)
+        if (accessibilityEnabled.value) CycleAccessibilityService.refreshConnection()
+        Log.d("SequmioRunner", "Activity permission=" + accessibilityEnabled.value +
+            " connection=" + (CycleAccessibilityService.instance != null) +
+            " pid=" + android.os.Process.myPid())
     }
     override fun onStart() {
         super.onStart()
@@ -74,8 +79,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
-        if (hasFocus && RunnerRuntime.state.value.phase == RunPhase.FINISHED)
-            CycleAccessibilityService.instance?.acknowledgeResultVisible()
+        if (hasFocus) {
+            refreshAccessibility()
+            if (RunnerRuntime.state.value.phase == RunPhase.FINISHED)
+                CycleAccessibilityService.instance?.acknowledgeResultVisible()
+        }
     }
 
     private fun tryOpenSettings(intent: Intent): Boolean {
@@ -145,6 +153,7 @@ class MainActivity : ComponentActivity() {
                                 if (Build.VERSION.SDK_INT >= 33)
                                     notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                             },
+                            refreshRunnerConnection = { refreshAccessibility() },
                             openAccessibility = { showAccessibilityServiceSettings() },
                             openAccessibilityList = { showAccessibilitySettings() },
                             openDisplaySettings = {

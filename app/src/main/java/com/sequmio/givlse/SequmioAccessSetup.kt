@@ -44,6 +44,7 @@ internal fun SequmioAccessSetup(
     onAppInfo: () -> Unit,
     onAccessibility: () -> Unit,
     onAccessibilityList: () -> Unit,
+    onRetryConnection: () -> Unit,
     onNotifications: () -> Unit,
     onDisplaySettings: () -> Unit,
     onPrivacy: () -> Unit,
@@ -190,6 +191,13 @@ internal fun SequmioAccessSetup(
                         color = if (ready) SeqColors.Success else SeqColors.Muted,
                         modifier = Modifier.weight(1f)
                     )
+                }
+                if (systemEnabled && !ready) {
+                    SeqTextButton(onClick = onRetryConnection) { Text("Retry connection") }
+                    Text("This checkmark is automatic. Android must connect the service; " +
+                        "it cannot be selected manually. If connection remains unavailable, " +
+                        "check whether Android or your phone's background restrictions stopped Runner.",
+                        color = SeqColors.Muted, fontSize = 12.sp)
                 }
             }
         }

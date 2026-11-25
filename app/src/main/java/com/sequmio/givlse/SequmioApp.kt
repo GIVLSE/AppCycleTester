@@ -57,6 +57,9 @@ import kotlinx.coroutines.launch
 import com.sequmio.givlse.data.PlanCaseUpdates
 import java.util.Locale
 
+private const val RUNNER_DISCONNECTED_MESSAGE =
+    "Android access is enabled, but Runner is not connected. Retry connection below."
+
 private enum class Page { RUNNER, APP_LIST, MY_APP, HISTORY, PLAN, SETUP,
     SETTINGS, ABOUT, SUITE_MANAGER, SCENARIO_EDITOR, QA_DASHBOARD }
 
@@ -66,6 +69,7 @@ internal fun SequmioApp(
     systemAccessibilityEnabled: Boolean,
     resultOpenVersion: Int,
     requestNotificationPermission: () -> Unit,
+    refreshRunnerConnection: () -> Unit,
     openAccessibility: () -> Unit,
     openAccessibilityList: () -> Unit,
     openDisplaySettings: () -> Unit,
@@ -104,8 +108,13 @@ internal fun SequmioApp(
             RecorderRuntime.set(com.sequmio.givlse.runner.RecorderState())
         }
     }
-    val connected = runner.accessibilityReady && CycleAccessibilityService.instance != null &&
-        systemAccessibilityEnabled
+    // Bind status is independent of a test session's snapshot and survives
+    // Activity recreation while Android keeps the actual service connected.
+    val liveService by CycleAccessibilityService.connection.collectAsState()
+    val connected = systemAccessibilityEnabled && liveService != null
+    LaunchedEffect(connected) {
+        if (connected && message == RUNNER_DISCONNECTED_MESSAGE) message = ""
+    }
     val notificationsGranted = Build.VERSION.SDK_INT < 33 ||
         ContextCompat.checkSelfPermission(
             context, Manifest.permission.POST_NOTIFICATIONS
@@ -180,15 +189,22 @@ internal fun SequmioApp(
         page = Page.SETUP
     }
     fun start() {
+        if (plan.targets.isEmpty()) { page = Page.PLAN; return }
+        if (!consent || !isSequmioAccessibilityEnabled(context)) {
+            openPermissions(Page.RUNNER)
+            return
+        }
+        // Recheck the live service at the moment of Start, not a cached UI flag.
+        refreshRunnerConnection()
+        if (!CycleAccessibilityService.refreshConnection()) {
+            message = RUNNER_DISCONNECTED_MESSAGE
+            return
+        }
         message = CycleAccessibilityService.instance?.let { it.start(plan).orEmpty() }
-            ?: "Sequmio Runner is not connected"
+            ?: RUNNER_DISCONNECTED_MESSAGE
         if (message.isEmpty()) page = Page.RUNNER
     }
-    fun requestStart() {
-        if (plan.targets.isEmpty()) page = Page.PLAN
-        else if (!consent || !connected) openPermissions(Page.RUNNER)
-        else start()
-    }
+    fun requestStart() = start()
     val mainTabs = listOf(Page.RUNNER, Page.APP_LIST, Page.MY_APP, Page.HISTORY)
     Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
         if (page in mainTabs) {
@@ -215,6 +231,7 @@ internal fun SequmioApp(
                     onStart = { requestStart() },
                     onEdit = { page = Page.PLAN },
                     onSetup = { openPermissions(Page.RUNNER) },
+                    onRetryConnection = refreshRunnerConnection,
                     onPause = { CycleAccessibilityService.instance?.pause() },
                     onResume = { CycleAccessibilityService.instance?.resume() },
                     onStop = { CycleAccessibilityService.instance?.stop() }
@@ -322,10 +339,12 @@ internal fun SequmioApp(
                                 recorderNotice = "Review the updated recording disclosure first."
                                 openPermissions(Page.MY_APP)
                             }
-                            !connected -> {
-                                recorderNotice = if (systemAccessibilityEnabled)
-                                    "Runner service not connected yet." else "Enable Sequmio Accessibility first."
+                            !isSequmioAccessibilityEnabled(context) -> {
+                                recorderNotice = "Enable Sequmio Accessibility first."
                                 openPermissions(Page.MY_APP)
+                            }
+                            !CycleAccessibilityService.refreshConnection() -> {
+                                recorderNotice = RUNNER_DISCONNECTED_MESSAGE
                             }
                             selected == null -> recorderNotice =
                                 "Install your app on this device before recording."
@@ -402,6 +421,7 @@ internal fun SequmioApp(
                     onAppInfo = openAppDetails,
                     onAccessibility = openAccessibility,
                     onAccessibilityList = openAccessibilityList,
+                    onRetryConnection = refreshRunnerConnection,
                     onNotifications = requestNotificationPermission,
                     onDisplaySettings = openDisplaySettings,
                     onPrivacy = openPrivacy,
@@ -441,6 +461,7 @@ internal fun SequmioApp(
 private fun SequmioHome(
     plan: TestPlan, runner: RunSnapshot, connected: Boolean, systemEnabled: Boolean, message: String,
     onStart: () -> Unit, onEdit: () -> Unit, onSetup: () -> Unit,
+    onRetryConnection: () -> Unit,
     onPause: () -> Unit, onResume: () -> Unit, onStop: () -> Unit
 ) {
     val active = runner.phase == RunPhase.RUNNING || runner.phase == RunPhase.PAUSED
@@ -657,6 +678,8 @@ private fun SequmioHome(
                             "Android access is enabled. Waiting for the Runner service to connect."
                             else "Accessibility access is needed to run test plans.",
                             color = SeqColors.Muted, fontSize = 12.sp)
+                        if (systemEnabled)
+                            SeqTextButton(onClick = onRetryConnection) { Text("Retry connection") }
                         SeqTextButton(onClick = onSetup) { Text("Manage permissions") }
                     } else if (runner.phase == RunPhase.FINISHED) {
                         Text(

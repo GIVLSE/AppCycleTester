@@ -16,6 +16,8 @@ import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
 import android.util.Log
+import com.sequmio.givlse.isSequmioAccessibilityEnabled
+import kotlinx.coroutines.flow.StateFlow
 import android.view.accessibility.AccessibilityEvent
 import com.sequmio.givlse.data.RunReportStore
 import com.sequmio.givlse.data.ScenarioCodec
@@ -38,8 +40,21 @@ import com.sequmio.givlse.model.ExecutionPolicy
  */
 class CycleAccessibilityService : AccessibilityService() {
     companion object {
-        @Volatile var instance: CycleAccessibilityService? = null
-            private set
+        private val registry = ServiceConnectionRegistry<CycleAccessibilityService>()
+        val connection: StateFlow<CycleAccessibilityService?> = registry.connection
+        val instance: CycleAccessibilityService? get() = registry.current
+
+        /** Activity resume / explicit Retry: verify a known service with the framework.
+         * Never start or bind an AccessibilityService ourselves.
+         */
+        fun refreshConnection(): Boolean {
+            val candidate = registry.current ?: return false
+            if (candidate.hasSystemConnection()) return true
+            registry.detach(candidate)
+            Log.w("SequmioRunner", "Known Runner connection is no longer available")
+            candidate.publishConnectionState()
+            return false
+        }
     }
 
     private val handler = Handler(Looper.getMainLooper())
@@ -77,6 +92,32 @@ class CycleAccessibilityService : AccessibilityService() {
     private var resultPresented = false
     private var lastCheckpointSecond = -1L
     private var destroying = false
+    private var destroyed = false
+
+    private fun hasSystemConnection(): Boolean = !destroyed && runCatching {
+        isSequmioAccessibilityEnabled(this) && serviceInfo != null
+    }.getOrDefault(false)
+
+    private fun publishConnectionState() {
+        val snapshot = RunnerRuntime.state.value
+        RunnerRuntime.publish(snapshot.copy(accessibilityReady = instance != null))
+    }
+
+    /** Framework callbacks are the only authority for registering a live service. */
+    private fun registerConnection(from: String, authoritative: Boolean): Boolean {
+        if (destroyed) return false
+        // A queued event from an old service must not displace a newer binding.
+        if (!authoritative && instance != null && instance !== this) return false
+        if (!hasSystemConnection()) return false
+        val fresh = registry.attach(this)
+        destroying = false
+        if (fresh) {
+            Log.i("SequmioRunner", "Runner connected via " + from +
+                " pid=" + android.os.Process.myPid())
+            publishConnectionState()
+        }
+        return true
+    }
     private val scenarioTimeout = Runnable {
         if (phase == RunPhase.RUNNING && scenarioPlayer != null) {
             val now = SystemClock.elapsedRealtime()
@@ -105,17 +146,40 @@ class CycleAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         val fresh = instance !== this
-        instance = this
-        destroying = false
-        Log.i("SequmioRunner", "Accessibility service connected")
-        // Report recovery is queued off the main thread and cannot prevent binding.
-        if (fresh && phase == RunPhase.IDLE) reports.recoverInterrupted()
-        publish()
+        // onServiceConnected is called only after Android initializes the connection.
+        // A later real event can recover a transient null serviceInfo on some OEMs.
+        if (registerConnection("onServiceConnected", authoritative = true)) {
+            if (fresh && phase == RunPhase.IDLE) reports.recoverInterrupted()
+            publish()
+        } else {
+            Log.w("SequmioRunner", "onServiceConnected received; waiting for framework connection")
+        }
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (event != null) recorder?.onEvent(event)
-        if (phase != RunPhase.RUNNING || event == null ||
+        if (event == null || destroyed) return
+        // Repair a lost in-process reference only when Android delivers an actual
+        // event AND the live framework connection can be verified.
+        if (instance !== this) {
+            if (!registerConnection("onAccessibilityEvent", authoritative = false)) return
+            if (phase == RunPhase.IDLE) reports.recoverInterrupted()
+        }
+        if (destroying) return
+        try {
+            recorder?.onEvent(event)
+            handleRunEvent(event)
+        } catch (e: Exception) {
+            // An exception in an event callback must not crash the accessibility
+            // process and leave an enabled-but-unbound system service.
+            Log.e("SequmioRunner", "Accessibility event handling failed", e)
+            runCatching { recorder?.stop() }
+            if (phase == RunPhase.RUNNING || phase == RunPhase.PAUSED)
+                runCatching { finish("Accessibility event handling failed", false, status = "BLOCKED") }
+        }
+    }
+
+    private fun handleRunEvent(event: AccessibilityEvent) {
+        if (phase != RunPhase.RUNNING ||
             event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         val expected = plan?.targets?.getOrNull(index)?.packageName ?: return
         val foreground = event.packageName?.toString() ?: return
@@ -145,23 +209,21 @@ class CycleAccessibilityService : AccessibilityService() {
 
     override fun onUnbind(intent: Intent?): Boolean {
         destroying = true
-        Log.w("SequmioRunner", "Accessibility service unbound")
+        Log.w("SequmioRunner", "Accessibility service unbound pid=" + android.os.Process.myPid())
         try {
             runCatching { recorder?.stop() }
             if (phase == RunPhase.RUNNING || phase == RunPhase.PAUSED)
                 finish("Accessibility service disconnected", false, status = "BLOCKED")
         } finally {
-            if (instance === this) {
-                instance = null
-                publish()
-            }
+            if (registry.detach(this)) publishConnectionState()
         }
         return super.onUnbind(intent)
     }
 
     override fun onDestroy() {
         destroying = true
-        Log.w("SequmioRunner", "Accessibility service destroyed")
+        destroyed = true
+        Log.w("SequmioRunner", "Accessibility service destroyed pid=" + android.os.Process.myPid())
         try {
             runCatching { recorder?.stop() }
             if (phase == RunPhase.RUNNING || phase == RunPhase.PAUSED)
@@ -171,10 +233,7 @@ class CycleAccessibilityService : AccessibilityService() {
             scenarioPlayer?.stop()
             scenarioPlayer = null
             runCatching { unregisterScreenReceiver() }
-            if (instance === this) {
-                instance = null
-                publish()
-            }
+            if (registry.detach(this)) publishConnectionState()
             super.onDestroy()
         }
     }
@@ -185,6 +244,7 @@ class CycleAccessibilityService : AccessibilityService() {
      */
     fun startRecording(target: InstalledApp): String? {
         check(Looper.myLooper() == Looper.getMainLooper())
+        if (instance !== this || !hasSystemConnection()) return "Runner service is disconnected"
         if (!store.accessConsentGiven()) return "Review and accept the updated Accessibility disclosure"
         if (phase == RunPhase.RUNNING || phase == RunPhase.PAUSED)
             return "Stop the running test before recording"
@@ -224,6 +284,8 @@ class CycleAccessibilityService : AccessibilityService() {
 
     fun start(newPlan: TestPlan): String? {
         check(Looper.myLooper() == Looper.getMainLooper())
+        if (!store.accessConsentGiven()) return "Review the Accessibility disclosure first"
+        if (instance !== this || !hasSystemConnection()) return "Runner service is disconnected"
         newPlan.validate()?.let { return it }
         if (phase == RunPhase.RUNNING || phase == RunPhase.PAUSED)
             return "Stop the current test first"
