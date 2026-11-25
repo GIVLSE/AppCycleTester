@@ -22,3 +22,6 @@ Compact readiness above publish with info dialog. App Details + Closed-test Link
 
 ### BUG-128-05A — show QA Dashboard only while published
 Hide the entire card for new/unpublished drafts, during initial status verification, and after successful Unpublish. Render and request QA metrics only for a confirmed published listing belonging to the signed-in owner. First successful publication immediately reveals the card; failed publication does not. Existing results retained, visible again after republishing. No additional Firestore changes, version bump or build.
+
+## Release candidate
+Version 1.2.8 (29). Android CI and Firestore emulator regression required; production Firebase deploy and physical-device QA are separate acceptance steps.
