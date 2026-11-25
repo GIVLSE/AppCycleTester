@@ -516,8 +516,7 @@ internal fun SequmioDeveloperApp(
     var form by remember(initial) { mutableStateOf(initial) }
     var busy by remember { mutableStateOf(false) }
     var notice by remember { mutableStateOf("") }
-    var published by remember { mutableStateOf(false) }
-    var hasListing by remember { mutableStateOf(false) }
+    var published by remember(account.profile?.uid, form.packageName) { mutableStateOf(false) }
     var editDetails by remember(initial) { mutableStateOf(initial.validateDetails().isNotEmpty()) }
     var edited by remember(initial) { mutableStateOf(initial) }
     var requirementsOpen by remember { mutableStateOf(false) }
@@ -528,11 +527,9 @@ internal fun SequmioDeveloperApp(
     val profile = account.profile
     LaunchedEffect(profile?.uid, form.packageName) {
         published = false
-        hasListing = false
         if (profile != null && form.packageName.isNotBlank()) {
             try {
                 val listing = repo.myPublishedApp(form.packageName)
-                hasListing = listing != null
                 published = listing?.status == "published"
             } catch (cancel: CancellationException) { throw cancel }
             catch (_: Exception) { notice = "Could not load publication status." }
@@ -543,11 +540,11 @@ internal fun SequmioDeveloperApp(
     var joinedCount by remember(profile?.uid, form.packageName) { mutableStateOf<Long?>(null) }
     var previewLoading by remember { mutableStateOf(false) }
     var previewError by remember { mutableStateOf(false) }
-    LaunchedEffect(profile?.uid, form.packageName, hasListing, previewRefresh) {
+    LaunchedEffect(profile?.uid, form.packageName, published, previewRefresh) {
         preview = null
         joinedCount = null
         previewError = false
-        previewLoading = profile != null && hasListing
+        previewLoading = profile != null && published
         if (previewLoading) {
             suspend fun <T> fetchMetric(fetch: suspend () -> T): T? =
                 try { fetch() } catch (cancel: CancellationException) { throw cancel }
@@ -600,7 +597,6 @@ internal fun SequmioDeveloperApp(
                             repo.savePublished(form, form.scenarioJson,
                                 AppIconCodec.capture(context, form.packageName))
                             published = true
-                            hasListing = true
                             previewRefresh++
                             notice = "Published successfully. Your app is now in App List."
                         } catch (error: Exception) {
@@ -618,38 +614,38 @@ internal fun SequmioDeveloperApp(
                 SeqIconAction(Icons.Outlined.Close, "Dismiss message", onClick = { notice = "" })
             }
         }
-        SeqCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                SeqSectionTitle("QA Dashboard", Icons.Outlined.BarChart, trailing = {
-                    SeqIconAction(Icons.Outlined.Refresh, "Refresh QA metrics",
-                        onClick = { previewRefresh++ }, enabled = editable && hasListing && !previewLoading)
-                })
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Column(Modifier.weight(1f)) {
-                        Text(joinedCount?.toString() ?: "—", fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                        Text("Joined QA", color = SeqColors.Muted, fontSize = 12.sp)
+        if (profile != null && published) {
+            SeqCard(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                    SeqSectionTitle("QA Dashboard", Icons.Outlined.BarChart, trailing = {
+                        SeqIconAction(Icons.Outlined.Refresh, "Refresh QA metrics",
+                            onClick = { previewRefresh++ }, enabled = editable && !previewLoading)
+                    })
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Column(Modifier.weight(1f)) {
+                            Text(joinedCount?.toString() ?: "—", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                            Text("Joined QA", color = SeqColors.Muted, fontSize = 12.sp)
+                        }
+                        Column(Modifier.weight(1f)) {
+                            Text(preview?.total?.toString() ?: "—", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                            Text("Runs today", color = SeqColors.Muted, fontSize = 12.sp)
+                        }
                     }
-                    Column(Modifier.weight(1f)) {
-                        Text(preview?.total?.toString() ?: "—", fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                        Text("Runs today", color = SeqColors.Muted, fontSize = 12.sp)
+                    preview?.let { summary ->
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(summary.passed.toString() + " Passed", color = SeqColors.Success, fontSize = 12.sp)
+                            Text(summary.failed.toString() + " Failed", color = SeqColors.Error, fontSize = 12.sp)
+                            Text(summary.errors.toString() + " Errors", color = SeqColors.Sky, fontSize = 12.sp)
+                        }
                     }
+                    if (previewLoading) Text("Loading QA metrics…", color = SeqColors.Muted, fontSize = 12.sp)
+                    else if (previewError) Text("Some QA metrics are unavailable. Check the cloud connection and access.",
+                        color = SeqColors.Muted, fontSize = 12.sp)
+                    else Text("Shared tester results · local day", color = SeqColors.Muted, fontSize = 11.sp)
+                    SeqPrimaryButton("Open QA Dashboard", onClick = { onDashboard(form) },
+                        modifier = Modifier.fillMaxWidth(), icon = Icons.Outlined.BarChart,
+                        enabled = editable && !editDetails)
                 }
-                preview?.let { summary ->
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(summary.passed.toString() + " Passed", color = SeqColors.Success, fontSize = 12.sp)
-                        Text(summary.failed.toString() + " Failed", color = SeqColors.Error, fontSize = 12.sp)
-                        Text(summary.errors.toString() + " Errors", color = SeqColors.Sky, fontSize = 12.sp)
-                    }
-                }
-                if (previewLoading) Text("Loading QA metrics…", color = SeqColors.Muted, fontSize = 12.sp)
-                else if (previewError) Text("Some QA metrics are unavailable. Check the cloud connection and access.",
-                    color = SeqColors.Muted, fontSize = 12.sp)
-                else if (!hasListing) Text("Publish your app to start receiving QA results.",
-                    color = SeqColors.Muted, fontSize = 12.sp)
-                else Text("Shared tester results · local day", color = SeqColors.Muted, fontSize = 11.sp)
-                SeqPrimaryButton("Open QA Dashboard", onClick = { onDashboard(form) },
-                    modifier = Modifier.fillMaxWidth(), icon = Icons.Outlined.BarChart,
-                    enabled = editable && profile != null && hasListing && !editDetails)
             }
         }
         SeqCard(Modifier.fillMaxWidth()) {
