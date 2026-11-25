@@ -114,6 +114,12 @@ class MyAppDraftStore(context: Context, private val uid: String? = null) {
     fun publicationStatus(packageName: String): String? =
         prefs.getString(statusKey(packageName), null)
 
+    /** Use the published snapshot, not potentially unpublished local edits. */
+    fun publishedDrafts(): List<MyAppDraft> = choices().mapNotNull { draft ->
+        if (publicationStatus(draft.packageName) == "published") read(baselineKey(draft.packageName))
+        else null
+    }
+
     fun markPublished(draft: MyAppDraft) {
         prefs.edit().putString(baselineKey(draft.packageName), encode(draft))
             .putString(statusKey(draft.packageName), "published").apply()

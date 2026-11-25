@@ -47,6 +47,7 @@ import com.sequmio.givlse.data.SettingsStore
 import com.sequmio.givlse.data.MyAppDraftStore
 import com.sequmio.givlse.data.ScenarioCodec
 import com.sequmio.givlse.data.PublishedApp
+import com.sequmio.givlse.data.toDraft
 import com.sequmio.givlse.account.SequmioAccount
 import com.sequmio.givlse.model.*
 import com.sequmio.givlse.runner.CycleAccessibilityService
@@ -60,6 +61,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import com.sequmio.givlse.data.PlanCaseUpdates
+import com.sequmio.givlse.data.OwnerPlanSync
 import java.util.Locale
 
 private const val RUNNER_DISCONNECTED_MESSAGE =
@@ -94,6 +96,13 @@ internal fun SequmioApp(
     val draftStore = remember(ownerUid) { MyAppDraftStore(context, ownerUid) }
     var ownAppDraft by remember(ownerUid) { mutableStateOf(draftStore.load()) }
     var ownedChoices by remember(ownerUid) { mutableStateOf(draftStore.choices()) }
+    var publishedOwned by remember(ownerUid) {
+        mutableStateOf(if (ownerUid == null) emptyList() else draftStore.publishedDrafts())
+    }
+    var excludedOwned by remember(ownerUid) {
+        mutableStateOf(ownerUid?.let(store::excludedOwnedApps).orEmpty())
+    }
+    var initialOwnerSyncDone by remember(ownerUid) { mutableStateOf(false) }
     var draftRevision by remember(ownerUid) { mutableIntStateOf(0) }
     var restoreRevision by remember(ownerUid) { mutableIntStateOf(0) }
     val onMyApp = page == Page.MY_APP
@@ -112,13 +121,15 @@ internal fun SequmioApp(
         ownedChoices = draftStore.choices()
     }
     LaunchedEffect(ownerUid, onMyApp, restoreRevision) {
-        if (ownerUid != null && onMyApp) {
+        if (ownerUid != null && (onMyApp || !initialOwnerSyncDone)) {
             try {
                 val owned = kotlinx.coroutines.withTimeoutOrNull(10_000L) {
                     com.sequmio.givlse.data.CommunityRepository(account).myApps(ownerUid)
                 } ?: error("Cloud sync timed out")
                 if (account.profile?.uid == ownerUid) {
                     draftStore.restoreOwned(owned)
+                    publishedOwned = draftStore.publishedDrafts()
+                    initialOwnerSyncDone = true
                     reloadDraft()
                 }
             } catch (cancel: kotlinx.coroutines.CancellationException) {
@@ -184,6 +195,32 @@ internal fun SequmioApp(
             value = withContext(Dispatchers.IO) { RunReportStore(context.applicationContext).recent() }
     }
     fun setPlan(p: TestPlan) { plan = p; store.savePlan(p) }
+    // Auto-import after sign-in even if My App or Community has never been opened.
+    // Wait until the current run/dialog ends before modifying its plan.
+    LaunchedEffect(ownerUid, publishedOwned, excludedOwned, apps, active, durationTarget, picker) {
+        if (!active && durationTarget == null && !picker) {
+            val next = OwnerPlanSync.merge(plan, ownerUid, publishedOwned, apps, excludedOwned)
+            if (next != plan) setPlan(next)
+        }
+    }
+    fun setOwnedExcluded(pkg: String, excluded: Boolean) {
+        val uid = ownerUid ?: return
+        store.setOwnedExcluded(uid, pkg, excluded)
+        excludedOwned = store.excludedOwnedApps(uid)
+    }
+    fun addInstalledToPlan(installed: InstalledApp) {
+        if (active) return
+        val uid = ownerUid
+        val draft = publishedOwned.firstOrNull { it.packageName == installed.packageName }
+        if (uid != null && draft != null) {
+            setOwnedExcluded(installed.packageName, false)
+            val next = OwnerPlanSync.addExplicit(plan, uid, draft, installed)
+            if (next != plan) setPlan(next)
+        } else if (plan.targets.none { it.packageName == installed.packageName }) {
+            setPlan(plan.copy(targets = plan.targets + TestTarget(
+                installed.packageName, installed.activityClass, installed.label)))
+        }
+    }
     fun syncEditedCase(oldRaw: String, newRaw: String, packageName: String) {
         if (active || oldRaw.isBlank()) return
         val next = plan.targets.map { PlanCaseUpdates.replaceLocal(it, packageName, oldRaw, newRaw) }
@@ -293,6 +330,7 @@ internal fun SequmioApp(
                         }
                     },
                     onRemove = { pkg ->
+                        if (publishedOwned.any { it.packageName == pkg }) setOwnedExcluded(pkg, true)
                         setPlan(plan.copy(targets = plan.targets.filterNot { it.packageName == pkg }))
                     },
                     onRepeat = { setPlan(plan.copy(repeatMode = it)) },
@@ -309,13 +347,15 @@ internal fun SequmioApp(
                         mergeCommunity(listOf(published to installed), true)
                     },
                     onSync = { list -> mergeCommunity(list, false) },
-                    onLocalTest = { installed ->
-                        if (plan.targets.none { it.packageName == installed.packageName }) {
-                            setPlan(plan.copy(targets = plan.targets + TestTarget(
-                                installed.packageName, installed.activityClass,
-                                installed.label
-                            )))
+                    onOwnedTest = { published, installed ->
+                        if (!active && ownerUid != null && published.ownerUid == ownerUid) {
+                            setOwnedExcluded(installed.packageName, false)
+                            setPlan(OwnerPlanSync.addExplicit(plan, ownerUid, published.toDraft(), installed))
+                            page = Page.RUNNER
                         }
+                    },
+                    onLocalTest = { installed ->
+                        addInstalledToPlan(installed)
                         page = Page.RUNNER
                     }
                 )
@@ -341,8 +381,14 @@ internal fun SequmioApp(
                         if (imported != null) reloadDraft()
                         imported != null
                     },
-                    onPublished = { draft -> draftStore.markPublished(draft) },
-                    onUnpublished = { pkg -> draftStore.markUnpublished(pkg) },
+                    onPublished = { draft ->
+                        draftStore.markPublished(draft)
+                        publishedOwned = draftStore.publishedDrafts()
+                    },
+                    onUnpublished = { pkg ->
+                        draftStore.markUnpublished(pkg)
+                        publishedOwned = draftStore.publishedDrafts()
+                    },
                     onSave = { updated -> saveDraft(updated) },
                     onOpenSettings = { openSettings() },
                     onEditCase = { draft, index ->
@@ -505,9 +551,7 @@ internal fun SequmioApp(
         apps, plan.targets.map { it.packageName }.toSet(),
         onDismiss = { picker = false },
         onAdd = { selected ->
-            setPlan(plan.copy(targets = plan.targets + selected.map {
-                TestTarget(it.packageName, it.activityClass, it.label)
-            }))
+            selected.forEach { addInstalledToPlan(it) }
             picker = false
         }
     )
@@ -648,8 +692,11 @@ private fun SequmioHome(
                                                 maxLines = 1, overflow = TextOverflow.Ellipsis)
                                             Text(
                                                 executionLabel(target) +
-                                                    if (target.origin == "community")
-                                                        " · Community" else " · Local plan",
+                                                    when (target.origin) {
+                                                        "community" -> " · Community"
+                                                        "owner" -> " · My App"
+                                                        else -> " · Local plan"
+                                                    },
                                                 fontSize = 11.sp, color = SeqColors.Muted
                                             )
                                             val timing = remember(target) { scenarioTimingLabel(target) }
@@ -857,7 +904,11 @@ private fun SequmioPlan(
                         Text(target.label, maxLines = 1, overflow = TextOverflow.Ellipsis,
                             fontWeight = FontWeight.SemiBold)
                         Text(executionLabel(target) +
-                            (if (target.origin == "community") " • Community" else " • edit"),
+                            (when (target.origin) {
+                                "community" -> " • Community"
+                                "owner" -> " • My App"
+                                else -> " • edit"
+                            }),
                             color = SeqColors.Muted, fontSize = 12.sp)
                         val timing = remember(target) { scenarioTimingLabel(target) }
                         if (timing != null) Text(timing, color = SeqColors.Muted, fontSize = 11.sp)

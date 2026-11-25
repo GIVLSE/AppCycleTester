@@ -11,7 +11,8 @@ data class TestTarget(
     val executionMode: ExecutionMode = if (scenarioJson.isNullOrBlank())
         ExecutionMode.FIXED_DURATION else ExecutionMode.RUN_TEST_CASES,
     val scenarioTimeoutSeconds: Int = 0,
-    val selectedCaseKeys: List<String>? = null
+    val selectedCaseKeys: List<String>? = null,
+    val ownerUid: String? = null
 )
 enum class RepeatMode { ONCE, COUNT, ENDLESS }
 data class TestPlan(

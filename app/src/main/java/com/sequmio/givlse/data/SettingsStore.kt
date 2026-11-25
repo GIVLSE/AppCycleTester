@@ -18,6 +18,15 @@ class SettingsStore(context: Context) {
         prefs.edit().putBoolean("access_disclosure_consent_v3", true).apply()
     }
 
+    fun excludedOwnedApps(uid: String): Set<String> =
+        prefs.getStringSet("owned_plan_excluded:$uid", emptySet()).orEmpty().toSet()
+
+    fun setOwnedExcluded(uid: String, pkg: String, excluded: Boolean) {
+        val previous = excludedOwnedApps(uid)
+        val next = if (excluded) previous + pkg else previous - pkg
+        prefs.edit().putStringSet("owned_plan_excluded:$uid", next).apply()
+    }
+
     fun loadPlan(): TestPlan = try {
         val json = JSONObject(prefs.getString("plan", "{}") ?: "{}")
         val targetsArray = json.optJSONArray("targets") ?: JSONArray()
@@ -37,7 +46,7 @@ class SettingsStore(context: Context) {
                     target.optInt("scenarioTimeoutSeconds", 0).coerceIn(0, 14430),
                     target.optJSONArray("selectedCaseKeys")?.let { arr ->
                         (0 until arr.length()).map { arr.optString(it) }.filter { it.isNotBlank() }
-                    }))
+                    }, target.optString("ownerUid", "").takeIf { it.isNotBlank() }))
             }
         }
         TestPlan(
@@ -60,6 +69,7 @@ class SettingsStore(context: Context) {
                 .put("label", it.label).put("durationSeconds", it.durationSeconds)
                 .put("scenarioJson", it.scenarioJson ?: "")
                 .put("origin", it.origin)
+                .put("ownerUid", it.ownerUid ?: "")
                 .put("executionMode", it.executionMode.name)
                 .put("scenarioTimeoutSeconds", it.scenarioTimeoutSeconds)
                 .put("selectedCaseKeys", it.selectedCaseKeys?.let { keys -> JSONArray(keys) } ?: JSONObject.NULL))

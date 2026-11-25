@@ -49,6 +49,7 @@ internal fun SequmioCommunityCatalog(
     onOpenSettings: () -> Unit,
     onJoined: (PublishedApp, InstalledApp) -> Unit,
     onSync: (List<Pair<PublishedApp, InstalledApp>>) -> Unit,
+    onOwnedTest: (PublishedApp, InstalledApp) -> Unit,
     onLocalTest: (InstalledApp) -> Unit
 ) {
     val context = LocalContext.current
@@ -282,7 +283,21 @@ internal fun SequmioCommunityCatalog(
                                     }
                                 }
                                 if (uid == app.ownerUid) {
-                                    SeqChip("My App", SeqColors.Teal)
+                                    val local = installed.firstOrNull { it.packageName == app.packageName }
+                                    if (local != null) {
+                                        Surface(onClick = { onOwnedTest(app, local) },
+                                            shape = RoundedCornerShape(50),
+                                            color = SeqColors.Teal.copy(alpha = 0.15f),
+                                            contentColor = SeqColors.Teal) {
+                                            Row(Modifier.padding(horizontal = 10.dp, vertical = 9.dp),
+                                                verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(Icons.Outlined.PlayArrow, "Add My App to Runner",
+                                                    Modifier.size(16.dp))
+                                                Spacer(Modifier.width(4.dp))
+                                                Text("My App", fontSize = 12.sp, maxLines = 1)
+                                            }
+                                        }
+                                    } else SeqChip("My App", SeqColors.Teal)
                                 } else if (member) {
                                     Surface(onClick = { notice = ""; selected = app },
                                         shape = RoundedCornerShape(50),
