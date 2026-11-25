@@ -127,6 +127,18 @@ internal fun executionLabel(target: TestTarget): String = when (target.execution
     ExecutionMode.LOOP_TEST_CASES -> targetTimeLabel(target.durationSeconds) + " · Loop"
 }
 
+internal fun scenarioTimingLabel(target: TestTarget): String? {
+    if (target.executionMode == ExecutionMode.FIXED_DURATION) return null
+    val cases = runCatching {
+        ScenarioCodec.selectCases(target.scenarioJson.orEmpty(), target.packageName, target.selectedCaseKeys)
+    }.getOrElse { return "Review test case selection" }
+    val timeouts = cases.map { ExecutionPolicy.timeout(it.totalDurationSec, target.scenarioTimeoutSeconds) }
+    val min = timeouts.minOrNull() ?: return null
+    val max = timeouts.maxOrNull() ?: min
+    return "Timeout: " + targetTimeLabel(min) +
+        (if (max != min) "–" + targetTimeLabel(max) else "") + " / case"
+}
+
 @Composable
 internal fun SequmioDurationDialog(
     target: TestTarget, onDismiss: () -> Unit, onSave: (TestTarget) -> Unit

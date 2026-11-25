@@ -138,9 +138,25 @@ class CycleAccessibilityService : AccessibilityService() {
     }
 
     override fun onInterrupt() {
-        recorder?.stop()
+        runCatching { recorder?.stop() }
         if (phase == RunPhase.RUNNING || phase == RunPhase.PAUSED)
             finish("Accessibility service interrupted", false, status = "BLOCKED")
+    }
+
+    override fun onUnbind(intent: Intent?): Boolean {
+        destroying = true
+        Log.w("SequmioRunner", "Accessibility service unbound")
+        try {
+            runCatching { recorder?.stop() }
+            if (phase == RunPhase.RUNNING || phase == RunPhase.PAUSED)
+                finish("Accessibility service disconnected", false, status = "BLOCKED")
+        } finally {
+            if (instance === this) {
+                instance = null
+                publish()
+            }
+        }
+        return super.onUnbind(intent)
     }
 
     override fun onDestroy() {
@@ -642,6 +658,7 @@ class CycleAccessibilityService : AccessibilityService() {
             },
             onStep = { event -> addEvent(event) },
             onFailure = { error -> failScenario(error, "FAIL") },
+            onError = { error -> failScenario(error, "BLOCKED") },
             onResult = { result -> reports.step(index, result) },
             singlePass = true,
             onCompleted = { completed ->
@@ -718,8 +735,7 @@ class CycleAccessibilityService : AccessibilityService() {
         val event = RunEvent(System.currentTimeMillis(), message)
         events = (events + event).takeLast(60)
         lastMessage = message
-        store.appendHistory(event)
-        reports.event(message)
+        reports.event(message, event)
         publish()
     }
 

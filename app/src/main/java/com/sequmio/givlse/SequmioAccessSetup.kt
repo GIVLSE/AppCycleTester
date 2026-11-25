@@ -185,7 +185,7 @@ internal fun SequmioAccessSetup(
                     Spacer(Modifier.width(8.dp))
                     Text(
                         if (ready) "Runner connected — ready to start"
-                        else if (systemEnabled) "Enabled; waiting for service connection"
+                        else if (systemEnabled) "Android permission enabled; Runner not connected yet"
                         else "Waiting for Android permission",
                         color = if (ready) SeqColors.Success else SeqColors.Muted,
                         modifier = Modifier.weight(1f)
@@ -235,7 +235,8 @@ internal fun SequmioAccessSetup(
             SeqPrimaryButton("Start test", onStart, Modifier.fillMaxWidth())
         } else if (consent) {
             Text(
-                "Return from Android Settings to refresh the checkmarks.",
+                if (systemEnabled) "Permission is already granted. Wait for Android to connect the Runner. If it remains disconnected, reopen the service settings."
+                else "Return from Android Settings to refresh the checkmarks.",
                 color = SeqColors.Muted, fontSize = 13.sp
             )
         }

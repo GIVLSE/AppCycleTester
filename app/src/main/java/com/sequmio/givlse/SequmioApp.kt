@@ -54,7 +54,7 @@ import org.json.JSONArray
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
-import com.sequmio.givlse.data.MyAppDraft
+import com.sequmio.givlse.data.PlanCaseUpdates
 import java.util.Locale
 
 private enum class Page { RUNNER, APP_LIST, MY_APP, HISTORY, PLAN, SETUP,
@@ -135,29 +135,7 @@ internal fun SequmioApp(
     fun setPlan(p: TestPlan) { plan = p; store.savePlan(p) }
     fun syncEditedCase(oldRaw: String, newRaw: String, packageName: String) {
         if (active || oldRaw.isBlank()) return
-        val next = plan.targets.map { target ->
-            if (target.origin != "local" || target.packageName != packageName ||
-                target.scenarioJson.isNullOrBlank()) target
-            else runCatching {
-                val cases = ScenarioCodec.split(target.scenarioJson).toMutableList()
-                val position = cases.indexOfFirst { JSONObject(it).toString() == JSONObject(oldRaw).toString() }
-                if (position < 0) target else {
-                    val oldSpec = ScenarioCodec.parse(cases[position], packageName)
-                    val newSpec = ScenarioCodec.parse(newRaw, packageName)
-                    cases[position] = newRaw
-                    val raw = ScenarioCodec.compose(cases)
-                    val keys = target.selectedCaseKeys?.map {
-                        if (it == ScenarioCodec.caseKey(position, oldSpec))
-                            ScenarioCodec.caseKey(position, newSpec) else it
-                    }
-                    target.copy(scenarioJson = raw, selectedCaseKeys = keys,
-                        durationSeconds = if (target.executionMode == ExecutionMode.RUN_TEST_CASES)
-                            ScenarioCodec.selectCases(raw, packageName, keys)
-                                .sumOf { it.totalDurationSec }.coerceIn(1, 7200)
-                        else target.durationSeconds)
-                }
-            }.getOrDefault(target)
-        }
+        val next = plan.targets.map { PlanCaseUpdates.replaceLocal(it, packageName, oldRaw, newRaw) }
         if (next != plan.targets) setPlan(plan.copy(targets = next))
     }
     fun mergeCommunity(
@@ -617,6 +595,8 @@ private fun SequmioHome(
                                                         " · Community" else " · Local plan",
                                                 fontSize = 11.sp, color = SeqColors.Muted
                                             )
+                                            val timing = remember(target) { scenarioTimingLabel(target) }
+                                            if (timing != null) Text(timing, fontSize = 11.sp, color = SeqColors.Muted)
                                         }
                                         if (active && runner.currentIndex == index) {
                                             SeqChip("Running", SeqColors.Teal)
@@ -780,6 +760,8 @@ private fun SequmioPlan(
                         Text(executionLabel(target) +
                             (if (target.origin == "community") " • Community" else " • edit"),
                             color = SeqColors.Muted, fontSize = 12.sp)
+                        val timing = remember(target) { scenarioTimingLabel(target) }
+                        if (timing != null) Text(timing, color = SeqColors.Muted, fontSize = 11.sp)
                     }
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Row(horizontalArrangement = Arrangement.spacedBy(0.dp)) {

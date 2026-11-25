@@ -24,6 +24,7 @@ class ScenarioPlayer(
     private val mayRun: () -> Boolean,
     private val onStep: (String) -> Unit,
     private val onFailure: (String) -> Unit,
+    private val onError: (String) -> Unit = onFailure,
     private val onResult: (StepExecutionResult) -> Unit = {},
     private val singlePass: Boolean = false,
     private val onCompleted: (ScenarioSpec) -> Unit = {}
@@ -53,7 +54,17 @@ class ScenarioPlayer(
         }
     }
 
-    fun start() { advance() }
+    fun start() { safely { advance() } }
+
+    private fun safely(action: () -> Unit) {
+        if (stopped) return
+        try {
+            action()
+        } catch (e: Exception) {
+            android.util.Log.e("SequmioRunner", "Scenario callback failed", e)
+            onError("Scenario execution error: " + e.javaClass.simpleName)
+        }
+    }
 
     fun stop() {
         stopped = true
@@ -65,7 +76,7 @@ class ScenarioPlayer(
         if (stopped) return
         val runnable = Runnable {
             pending = null
-            if (!stopped) action()
+            safely(action)
         }
         pending = runnable
         handler.postDelayed(runnable, ms.coerceIn(0L, 30_000L))
@@ -228,10 +239,10 @@ class ScenarioPlayer(
         val accepted = service.dispatchGesture(builder.build(),
             object : AccessibilityService.GestureResultCallback() {
                 override fun onCompleted(gestureDescription: GestureDescription?) {
-                    if (!stopped) onSuccess()
+                    safely(onSuccess)
                 }
                 override fun onCancelled(gestureDescription: GestureDescription?) {
-                    if (!stopped) onFail()
+                    safely(onFail)
                 }
             }, handler)
         if (!accepted) onFail()

@@ -252,8 +252,9 @@ class RunReportStore(private val context: Context) {
         }
     }
 
-    fun event(message: String) {
-        val at = System.currentTimeMillis()
+    fun event(message: String, localEvent: com.sequmio.givlse.model.RunEvent? = null) {
+        val at = localEvent?.timestampMillis ?: System.currentTimeMillis()
+        if (localEvent != null) dispatch { SettingsStore(context).appendHistory(localEvent) }
         change { json ->
             val events = json.optJSONArray("events") ?: JSONArray()
             if (events.length() < 250) {
