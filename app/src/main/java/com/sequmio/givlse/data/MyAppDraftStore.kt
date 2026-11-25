@@ -12,28 +12,27 @@ data class MyAppDraft(
     val playStoreUrl: String = "",
     val scenarioJson: String = ""
 ) {
-    fun validateForPublish(): List<String> = buildList {
+    fun validateDetails(): List<String> = buildList {
         if (appName.isBlank()) add("App name is required")
         if (appName.length >= 100) add("App name must be shorter than 100 characters")
+        if (description.isBlank()) add("Description is required")
         if (description.length > 1000) add("Description must be 1000 characters or less")
         if (!Regex("^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)+$")
                 .matches(packageName)) add("Enter a valid Android package name")
-        if (!googleGroupUrl.isHttps()) add("Google Group link must use HTTPS")
-        if (!optInUrl.isHttps()) add("Become a Tester link must use HTTPS")
-        if (!playStoreUrl.isHttps()) add("Google Play link must use HTTPS")
-        if (googleGroupUrl.isNotBlank() && android.net.Uri.parse(googleGroupUrl).host != "groups.google.com")
-            add("Google Group must use groups.google.com")
-        if (optInUrl.isNotBlank() && android.net.Uri.parse(optInUrl).host != "play.google.com")
-            add("Become a Tester must use play.google.com")
-        if (playStoreUrl.isNotBlank() && android.net.Uri.parse(playStoreUrl).host != "play.google.com")
-            add("Google Play URL must use play.google.com")
-        // Match the Firestore publication URL allowlist before attempting the transaction.
-        if (googleGroupUrl.isNotBlank() && !googleGroupUrl.startsWith("https://groups.google.com/"))
-            add("Enter a direct HTTPS Google Group URL")
-        if (optInUrl.isNotBlank() && !optInUrl.startsWith("https://play.google.com/apps/testing/"))
-            add("Become a Tester link must start with https://play.google.com/apps/testing/")
-        if (playStoreUrl.isNotBlank() && !playStoreUrl.startsWith("https://play.google.com/store/apps/details"))
-            add("Enter the Google Play app details URL")
+        val links = listOf(
+            Triple("Google Group", googleGroupUrl, "https://groups.google.com/"),
+            Triple("Become a tester", optInUrl, "https://play.google.com/apps/testing/"),
+            Triple("Google Play", playStoreUrl, "https://play.google.com/store/apps/details")
+        )
+        links.forEach { (label, url, prefix) ->
+            if (url.isBlank()) add("$label link is required")
+            else if (!url.startsWith(prefix) || !url.isHttps())
+                add("$label: enter a valid URL starting with $prefix")
+        }
+    }
+
+    fun validateForPublish(): List<String> = buildList {
+        addAll(validateDetails())
         if (scenarioJson.length !in 41..48000)
             add("Test case data must contain 41 to 48000 characters")
         val scenarioError = runCatching {
@@ -45,7 +44,7 @@ data class MyAppDraft(
 
 private fun String.isHttps() =
     startsWith("https://", ignoreCase = true) &&
-    android.net.Uri.parse(this).host?.isNotBlank() == true
+    runCatching { java.net.URI(this).host?.isNotBlank() == true }.getOrDefault(false)
 
 /** Offline developer draft; JSON may contain up to 12 versioned test cases. */
 class MyAppDraftStore(context: Context) {

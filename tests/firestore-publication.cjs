@@ -84,7 +84,25 @@ async function main() {
       const doc = await assertSucceeds(guest.doc(path).get());
       assert.equal(doc.get("iconPng"), "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB");
     });
-    console.log("RESULT: " + count + "/17 PASSED");
+    const membership = {userUid: "other", packageName: pkg, selfConfirmed: true, joinedAt: new Date()};
+    await check("QA-01 tester joins", () =>
+      assertSucceeds(other.doc("memberships/other_" + pkg).set(membership)));
+    const query = db => db.collection("memberships")
+      .where("packageName", "==", pkg).where("selfConfirmed", "==", true);
+    await check("QA-02 listing owner can query confirmed memberships", async () => {
+      const result = await assertSucceeds(query(dev).get());
+      assert.equal(result.size, 1);
+    });
+    const stranger = env.authenticatedContext("stranger").firestore();
+    await check("QA-03 other developer cannot query memberships", () => assertFails(query(stranger).get()));
+    await check("QA-04 guest cannot query memberships", () => assertFails(query(guest).get()));
+    await check("QA-05 owner cannot list unrestricted memberships", () =>
+      assertFails(dev.collection("memberships").get()));
+    await check("QA-06 owner cannot modify tester membership", () =>
+      assertFails(dev.doc("memberships/other_" + pkg).delete()));
+    await check("QA-07 tester can still read own membership", () =>
+      assertSucceeds(other.doc("memberships/other_" + pkg).get()));
+    console.log("RESULT: " + count + "/24 PASSED");
   } finally { await env.cleanup(); }
 }
 main().catch(e => { console.error(e); process.exitCode = 1; });

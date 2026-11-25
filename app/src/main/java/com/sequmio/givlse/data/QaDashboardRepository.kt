@@ -1,6 +1,11 @@
 package com.sequmio.givlse.data
 
-import com.google.firebase.firestore.DocumentSnapshot
+import com.google.firebase.firestore.AggregateSource
+import com.google.firebase.firestore.Source
+import com.google.firebase.Timestamp
+import java.time.LocalDate
+import java.time.ZoneId
+import java.util.Date
 import com.sequmio.givlse.account.SequmioAccount
 import kotlinx.coroutines.tasks.await
 
@@ -33,6 +38,34 @@ data class QaDashboardData(val runs: List<QaRun>, val digests: List<QaDigest>) {
  * security rules; never downloads another developer's private test results.
  */
 class QaDashboardRepository(private val account: SequmioAccount) {
+    /** Exact joined count for this app; no tester identities are downloaded. */
+    suspend fun joinedCount(appId: String): Long {
+        val db = requireNotNull(account.cloudStore()) { "Cloud backend unavailable" }
+        requireNotNull(account.profile?.uid) { "Sign in first" }
+        return db.collection("memberships").whereEqualTo("packageName", appId)
+            .whereEqualTo("selfConfirmed", true).count().get(AggregateSource.SERVER).await().count
+    }
+
+    /** One session per tester/runId, not one row per uploaded test case. */
+    suspend fun today(appId: String): QaTodaySummary {
+        val uid = requireNotNull(account.profile?.uid) { "Sign in first" }
+        val db = requireNotNull(account.cloudStore()) { "Cloud backend unavailable" }
+        val zone = ZoneId.systemDefault()
+        val day = LocalDate.now(zone)
+        val start = Timestamp(Date.from(day.atStartOfDay(zone).toInstant()))
+        val end = Timestamp(Date.from(day.plusDays(1).atStartOfDay(zone).toInstant()))
+        val docs = db.collection("testRuns").whereEqualTo("ownerUid", uid)
+            .whereEqualTo("appId", appId).whereGreaterThanOrEqualTo("endedAt", start)
+            .whereLessThan("endedAt", end).get(Source.SERVER).await().documents
+        val cases = docs.mapNotNull { doc ->
+            val tester = doc.getString("testerUid").orEmpty()
+            val run = doc.getString("runId").orEmpty()
+            if (tester.isBlank() || tester == uid || run.isBlank()) null
+            else QaPreviewCase(tester, run, doc.getString("status").orEmpty())
+        }
+        return QaTodaySummary.fromCases(cases)
+    }
+
     suspend fun load(appId: String): QaDashboardData {
         val uid = requireNotNull(account.profile?.uid) { "Sign in first" }
         val db = requireNotNull(account.cloudStore()) { "Cloud backend unavailable" }
