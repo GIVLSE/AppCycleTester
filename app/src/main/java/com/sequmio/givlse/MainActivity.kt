@@ -81,8 +81,14 @@ class MainActivity : ComponentActivity() {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) {
             refreshAccessibility()
-            if (RunnerRuntime.state.value.phase == RunPhase.FINISHED)
-                CycleAccessibilityService.instance?.acknowledgeResultVisible()
+            if (RunnerRuntime.state.value.phase == RunPhase.FINISHED &&
+                CycleAccessibilityService.instance?.acknowledgeResultVisible() == true) {
+                // One user-visible tactile confirmation per completed run; respects system settings.
+                val feedback = if (Build.VERSION.SDK_INT >= 30)
+                    android.view.HapticFeedbackConstants.CONFIRM
+                else android.view.HapticFeedbackConstants.VIRTUAL_KEY
+                window.decorView.performHapticFeedback(feedback)
+            }
         }
     }
 

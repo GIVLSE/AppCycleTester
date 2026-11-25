@@ -664,9 +664,11 @@ class CycleAccessibilityService : AccessibilityService() {
         }
     }
 
-    fun acknowledgeResultVisible() {
+    fun acknowledgeResultVisible(): Boolean {
+        if (resultPresented) return false
         resultPresented = true
         Log.i("SequmioRunner", "Result activity visible")
+        return true
     }
 
     private fun registerScreenReceiver() {
