@@ -15,6 +15,37 @@ class ServiceConnectionRegistryTest {
         assertNull(registry.current)
     }
 
+    @Test fun transientProbeFailureKeepsInstanceForRetry() {
+        val registry = ServiceConnectionRegistry<Any>()
+        val service = Any()
+        registry.attach(service)
+        assertTrue(registry.updateReadiness(service, false))
+        assertNull(registry.current)
+        assertSame(service, registry.known)
+        assertTrue(registry.updateReadiness(service, true))
+        assertSame(service, registry.current)
+    }
+
+    @Test fun actualUnbindClearsEvenUnavailableCandidate() {
+        val registry = ServiceConnectionRegistry<Any>()
+        val service = Any()
+        registry.attach(service, ready = false)
+        assertSame(service, registry.known)
+        assertTrue(registry.detach(service))
+        assertNull(registry.known)
+        assertFalse(registry.updateReadiness(service, true))
+    }
+
+    @Test fun oldProbeCannotRestoreReplacedService() {
+        val registry = ServiceConnectionRegistry<Any>()
+        val old = Any()
+        val new = Any()
+        registry.attach(old, ready = false)
+        registry.attach(new)
+        assertFalse(registry.updateReadiness(old, true))
+        assertSame(new, registry.current)
+    }
+
     @Test fun lateUnbindFromOldServiceCannotClearReplacement() {
         val registry = ServiceConnectionRegistry<Any>()
         val old = Any()

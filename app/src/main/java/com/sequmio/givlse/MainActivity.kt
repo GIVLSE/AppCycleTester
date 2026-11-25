@@ -40,7 +40,11 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        if (intent.action == ACTION_SHOW_RUN_RESULT) runResultOpenVersion.value += 1
+        if (intent.action == ACTION_SHOW_RUN_RESULT) {
+            runResultOpenVersion.value += 1
+            Log.i("SequmioRunner", "Result intent received; windowFocus=" + hasWindowFocus())
+            if (hasWindowFocus()) CycleAccessibilityService.instance?.acknowledgeResultVisible()
+        }
     }
 
     private val settingsReturnVersion = MutableStateFlow(0)
@@ -75,6 +79,7 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         refreshAccessibility()
         settingsReturnVersion.value += 1
+        if (hasWindowFocus()) CycleAccessibilityService.instance?.acknowledgeResultVisible()
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {

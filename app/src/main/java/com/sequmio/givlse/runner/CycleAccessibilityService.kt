@@ -49,12 +49,14 @@ class CycleAccessibilityService : AccessibilityService() {
          * Never start or bind an AccessibilityService ourselves.
          */
         fun refreshConnection(): Boolean {
-            val candidate = registry.current ?: return false
-            if (candidate.hasSystemConnection()) return true
-            registry.detach(candidate)
-            Log.w("SequmioRunner", "Known Runner connection is no longer available")
-            candidate.publishConnectionState()
-            return false
+            val candidate = registry.known ?: run {
+                Log.w("SequmioRunner", "No framework-bound Runner instance")
+                return false
+            }
+            val ready = candidate.hasSystemConnection()
+            if (registry.updateReadiness(candidate, ready)) candidate.publishConnectionState()
+            if (!ready) Log.w("SequmioRunner", "Runner probe unavailable; retaining bound instance for Retry")
+            return ready
         }
     }
 
@@ -94,9 +96,16 @@ class CycleAccessibilityService : AccessibilityService() {
     private var destroying = false
     private var destroyed = false
 
-    private fun hasSystemConnection(): Boolean = !destroyed && runCatching {
-        isSequmioAccessibilityEnabled(this) && serviceInfo != null
-    }.getOrDefault(false)
+    private fun hasSystemConnection(): Boolean {
+        if (destroyed || destroying) return false
+        return runCatching {
+            val enabled = isSequmioAccessibilityEnabled(this)
+            val infoAvailable = serviceInfo != null
+            if (!enabled || !infoAvailable)
+                Log.w("SequmioRunner", "Probe enabled=$enabled serviceInfo=$infoAvailable")
+            enabled && infoAvailable
+        }.onFailure { Log.e("SequmioRunner", "Connection probe failed", it) }.getOrDefault(false)
+    }
 
     private fun publishConnectionState() {
         val snapshot = RunnerRuntime.state.value
@@ -106,17 +115,19 @@ class CycleAccessibilityService : AccessibilityService() {
     /** Framework callbacks are the only authority for registering a live service. */
     private fun registerConnection(from: String, authoritative: Boolean): Boolean {
         if (destroyed) return false
-        // A queued event from an old service must not displace a newer binding.
-        if (!authoritative && instance != null && instance !== this) return false
-        if (!hasSystemConnection()) return false
-        val fresh = registry.attach(this)
-        destroying = false
-        if (fresh) {
-            Log.i("SequmioRunner", "Runner connected via " + from +
+        // Only onServiceConnected may establish a binding. Events may restore
+        // readiness of that exact bound instance, never a detached service.
+        if (!authoritative && (destroying || registry.known !== this)) return false
+        if (authoritative) destroying = false
+        val ready = hasSystemConnection()
+        val changed = if (authoritative) registry.attach(this, ready)
+            else registry.updateReadiness(this, ready)
+        if (changed) {
+            Log.i("SequmioRunner", "Runner binding via " + from + " ready=" + ready +
                 " pid=" + android.os.Process.myPid())
             publishConnectionState()
         }
-        return true
+        return ready
     }
     private val scenarioTimeout = Runnable {
         if (phase == RunPhase.RUNNING && scenarioPlayer != null) {
@@ -145,25 +156,18 @@ class CycleAccessibilityService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
-        val fresh = instance !== this
-        // onServiceConnected is called only after Android initializes the connection.
-        // A later real event can recover a transient null serviceInfo on some OEMs.
-        if (registerConnection("onServiceConnected", authoritative = true)) {
-            if (fresh && phase == RunPhase.IDLE) reports.recoverInterrupted()
-            publish()
-        } else {
-            Log.w("SequmioRunner", "onServiceConnected received; waiting for framework connection")
-        }
+        val fresh = registry.known !== this
+        val ready = registerConnection("onServiceConnected", authoritative = true)
+        if (fresh && phase == RunPhase.IDLE) reports.recoverInterrupted()
+        publish()
+        if (!ready) Log.w("SequmioRunner", "Framework bound Runner; readiness probe pending")
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null || destroyed) return
         // Repair a lost in-process reference only when Android delivers an actual
         // event AND the live framework connection can be verified.
-        if (instance !== this) {
-            if (!registerConnection("onAccessibilityEvent", authoritative = false)) return
-            if (phase == RunPhase.IDLE) reports.recoverInterrupted()
-        }
+        if (instance !== this && !registerConnection("onAccessibilityEvent", authoritative = false)) return
         if (destroying) return
         try {
             recorder?.onEvent(event)
@@ -647,26 +651,33 @@ class CycleAccessibilityService : AccessibilityService() {
         }.onFailure { Log.e("SequmioRunner", "Result notification failed", it) }
         val power = getSystemService(POWER_SERVICE) as PowerManager
         val keyguard = getSystemService(KEYGUARD_SERVICE) as KeyguardManager
-        if (!destroying && power.isInteractive && !keyguard.isKeyguardLocked) {
-            Log.i("SequmioRunner", "Requesting return to Sequmio")
+        val generation = runGeneration
+        fun stillWaiting() = phase == RunPhase.FINISHED && runGeneration == generation &&
+            !resultPresented && !destroying && !destroyed &&
+            power.isInteractive && !keyguard.isKeyguardLocked
+        fun requestReturn(attempt: Int) {
+            if (!stillWaiting()) return
+            // A stale accessibility root is not proof the result Activity is visible.
+            // Only the Activity's actual window-focus acknowledgement ends retries.
+            Log.i("SequmioRunner", "Return attempt=$attempt generation=$generation status=$status")
             runCatching { startActivity(intent) }
                 .onFailure { Log.e("SequmioRunner", "Return request failed", it) }
-            val generation = runGeneration
-            handler.postDelayed({
-                if (phase == RunPhase.FINISHED && runGeneration == generation &&
-                    !resultPresented && rootInActiveWindow?.packageName?.toString() != packageName &&
-                    power.isInteractive && !keyguard.isKeyguardLocked) {
-                    Log.w("SequmioRunner", "Return not observed; retry once")
-                    runCatching { startActivity(intent) }
-                        .onFailure { Log.e("SequmioRunner", "Return retry failed", it) }
-                }
-            }, 1000L)
         }
+        if (stillWaiting()) {
+            requestReturn(1)
+            handler.postDelayed({ requestReturn(2) }, 750L)
+            handler.postDelayed({ requestReturn(3) }, 2000L)
+            handler.postDelayed({
+                if (phase == RunPhase.FINISHED && runGeneration == generation && !resultPresented)
+                    Log.w("SequmioRunner", "Return not acknowledged; notification fallback available")
+            }, 3500L)
+        } else Log.w("SequmioRunner", "Automatic return skipped: service unavailable or screen locked")
     }
 
     fun acknowledgeResultVisible() {
+        if (phase != RunPhase.FINISHED || resultPresented) return
         resultPresented = true
-        Log.i("SequmioRunner", "Result activity visible")
+        Log.i("SequmioRunner", "Result activity visible generation=$runGeneration")
     }
 
     private fun registerScreenReceiver() {
