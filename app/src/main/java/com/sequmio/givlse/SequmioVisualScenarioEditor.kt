@@ -66,13 +66,15 @@ internal fun SequmioVisualScenarioEditor(
     var showAdvanced by remember { mutableStateOf(false) }
     var showJson by rememberSaveable { mutableStateOf(false) }
     var rawJson by rememberSaveable(initial.scenarioJson) { mutableStateOf(initial.scenarioJson) }
+    var baseJson by rememberSaveable(initial.scenarioJson) { mutableStateOf(parsed.toString()) }
     var pickPending by remember { mutableStateOf(false) }
+    val currentCancelPick by rememberUpdatedState(onCancelPick)
     var leaveConfirm by remember { mutableStateOf(false) }
     var advancedCase by remember { mutableStateOf(false) }
     var loop by rememberSaveable(initial.scenarioJson) {
         mutableStateOf(parsed.optJSONObject("execution")?.optBoolean("loop_steps", false) ?: false)
     }
-    DisposableEffect(Unit) { onDispose { onCancelPick() } }
+    DisposableEffect(Unit) { onDispose { currentCancelPick() } }
 
     fun change(i: Int, block: (JSONObject) -> Unit) {
         if (i !in steps.indices) return
@@ -86,7 +88,7 @@ internal fun SequmioVisualScenarioEditor(
     }
     fun snapshot(): JSONObject {
         if (showJson) return JSONObject(rawJson)
-        val root = JSONObject(parsed.toString())
+        val root = JSONObject(baseJson)
         root.put("schema_version", 1)
         val meta = root.optJSONObject("meta") ?: JSONObject()
         meta.put("name", name.trim()).put("suite", suite)
@@ -118,7 +120,7 @@ internal fun SequmioVisualScenarioEditor(
         if (runCatching { snapshot().toString() != parsed.toString() }.getOrDefault(true))
             leaveConfirm = true else onBack()
     }
-    BackHandler { requestBack() }
+    BackHandler { if (pickPending) { onCancelPick(); pickPending = false } else requestBack() }
     val rowObjects = steps.map { JSONObject(it) }
     val checks = rowObjects.count { it.optString("action") in StepUi.checks }
     val issues = rowObjects.count { StepUi.warning(it) != null } + if (checks == 0) 1 else 0
@@ -126,7 +128,13 @@ internal fun SequmioVisualScenarioEditor(
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        SeqTopBar("Scenario Editor", { requestBack() })
+        SeqTopBar("Scenario Editor", {
+            if (pickPending) { onCancelPick(); pickPending = false } else requestBack()
+        })
+        if (pickPending) {
+            Text("Select an element in the target app, or cancel to return.", color = SeqColors.Teal)
+            TextButton(onClick = { onCancelPick(); pickPending = false }) { Text("Cancel selection") }
+        }
         SeqCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(initial.appName.ifBlank { initial.packageName }, fontWeight = FontWeight.Bold)
@@ -161,6 +169,7 @@ internal fun SequmioVisualScenarioEditor(
                                 val root = JSONObject(rawJson)
                                 require(root.getJSONObject("target").getString("package_name") == initial.packageName)
                                 steps = ArrayList(StepUi.rows(root))
+                                baseJson = root.toString()
                                 name = root.optJSONObject("meta")?.optString("name", name) ?: name
                                 suite = root.optJSONObject("meta")?.optString("suite", suite) ?: suite
                                 duration = root.optJSONObject("execution")?.optInt("total_duration_sec", 300)?.toString() ?: "300"
@@ -270,7 +279,7 @@ internal fun SequmioVisualScenarioEditor(
                 }
             }
         }, confirmButton = { TextButton(onClick = { addKind = "" }) { Text("Cancel") } })
-    if (editing in steps.indices && !showJson) {
+    if (editing in steps.indices && !showJson && !pickPending) {
         val index = editing
         val step = JSONObject(steps[index])
         val action = step.optString("action")

@@ -226,6 +226,18 @@ internal fun SequmioApp(
         val next = plan.targets.map { PlanCaseUpdates.replaceLocal(it, packageName, oldRaw, newRaw) }
         if (next != plan.targets) setPlan(plan.copy(targets = next))
     }
+    fun saveEditedCase(updated: com.sequmio.givlse.data.MyAppDraft) {
+        val cases = ScenarioCodec.split(ownAppDraft.scenarioJson).toMutableList()
+        val previous = cases.getOrNull(selectedScenarioIndex)
+        if (previous != null) cases[selectedScenarioIndex] = updated.scenarioJson
+        else cases.add(updated.scenarioJson)
+        val combined = ScenarioCodec.compose(cases)
+        require(combined.length <= 48000) { "Test cases exceed the 48 KB limit" }
+        val count = cases.sumOf { org.json.JSONObject(it).optJSONArray("steps")?.length() ?: 0 }
+        require(count <= 150) { "Too many combined test steps" }
+        if (previous != null) syncEditedCase(previous, updated.scenarioJson, ownAppDraft.packageName)
+        saveDraft(ownAppDraft.copy(scenarioJson = combined))
+    }
     fun mergeCommunity(
         changes: List<Pair<PublishedApp, InstalledApp>>,
         explicitJoin: Boolean
@@ -484,17 +496,46 @@ internal fun SequmioApp(
                         }.getOrNull().orEmpty()
                     ),
                     onSave = { updated ->
-                        val cases = runCatching {
-                            ScenarioCodec.split(ownAppDraft.scenarioJson).toMutableList()
-                        }.getOrElse { mutableListOf() }
-                        if (selectedScenarioIndex in cases.indices) {
-                            syncEditedCase(cases[selectedScenarioIndex], updated.scenarioJson, ownAppDraft.packageName)
-                            cases[selectedScenarioIndex] = updated.scenarioJson
+                        saveEditedCase(updated)
+                        page = Page.MY_APP
+                    },
+                    onBack = { page = Page.MY_APP },
+                    onPick = { callback ->
+                        val target = apps.firstOrNull { it.packageName == ownAppDraft.packageName }
+                        when {
+                            active -> "Stop the current run first."
+                            !consent -> "Enable Accessibility and accept the recording disclosure in Settings."
+                            target == null -> "Install your app on this device first."
+                            !CycleAccessibilityService.refreshConnection() -> RUNNER_DISCONNECTED_MESSAGE
+                            else -> CycleAccessibilityService.instance?.let { service ->
+                                service.startElementPicker(target, callback)
+                            } ?: if (CycleAccessibilityService.instance == null) RUNNER_DISCONNECTED_MESSAGE else null
                         }
-                        else cases.add(updated.scenarioJson)
-                        val next = ownAppDraft.copy(
-                            scenarioJson = ScenarioCodec.compose(cases)
-                        )
+                    },
+                    onCancelPick = { CycleAccessibilityService.instance?.cancelElementPicker() },
+                    onRun = { draft ->
+                        val installed = apps.firstOrNull { it.packageName == draft.packageName }
+                        when {
+                            active -> "Stop the current run first."
+                            !consent -> "Enable Accessibility and accept the recording disclosure in Settings."
+                            installed == null -> "Install your app on this device first."
+                            !CycleAccessibilityService.refreshConnection() -> RUNNER_DISCONNECTED_MESSAGE
+                            else -> {
+                                val specs = ScenarioCodec.parseAll(draft.scenarioJson, draft.packageName)
+                                val target = TestTarget(installed.packageName, installed.activityClass,
+                                    draft.appName, specs.sumOf { it.totalDurationSec }.coerceIn(1, 7200),
+                                    draft.scenarioJson, "local")
+                                saveEditedCase(draft)
+                                val service = CycleAccessibilityService.instance
+                                val error = if (service != null) service.start(TestPlan(targets = listOf(target)))
+                                    else RUNNER_DISCONNECTED_MESSAGE
+                                page = Page.RUNNER
+                                message = error.orEmpty()
+                                error
+                            }
+                        }
+                    }
+                )
                         saveDraft(next)
                         page = Page.MY_APP
                     },

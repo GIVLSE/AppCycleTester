@@ -219,6 +219,6 @@ internal class VisualElementPicker(
             frame.addView(options, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
             attach(frame, true)
             true
-        } catch (_: Exception) { removeWindow(); false }
+        } catch (_: Exception) { cancel(); false }
     }
 }

@@ -127,9 +127,10 @@ class CycleAccessibilityService : AccessibilityService() {
     private var recorder: AccessibilityEventRecorder? = null
     private var elementPicker: VisualElementPicker? = null
 
-    fun cancelElementPicker() {
-        elementPicker?.cancel(false)
+    fun cancelElementPicker(notify: Boolean = false) {
+        val session = elementPicker
         elementPicker = null
+        session?.cancel(notify)
     }
 
     fun startElementPicker(target: InstalledApp, onSelected: (PickedElement?) -> Unit): String? {
@@ -199,7 +200,7 @@ class CycleAccessibilityService : AccessibilityService() {
             // An exception in an event callback must not crash the accessibility
             // process and leave an enabled-but-unbound system service.
             Log.e("SequmioRunner", "Accessibility event handling failed", e)
-            runCatching { cancelElementPicker() }
+            runCatching { cancelElementPicker(notify = true) }
             runCatching { recorder?.stop() }
             if (phase == RunPhase.RUNNING || phase == RunPhase.PAUSED)
                 runCatching { finish("Accessibility event handling failed", RunStatus.BLOCKED) }
@@ -230,7 +231,7 @@ class CycleAccessibilityService : AccessibilityService() {
     }
 
     override fun onInterrupt() {
-        runCatching { cancelElementPicker() }
+        runCatching { cancelElementPicker(notify = true) }
             runCatching { recorder?.stop() }
         if (phase == RunPhase.RUNNING || phase == RunPhase.PAUSED)
             finish("Accessibility service interrupted", RunStatus.BLOCKED)
@@ -240,7 +241,7 @@ class CycleAccessibilityService : AccessibilityService() {
         destroying = true
         Log.w("SequmioRunner", "Accessibility service unbound pid=" + android.os.Process.myPid())
         try {
-            runCatching { cancelElementPicker() }
+            runCatching { cancelElementPicker(notify = true) }
             runCatching { recorder?.stop() }
             if (phase == RunPhase.RUNNING || phase == RunPhase.PAUSED)
                 finish("Accessibility service disconnected", RunStatus.BLOCKED)
@@ -255,7 +256,7 @@ class CycleAccessibilityService : AccessibilityService() {
         destroyed = true
         Log.w("SequmioRunner", "Accessibility service destroyed pid=" + android.os.Process.myPid())
         try {
-            runCatching { cancelElementPicker() }
+            runCatching { cancelElementPicker(notify = true) }
             runCatching { recorder?.stop() }
             if (phase == RunPhase.RUNNING || phase == RunPhase.PAUSED)
                 finish("Accessibility service stopped", RunStatus.BLOCKED)
