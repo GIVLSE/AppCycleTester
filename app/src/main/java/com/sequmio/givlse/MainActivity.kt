@@ -35,15 +35,27 @@ class MainActivity : ComponentActivity() {
     companion object {
         const val ACTION_SHOW_RUN_RESULT = "com.sequmio.givlse.SHOW_RUN_RESULT"
         const val EXTRA_AUTOMATIC_RETURN = "automatic_return_token"
+        const val EXTRA_MANUAL_RETURN = "manual_return_token"
     }
 
     private val runResultOpenVersion = MutableStateFlow(0)
     private var pendingReturnToken = 0L
+    private var pendingManualToken = 0L
+    private var activityResumed = false
+
+    private fun readReturnIntent(intent: Intent?) {
+        pendingReturnToken = intent?.getLongExtra(EXTRA_AUTOMATIC_RETURN, 0L) ?: 0L
+        pendingManualToken = intent?.getLongExtra(EXTRA_MANUAL_RETURN, 0L) ?: 0L
+        // Do not treat a restored Activity's old Intent as a new return.
+        intent?.removeExtra(EXTRA_AUTOMATIC_RETURN)
+        intent?.removeExtra(EXTRA_MANUAL_RETURN)
+    }
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        pendingReturnToken = intent.getLongExtra(EXTRA_AUTOMATIC_RETURN, 0L)
+        readReturnIntent(intent)
         if (intent.action == ACTION_SHOW_RUN_RESULT) runResultOpenVersion.value += 1
+        confirmResultIfVisible()
     }
 
     private val settingsReturnVersion = MutableStateFlow(0)
@@ -76,24 +88,39 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        activityResumed = true
         refreshAccessibility()
         settingsReturnVersion.value += 1
+        confirmResultIfVisible()
+    }
+
+    override fun onPause() {
+        activityResumed = false
+        super.onPause()
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) {
             refreshAccessibility()
-            val returnToken = pendingReturnToken
-            pendingReturnToken = 0L
-            if (RunnerRuntime.state.value.phase == RunPhase.FINISHED &&
-                CycleAccessibilityService.instance?.acknowledgeResultVisible(returnToken) == true) {
-                // One user-visible tactile confirmation per completed run; respects system settings.
-                val feedback = if (Build.VERSION.SDK_INT >= 30)
-                    android.view.HapticFeedbackConstants.CONFIRM
-                else android.view.HapticFeedbackConstants.VIRTUAL_KEY
-                window.decorView.performHapticFeedback(feedback)
-            }
+            confirmResultIfVisible()
+        }
+    }
+
+    private fun confirmResultIfVisible() {
+        if (!activityResumed || !hasWindowFocus() ||
+            RunnerRuntime.state.value.phase != RunPhase.FINISHED) return
+        val service = CycleAccessibilityService.instance ?: return
+        val auto = pendingReturnToken
+        val manual = pendingManualToken
+        pendingReturnToken = 0L
+        pendingManualToken = 0L
+        if (service.acknowledgeResultVisible(auto, manual)) {
+            // One user-visible tactile confirmation per completed run.
+            val feedback = if (Build.VERSION.SDK_INT >= 30)
+                android.view.HapticFeedbackConstants.CONFIRM
+            else android.view.HapticFeedbackConstants.VIRTUAL_KEY
+            window.decorView.performHapticFeedback(feedback)
         }
     }
 
@@ -128,7 +155,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        pendingReturnToken = intent?.getLongExtra(EXTRA_AUTOMATIC_RETURN, 0L) ?: 0L
+        readReturnIntent(intent)
         if (intent?.action == ACTION_SHOW_RUN_RESULT) runResultOpenVersion.value += 1
         if (CycleAccessibilityService.instance == null) {
             RunReportStore(this).recoverInterrupted()

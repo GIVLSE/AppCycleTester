@@ -89,8 +89,7 @@ class CycleAccessibilityService : AccessibilityService() {
     private var scenarioIteration = 1
     private var runGeneration = 0
     private var resultPresented = false
-    private var awaitingAutomaticReturn = false
-    private var automaticReturnToken = 0L
+    private val returnObservation = ResultReturnObservation()
     private var completionResults: RunCompletionAccumulator? = null
     private var lastCheckpointSecond = -1L
     private var destroying = false
@@ -342,7 +341,7 @@ class CycleAccessibilityService : AccessibilityService() {
         lastCheckpointSecond = -1L
         runGeneration++
         resultPresented = false
-        awaitingAutomaticReturn = false
+        returnObservation.reset()
         success = null
         terminalStatus = null
         runCatching { getSystemService(NotificationManager::class.java).cancel(411) }
@@ -657,7 +656,7 @@ class CycleAccessibilityService : AccessibilityService() {
 
     /** Return promptly; durable report writing continues on the ordered IO worker. */
     private fun presentRunResult(reason: String, status: String) {
-        automaticReturnToken = SystemClock.elapsedRealtime()
+        val automaticReturnToken = SystemClock.elapsedRealtime().coerceAtLeast(1L)
         val intent = Intent(this, MainActivity::class.java)
             .setAction(MainActivity.ACTION_SHOW_RUN_RESULT)
             .putExtra(MainActivity.EXTRA_AUTOMATIC_RETURN, automaticReturnToken)
@@ -671,7 +670,10 @@ class CycleAccessibilityService : AccessibilityService() {
                 manager.createNotificationChannel(NotificationChannel(
                     channel, "Sequmio test results", NotificationManager.IMPORTANCE_HIGH
                 ))
-                val manualIntent = Intent(intent).apply { removeExtra(MainActivity.EXTRA_AUTOMATIC_RETURN) }
+                val manualIntent = Intent(intent).apply {
+                    removeExtra(MainActivity.EXTRA_AUTOMATIC_RETURN)
+                    putExtra(MainActivity.EXTRA_MANUAL_RETURN, automaticReturnToken)
+                }
                 val open = PendingIntent.getActivity(this, 411, manualIntent,
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
                 manager.notify(411, Notification.Builder(this, channel)
@@ -690,7 +692,7 @@ class CycleAccessibilityService : AccessibilityService() {
         val power = getSystemService(POWER_SERVICE) as PowerManager
         val keyguard = getSystemService(KEYGUARD_SERVICE) as KeyguardManager
         if (!destroying && power.isInteractive && !keyguard.isKeyguardLocked) {
-            awaitingAutomaticReturn = true
+            returnObservation.begin(automaticReturnToken)
             Log.i("SequmioRunner", "Requesting return to Sequmio")
             runCatching { startActivity(intent) }
                 .onFailure { Log.e("SequmioRunner", "Return request failed", it) }
@@ -707,30 +709,31 @@ class CycleAccessibilityService : AccessibilityService() {
             // A successful startActivity call does not guarantee the OEM actually
             // brought the activity to the foreground. Observe the result instead.
             handler.postDelayed({
-                if (phase == RunPhase.FINISHED && runGeneration == generation && awaitingAutomaticReturn) {
-                    awaitingAutomaticReturn = false
+                if (phase == RunPhase.FINISHED && runGeneration == generation &&
+                    !destroying && !destroyed) {
                     val foreground = runCatching { rootInActiveWindow?.packageName?.toString() }.getOrNull()
-                    if (!resultPresented && !destroying && !destroyed &&
-                        power.isInteractive && !keyguard.isKeyguardLocked &&
-                        foreground != null && foreground != packageName) {
-                        store.setResultReturnNeedsReview(true)
-                        Log.w("SequmioRunner", "Automatic return not observed; using manual result notification")
+                    val review = returnObservation.deadline(
+                        screenAvailable = power.isInteractive && !keyguard.isKeyguardLocked,
+                        ownForeground = foreground?.let { it == packageName }
+                    )
+                    review?.let {
+                        store.setResultReturnNeedsReview(it)
+                        Log.i("SequmioRunner", "Automatic return observation at deadline: review=" + it)
                     }
                 }
             }, 3500L)
         }
     }
 
-    fun acknowledgeResultVisible(returnToken: Long = 0L): Boolean {
+    fun acknowledgeResultVisible(returnToken: Long = 0L, manualToken: Long = 0L): Boolean {
+        if (phase != RunPhase.FINISHED) return false
+        // Return classification is independent of the one-shot haptic feedback.
+        returnObservation.visible(returnToken, manualToken)?.let {
+            store.setResultReturnNeedsReview(it)
+            Log.i("SequmioRunner", "Result activity confirmed: review=" + it)
+        }
         if (resultPresented) return false
         resultPresented = true
-        if (awaitingAutomaticReturn) {
-            awaitingAutomaticReturn = false
-            if (returnToken != 0L && returnToken == automaticReturnToken)
-                store.setResultReturnNeedsReview(false)
-            else
-                store.setResultReturnNeedsReview(true)
-        }
         Log.i("SequmioRunner", "Result activity visible")
         return true
     }
