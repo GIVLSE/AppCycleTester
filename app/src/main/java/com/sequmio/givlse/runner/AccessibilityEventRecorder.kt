@@ -98,7 +98,7 @@ class AccessibilityEventRecorder(
         }
         root.addView(text, LinearLayout.LayoutParams(0, -2, 1f))
         val check = Button(service).apply {
-            text = "Check"
+            this.text = "Check"
             isAllCaps = false
             setOnClickListener { pickVerification() }
         }

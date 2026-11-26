@@ -185,6 +185,7 @@ internal class VisualElementPicker(
                         highlight = candidate?.bounds
                         invalidate()
                         options.removeAllViews()
+                        options.visibility = View.VISIBLE
                         val element = picked
                         options.addView(label(if (element == null) "No accessible element here. Try another."
                             else "Selected: " + element.label))
@@ -211,11 +212,22 @@ internal class VisualElementPicker(
             val top = panel()
             val row = LinearLayout(service).apply { orientation = LinearLayout.HORIZONTAL }
             row.addView(label("Tap an element to select"), LinearLayout.LayoutParams(0, -2, 1f))
+            var controlsAtTop = true
+            row.addView(button("Move") {
+                controlsAtTop = !controlsAtTop
+                top.layoutParams = FrameLayout.LayoutParams(-1, -2,
+                    if (controlsAtTop) Gravity.TOP else Gravity.BOTTOM)
+                options.layoutParams = FrameLayout.LayoutParams(-1, -2,
+                    if (controlsAtTop) Gravity.BOTTOM else Gravity.TOP)
+                options.visibility = View.GONE
+                highlight = null
+                canvas.invalidate()
+            })
             row.addView(button("Cancel") { cancel() })
             top.addView(row)
             frame.addView(top, FrameLayout.LayoutParams(-1, -2, Gravity.TOP))
             options = panel()
-            options.addView(label("Selection does not tap the app."))
+            options.visibility = View.GONE
             frame.addView(options, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
             attach(frame, true)
             true

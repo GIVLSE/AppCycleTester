@@ -134,7 +134,7 @@ internal fun SequmioVisualScenarioEditor(
         if (pickPending) {
             Text("Select an element in the target app, or cancel to return.", color = SeqColors.Teal)
             TextButton(onClick = { onCancelPick(); pickPending = false }) { Text("Cancel selection") }
-        }
+        } else {
         SeqCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(initial.appName.ifBlank { initial.packageName }, fontWeight = FontWeight.Bold)
@@ -258,6 +258,7 @@ internal fun SequmioVisualScenarioEditor(
         }) { Text("Validate") }
         Text("Changes stay on this device until you update the published listing.",
             color = SeqColors.Muted, fontSize = 12.sp)
+        }
     }
     if (addKind.isNotBlank()) AlertDialog(onDismissRequest = { addKind = "" },
         title = { Text(if (addKind == "check") "Add Verification" else "Add Action") },
