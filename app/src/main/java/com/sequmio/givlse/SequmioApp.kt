@@ -507,9 +507,11 @@ internal fun SequmioApp(
                             !consent -> "Enable Accessibility and accept the recording disclosure in Settings."
                             target == null -> "Install your app on this device first."
                             !CycleAccessibilityService.refreshConnection() -> RUNNER_DISCONNECTED_MESSAGE
-                            else -> CycleAccessibilityService.instance?.let { service ->
-                                service.startElementPicker(target, callback)
-                            } ?: if (CycleAccessibilityService.instance == null) RUNNER_DISCONNECTED_MESSAGE else null
+                            else -> {
+                                val service = CycleAccessibilityService.instance
+                                if (service == null) RUNNER_DISCONNECTED_MESSAGE
+                                else service.startElementPicker(target, callback)
+                            }
                         }
                     },
                     onCancelPick = { CycleAccessibilityService.instance?.cancelElementPicker() },
@@ -535,11 +537,6 @@ internal fun SequmioApp(
                             }
                         }
                     }
-                )
-                        saveDraft(next)
-                        page = Page.MY_APP
-                    },
-                    onBack = { page = Page.MY_APP }
                 )
                 Page.QA_DASHBOARD -> SequmioQaDashboard(
                     appId = ownAppDraft.packageName,

@@ -143,7 +143,7 @@ class CycleAccessibilityService : AccessibilityService() {
         val session = VisualElementPicker(this, target, false) { picked, _ ->
             elementPicker = null
             onSelected(picked)
-            runCatching {
+            if (!destroying && !destroyed) runCatching {
                 startActivity(Intent(this, MainActivity::class.java)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP))
             }
