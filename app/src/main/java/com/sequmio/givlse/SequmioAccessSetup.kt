@@ -39,6 +39,7 @@ internal fun SequmioAccessSetup(
     ready: Boolean,
     systemEnabled: Boolean,
     notificationsGranted: Boolean,
+    returnNeedsReview: Boolean,
     consent: Boolean,
     onConsent: () -> Unit,
     onAppInfo: () -> Unit,
@@ -229,6 +230,25 @@ internal fun SequmioAccessSetup(
                     SeqTextButton(onClick = onAppInfo) {
                         Text("Manage in Android App Info")
                     }
+                }
+            }
+        }
+        if (returnNeedsReview) {
+            val miui = Build.MANUFACTURER.lowercase(java.util.Locale.ROOT) in
+                setOf("xiaomi", "redmi", "poco")
+            SeqCard(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("5. Automatic return (optional)", fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
+                    Text("After a recent run, Sequmio could not confirm that its results screen opened automatically. " +
+                        "You can still open results from the notification or return manually.",
+                        color = SeqColors.Muted, fontSize = 13.sp)
+                    Text(if (miui) "If available on your phone: App Info → Other permissions → " +
+                        "Display pop-up windows while running in the background. Allow it only if you want automatic return."
+                        else "Your phone may restrict launching an app from the background. Review its app-specific settings if desired.",
+                        color = SeqColors.Muted, fontSize = 12.sp)
+                    SeqTextButton(onClick = onAppInfo) { Text("Open App Info") }
+                    Text("This is not required to run tests. Sequmio will reassess after the next run.",
+                        color = SeqColors.Muted, fontSize = 12.sp)
                 }
             }
         }

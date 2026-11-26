@@ -18,6 +18,21 @@ class SettingsStore(context: Context) {
         prefs.edit().putBoolean("access_disclosure_consent_v3", true).apply()
     }
 
+    fun resultReturnNeedsReview(): Boolean = prefs.getBoolean("result_return_needs_review", false)
+
+    fun setResultReturnNeedsReview(value: Boolean) {
+        prefs.edit().putBoolean("result_return_needs_review", value).apply()
+    }
+
+    fun observeResultReturnNeedsReview(onChange: (Boolean) -> Unit): () -> Unit {
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == "result_return_needs_review") onChange(resultReturnNeedsReview())
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        onChange(resultReturnNeedsReview())
+        return { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
+
     fun excludedOwnedApps(uid: String): Set<String> =
         prefs.getStringSet("owned_plan_excluded:$uid", emptySet()).orEmpty().toSet()
 

@@ -84,6 +84,11 @@ internal fun SequmioApp(
 ) {
     val context = LocalContext.current
     val store = remember { SettingsStore(context) }
+    var returnNeedsReview by remember { mutableStateOf(store.resultReturnNeedsReview()) }
+    DisposableEffect(store) {
+        val unsubscribe = store.observeResultReturnNeedsReview { returnNeedsReview = it }
+        onDispose { unsubscribe() }
+    }
     val apps = remember(permissionRefreshToken) { AppCatalog.list(context) }
     val runner by RunnerRuntime.state.collectAsState()
     var plan by remember { mutableStateOf(store.loadPlan()) }
@@ -311,6 +316,16 @@ internal fun SequmioApp(
                     Icons.Outlined.Settings, "Settings", onClick = { openSettings() },
                     tint = SeqColors.Primary
                 )
+            }
+        }
+        if (page == Page.RUNNER && returnNeedsReview && !active) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("Automatic return was not observed. Tests can still run.",
+                    color = SeqColors.Muted, fontSize = 12.sp)
+                SeqTextButton(onClick = { openPermissions(Page.RUNNER) }) {
+                    Text("Review background launch settings")
+                }
             }
         }
         Box(Modifier.weight(1f)) {
@@ -559,6 +574,7 @@ internal fun SequmioApp(
                     ready = connected,
                     systemEnabled = systemAccessibilityEnabled,
                     notificationsGranted = notificationsGranted,
+                    returnNeedsReview = returnNeedsReview,
                     consent = consent,
                     onConsent = { store.saveAccessConsent(); consent = true },
                     onBack = { page = setupReturnPage },

@@ -89,6 +89,7 @@ class CycleAccessibilityService : AccessibilityService() {
     private var scenarioIteration = 1
     private var runGeneration = 0
     private var resultPresented = false
+    private var awaitingAutomaticReturn = false
     private var completionResults: RunCompletionAccumulator? = null
     private var lastCheckpointSecond = -1L
     private var destroying = false
@@ -340,6 +341,7 @@ class CycleAccessibilityService : AccessibilityService() {
         lastCheckpointSecond = -1L
         runGeneration++
         resultPresented = false
+        awaitingAutomaticReturn = false
         success = null
         terminalStatus = null
         runCatching { getSystemService(NotificationManager::class.java).cancel(411) }
@@ -671,8 +673,10 @@ class CycleAccessibilityService : AccessibilityService() {
                 manager.notify(411, Notification.Builder(this, channel)
                     .setSmallIcon(android.R.drawable.ic_menu_info_details)
                     .setContentTitle("Run " + status.lowercase(java.util.Locale.ROOT))
-                    .setContentText(reason)
-                    .setStyle(Notification.BigTextStyle().bigText(reason))
+                    .setContentText("Tap to view test results")
+                    .setStyle(Notification.BigTextStyle().bigText(reason + " · Tap to view results"))
+                    .addAction(Notification.Action.Builder(
+                        android.R.drawable.ic_menu_info_details, "View results", open).build())
                     .setVisibility(Notification.VISIBILITY_PRIVATE)
                     .setContentIntent(open)
                     .setAutoCancel(true)
@@ -682,6 +686,7 @@ class CycleAccessibilityService : AccessibilityService() {
         val power = getSystemService(POWER_SERVICE) as PowerManager
         val keyguard = getSystemService(KEYGUARD_SERVICE) as KeyguardManager
         if (!destroying && power.isInteractive && !keyguard.isKeyguardLocked) {
+            awaitingAutomaticReturn = true
             Log.i("SequmioRunner", "Requesting return to Sequmio")
             runCatching { startActivity(intent) }
                 .onFailure { Log.e("SequmioRunner", "Return request failed", it) }
@@ -695,12 +700,30 @@ class CycleAccessibilityService : AccessibilityService() {
                         .onFailure { Log.e("SequmioRunner", "Return retry failed", it) }
                 }
             }, 1000L)
+            // A successful startActivity call does not guarantee the OEM actually
+            // brought the activity to the foreground. Observe the result instead.
+            handler.postDelayed({
+                if (phase == RunPhase.FINISHED && runGeneration == generation && awaitingAutomaticReturn) {
+                    awaitingAutomaticReturn = false
+                    val foreground = runCatching { rootInActiveWindow?.packageName?.toString() }.getOrNull()
+                    if (!resultPresented && !destroying && !destroyed &&
+                        power.isInteractive && !keyguard.isKeyguardLocked &&
+                        foreground != null && foreground != packageName) {
+                        store.setResultReturnNeedsReview(true)
+                        Log.w("SequmioRunner", "Automatic return not observed; using manual result notification")
+                    }
+                }
+            }, 3500L)
         }
     }
 
     fun acknowledgeResultVisible(): Boolean {
         if (resultPresented) return false
         resultPresented = true
+        if (awaitingAutomaticReturn) {
+            awaitingAutomaticReturn = false
+            store.setResultReturnNeedsReview(false)
+        }
         Log.i("SequmioRunner", "Result activity visible")
         return true
     }
