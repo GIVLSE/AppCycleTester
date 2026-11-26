@@ -125,6 +125,33 @@ class CycleAccessibilityService : AccessibilityService() {
         }
     }
     private var recorder: AccessibilityEventRecorder? = null
+    private var elementPicker: VisualElementPicker? = null
+
+    fun cancelElementPicker() {
+        elementPicker?.cancel(false)
+        elementPicker = null
+    }
+
+    fun startElementPicker(target: InstalledApp, onSelected: (PickedElement?) -> Unit): String? {
+        check(Looper.myLooper() == Looper.getMainLooper())
+        if (instance !== this || !hasSystemConnection()) return "Runner service is disconnected"
+        if (!store.accessConsentGiven()) return "Review and accept the updated Accessibility disclosure"
+        if (phase == RunPhase.RUNNING || phase == RunPhase.PAUSED || recorder != null)
+            return "Stop the running test or recording first"
+        if (elementPicker != null) return "Element picker is already open"
+        val session = VisualElementPicker(this, target, false) { picked, _ ->
+            elementPicker = null
+            onSelected(picked)
+            runCatching {
+                startActivity(Intent(this, MainActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+            }
+        }
+        elementPicker = session
+        val error = session.startNavigation()
+        if (error != null) elementPicker = null
+        return error
+    }
 
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -172,6 +199,7 @@ class CycleAccessibilityService : AccessibilityService() {
             // An exception in an event callback must not crash the accessibility
             // process and leave an enabled-but-unbound system service.
             Log.e("SequmioRunner", "Accessibility event handling failed", e)
+            runCatching { cancelElementPicker() }
             runCatching { recorder?.stop() }
             if (phase == RunPhase.RUNNING || phase == RunPhase.PAUSED)
                 runCatching { finish("Accessibility event handling failed", RunStatus.BLOCKED) }
@@ -202,7 +230,8 @@ class CycleAccessibilityService : AccessibilityService() {
     }
 
     override fun onInterrupt() {
-        runCatching { recorder?.stop() }
+        runCatching { cancelElementPicker() }
+            runCatching { recorder?.stop() }
         if (phase == RunPhase.RUNNING || phase == RunPhase.PAUSED)
             finish("Accessibility service interrupted", RunStatus.BLOCKED)
     }
@@ -211,6 +240,7 @@ class CycleAccessibilityService : AccessibilityService() {
         destroying = true
         Log.w("SequmioRunner", "Accessibility service unbound pid=" + android.os.Process.myPid())
         try {
+            runCatching { cancelElementPicker() }
             runCatching { recorder?.stop() }
             if (phase == RunPhase.RUNNING || phase == RunPhase.PAUSED)
                 finish("Accessibility service disconnected", RunStatus.BLOCKED)
@@ -225,6 +255,7 @@ class CycleAccessibilityService : AccessibilityService() {
         destroyed = true
         Log.w("SequmioRunner", "Accessibility service destroyed pid=" + android.os.Process.myPid())
         try {
+            runCatching { cancelElementPicker() }
             runCatching { recorder?.stop() }
             if (phase == RunPhase.RUNNING || phase == RunPhase.PAUSED)
                 finish("Accessibility service stopped", RunStatus.BLOCKED)
@@ -248,7 +279,7 @@ class CycleAccessibilityService : AccessibilityService() {
         if (!store.accessConsentGiven()) return "Review and accept the updated Accessibility disclosure"
         if (phase == RunPhase.RUNNING || phase == RunPhase.PAUSED)
             return "Stop the running test before recording"
-        if (recorder != null) return "Recorder is already active"
+        if (recorder != null || elementPicker != null) return "Recorder or element picker is already active"
         val draftStore = MyAppDraftStore(this, ownerUid)
         val draft = draftStore.loadPackage(target.packageName)
             ?: return "Save your My App package name before recording"
@@ -287,6 +318,7 @@ class CycleAccessibilityService : AccessibilityService() {
         check(Looper.myLooper() == Looper.getMainLooper())
         if (!store.accessConsentGiven()) return "Review the Accessibility disclosure first"
         if (instance !== this || !hasSystemConnection()) return "Runner service is disconnected"
+        if (recorder != null || elementPicker != null) return "Finish recording or element selection first"
         newPlan.validate()?.let { return it }
         if (phase == RunPhase.RUNNING || phase == RunPhase.PAUSED)
             return "Stop the current test first"

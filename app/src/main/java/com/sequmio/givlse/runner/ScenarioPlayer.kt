@@ -250,7 +250,9 @@ class ScenarioPlayer(
     }
 
     private fun retryMissing(step: ScenarioStep, message: String) {
-        if (SystemClock.elapsedRealtime() - stepStartedAt < 5000L) {
+        val timeout = if (step.action in ScenarioCodec.assertionActions)
+            ScenarioCodec.assertionTimeoutMs(step.params) else 5000L
+        if (SystemClock.elapsedRealtime() - stepStartedAt < timeout) {
             later(250) { execute(step) }
         } else {
             fail(step, message)

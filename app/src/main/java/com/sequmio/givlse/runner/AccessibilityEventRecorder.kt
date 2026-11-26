@@ -48,6 +48,7 @@ class AccessibilityEventRecorder(
     private val wm = service.getSystemService(WindowManager::class.java)
     private val steps = JSONArray()
     private var overlay: LinearLayout? = null
+    private var picker: VisualElementPicker? = null
     private var paused = false
     private var stopped = false
     private var lastEventAt = 0L
@@ -96,6 +97,12 @@ class AccessibilityEventRecorder(
             setOnClickListener { stop() }
         }
         root.addView(text, LinearLayout.LayoutParams(0, -2, 1f))
+        val check = Button(service).apply {
+            text = "Check"
+            isAllCaps = false
+            setOnClickListener { pickVerification() }
+        }
+        root.addView(check)
         root.addView(pause)
         root.addView(stop)
         val args = WindowManager.LayoutParams(
@@ -112,6 +119,43 @@ class AccessibilityEventRecorder(
         overlay = root
     }
 
+    private fun pickVerification() {
+        if (stopped || picker != null || steps.length() >= 50) return
+        val wasPaused = paused
+        val pickedAt = SystemClock.uptimeMillis()
+        if (!paused) togglePause()
+        overlay?.visibility = android.view.View.GONE
+        val session = VisualElementPicker(service, app, true) { element, action ->
+            picker = null
+            if (!stopped) {
+                overlay?.visibility = android.view.View.VISIBLE
+                if (element != null && action != null && element.hasSelector() && steps.length() < 50) {
+                    val params = JSONObject().put("timeout_ms", 5000L)
+                    if (action == "ASSERT_TEXT") params.put("expected", element.expectedText)
+                    val step = JSONObject().put("order", steps.length() + 1)
+                        .put("action", action).put("selector", element.selector())
+                        .put("label", element.label).put("params", params)
+                        .put("delay_before_ms", if (lastEventAt == 0L) 500L
+                            else ((if (wasPaused) pausedAt else pickedAt) - lastEventAt).coerceIn(0L, 30_000L))
+                    steps.put(step)
+                    // Exclude time spent inspecting the element from replay delays.
+                    lastEventAt = if (wasPaused) pausedAt else pickedAt
+                    labelView?.text = "REC ● " + steps.length()
+                }
+                if (!wasPaused && paused) togglePause()
+                RecorderRuntime.set(RecorderState(recording = true, paused = paused,
+                    stepCount = steps.length(), message = "Recording " + app.label))
+            }
+        }
+        picker = session
+        if (!session.showSelection()) {
+            session.cancel()
+            android.widget.Toast.makeText(service,
+                "No accessible elements. Open the target app and try Check again.",
+                android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
+
     private fun togglePause() {
         val now = SystemClock.uptimeMillis()
         if (paused) {
@@ -125,7 +169,7 @@ class AccessibilityEventRecorder(
     }
 
     fun onEvent(event: AccessibilityEvent) {
-        if (stopped || paused || event.packageName?.toString() != app.packageName) return
+        if (stopped || paused || picker != null || event.packageName?.toString() != app.packageName) return
         if (steps.length() >= 50) { stop(); return }
         val type = event.eventType
         if (type != AccessibilityEvent.TYPE_VIEW_CLICKED &&
@@ -139,7 +183,7 @@ class AccessibilityEventRecorder(
         val step = JSONObject()
         val selector = JSONObject()
         val viewId = source.viewIdResourceName.orEmpty()
-        val description = source.contentDescription?.toString().orEmpty()
+        val description = if (source.isEditable) "" else source.contentDescription?.toString().orEmpty()
         if (viewId.isNotBlank()) selector.put("view_id", viewId)
         else if (description.isNotBlank() && description.length <= 100)
             selector.put("content_desc", description)
@@ -174,14 +218,19 @@ class AccessibilityEventRecorder(
             AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED -> {
                 // Never capture actual typed characters or password values.
                 if (viewId.isBlank() && description.isBlank()) return
-                if (viewId == lastTextResource) return
-                lastTextResource = viewId
+                val textKey = viewId.ifBlank { description }
+                if (textKey == lastTextResource) return
+                lastTextResource = textKey
                 step.put("action", "INPUT_TEXT")
                     .put("selector", selector)
                     .put("params", JSONObject()
                         .put("text", "REPLACE_WITH_TEST_TEXT")
                         .put("clear_before", true))
             }
+        }
+        if (type != AccessibilityEvent.TYPE_VIEW_SCROLLED) {
+            val title = description.take(100).ifBlank { viewId.substringAfterLast('/').replace('_', ' ') }
+            if (title.isNotBlank()) step.put("label", title.take(100))
         }
         step.put("order", steps.length() + 1)
             .put("delay_before_ms", if (lastEventAt == 0L) 500L
@@ -196,6 +245,8 @@ class AccessibilityEventRecorder(
     fun stop() {
         if (stopped) return
         stopped = true
+        picker?.cancel(false)
+        picker = null
         overlay?.let { runCatching { wm.removeView(it) } }
         overlay = null
         val endedAt = if (paused) pausedAt else SystemClock.uptimeMillis()

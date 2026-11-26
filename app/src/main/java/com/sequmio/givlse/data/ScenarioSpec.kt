@@ -33,6 +33,10 @@ object ScenarioCodec {
     private val actions = setOf("WAIT","CLICK","SWIPE","INPUT_TEXT","SYSTEM_BACK") +
         assertionActions
 
+    /** Legacy scenarios retain the original five-second assertion retry window. */
+    fun assertionTimeoutMs(params: JSONObject): Long = params.optLong("timeout_ms", 5000L)
+        .coerceIn(1000L, 30_000L)
+
     /** One JSON scenario or a bundle of independent smoke/regression/feature scenarios. */
     fun split(raw: String): List<String> {
         if (raw.isBlank()) return emptyList()
@@ -104,6 +108,9 @@ object ScenarioCodec {
                     "CLICK requires selector or normalized coordinates"
                 }
                 in assertionActions -> {
+                    require(!params.has("timeout_ms") || params.optLong("timeout_ms", 0L) in 1000L..30_000L) {
+                        "Verification timeout must be 1–30 seconds"
+                    }
                     require(validSelector(selector) &&
                         selector?.optString("text") != "REPLACE_WITH_VISIBLE_TEXT") {
                         "$action requires a real UI selector, not a template placeholder"
