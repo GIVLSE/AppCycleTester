@@ -18,18 +18,28 @@ class SettingsStore(context: Context) {
         prefs.edit().putBoolean("access_disclosure_consent_v3", true).apply()
     }
 
-    fun resultReturnNeedsReview(): Boolean = prefs.getBoolean("result_return_needs_review", false)
+    // Do not migrate the unreliable boolean from 1.3.1/1.3.2 as a confirmed restriction.
+    fun resultReturnStatus(): ResultReturnStatus = runCatching {
+        ResultReturnStatus.valueOf(prefs.getString("result_return_status_v2", null) ?: "UNKNOWN")
+    }.getOrDefault(ResultReturnStatus.UNKNOWN)
 
     fun setResultReturnNeedsReview(value: Boolean) {
-        prefs.edit().putBoolean("result_return_needs_review", value).apply()
+        val status = if (value) ResultReturnStatus.NOT_OBSERVED else ResultReturnStatus.CONFIRMED
+        prefs.edit().putString("result_return_status_v2", status.name).apply()
     }
 
-    fun observeResultReturnNeedsReview(onChange: (Boolean) -> Unit): () -> Unit {
+    fun resultReturnHintDismissed(): Boolean = prefs.getBoolean("result_return_hint_dismissed", false)
+
+    fun setResultReturnHintDismissed(value: Boolean) {
+        prefs.edit().putBoolean("result_return_hint_dismissed", value).apply()
+    }
+
+    fun observeResultReturnSettings(onChange: () -> Unit): () -> Unit {
         val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-            if (key == "result_return_needs_review") onChange(resultReturnNeedsReview())
+            if (key == "result_return_status_v2" || key == "result_return_hint_dismissed") onChange()
         }
         prefs.registerOnSharedPreferenceChangeListener(listener)
-        onChange(resultReturnNeedsReview())
+        onChange()
         return { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
     }
 
@@ -111,3 +121,6 @@ class SettingsStore(context: Context) {
         prefs.edit().putString("history", arr.toString()).apply()
     }
 }
+
+
+enum class ResultReturnStatus { UNKNOWN, CONFIRMED, NOT_OBSERVED }

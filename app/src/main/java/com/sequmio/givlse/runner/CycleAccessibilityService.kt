@@ -197,6 +197,12 @@ class CycleAccessibilityService : AccessibilityService() {
         try {
             recorder?.onEvent(event)
             handleRunEvent(event)
+            if (phase == RunPhase.FINISHED &&
+                (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED ||
+                    event.eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED) &&
+                event.packageName?.toString() == packageName) {
+                observeOwnResultWindow()
+            }
         } catch (e: Exception) {
             // An exception in an event callback must not crash the accessibility
             // process and leave an enabled-but-unbound system service.
@@ -706,11 +712,16 @@ class CycleAccessibilityService : AccessibilityService() {
                         .onFailure { Log.e("SequmioRunner", "Return retry failed", it) }
                 }
             }, 1000L)
-            // A successful startActivity call does not guarantee the OEM actually
-            // brought the activity to the foreground. Observe the result instead.
+            // Check independent application-window evidence even when the result
+            // dialog owns focus and the Activity callback has not fired.
+            handler.postDelayed({
+                if (phase == RunPhase.FINISHED && runGeneration == generation &&
+                    !destroying && !destroyed) observeOwnResultWindow()
+            }, 2000L)
             handler.postDelayed({
                 if (phase == RunPhase.FINISHED && runGeneration == generation &&
                     !destroying && !destroyed) {
+                    observeOwnResultWindow()
                     val foreground = runCatching { rootInActiveWindow?.packageName?.toString() }.getOrNull()
                     val review = returnObservation.deadline(
                         screenAvailable = power.isInteractive && !keyguard.isKeyguardLocked,
@@ -720,19 +731,36 @@ class CycleAccessibilityService : AccessibilityService() {
                         store.setResultReturnNeedsReview(it)
                         Log.i("SequmioRunner", "Automatic return observation at deadline: review=" + it)
                     }
+                    Log.i("SequmioRunner", "Return deadline: foreground=" + foreground + " review=" + review)
                 }
-            }, 3500L)
+            }, 7000L)
         }
     }
 
-    fun acknowledgeResultVisible(returnToken: Long = 0L, manualToken: Long = 0L): Boolean {
+    private fun observeOwnResultWindow() {
+        val ownWindow = runCatching {
+            windows.any { window ->
+                window.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION &&
+                    (window.isActive || window.isFocused) &&
+                    window.root?.packageName?.toString() == packageName
+            }
+        }.getOrDefault(false)
+        if (ownWindow) returnObservation.foregroundObserved()?.let {
+            store.setResultReturnNeedsReview(it)
+            Log.i("SequmioRunner", "Own result window observed: review=" + it)
+        }
+    }
+
+    fun acknowledgeResultVisible(returnToken: Long = 0L, manualToken: Long = 0L,
+        focused: Boolean = true): Boolean {
         if (phase != RunPhase.FINISHED) return false
         // Return classification is independent of the one-shot haptic feedback.
         returnObservation.visible(returnToken, manualToken)?.let {
             store.setResultReturnNeedsReview(it)
             Log.i("SequmioRunner", "Result activity confirmed: review=" + it)
         }
-        if (resultPresented) return false
+        // Preserve the existing one-shot haptic acknowledgement on focus.
+        if (!focused || resultPresented) return false
         resultPresented = true
         Log.i("SequmioRunner", "Result activity visible")
         return true

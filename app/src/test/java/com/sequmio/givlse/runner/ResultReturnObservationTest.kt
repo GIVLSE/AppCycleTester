@@ -50,6 +50,26 @@ class ResultReturnObservationTest {
         assertNull(o.visible(42L, 0L))
         assertEquals(false, o.visible(43L, 0L))
     }
+    @Test fun dialogWindowEvidenceClearsWarningWithoutActivityFocus() {
+        val o = ResultReturnObservation()
+        o.begin(42L)
+        assertEquals(false, o.foregroundObserved())
+        assertEquals(false, o.deadline(true, false))
+        assertNull(o.visible(0L, 42L))
+    }
+    @Test fun manualNotificationHasPriorityOverWindowEvidence() {
+        val o = ResultReturnObservation()
+        o.begin(42L)
+        assertEquals(true, o.visible(0L, 42L))
+        assertNull(o.foregroundObserved())
+        assertEquals(true, o.deadline(true, true))
+    }
+    @Test fun lateWindowAfterFailureIsNotAutomaticEvidence() {
+        val o = ResultReturnObservation()
+        o.begin(42L)
+        assertEquals(true, o.deadline(true, false))
+        assertNull(o.foregroundObserved())
+    }
     @Test fun manualNotificationAfterAutomaticSuccessDoesNotRecreateWarning() {
         val o = ResultReturnObservation()
         o.begin(42L)

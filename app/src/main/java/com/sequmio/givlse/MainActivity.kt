@@ -108,14 +108,16 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun confirmResultIfVisible() {
-        if (!activityResumed || !hasWindowFocus() ||
-            RunnerRuntime.state.value.phase != RunPhase.FINISHED) return
+        // The Compose result Dialog can own window focus while this Activity is resumed.
+        if (!activityResumed || RunnerRuntime.state.value.phase != RunPhase.FINISHED) return
         val service = CycleAccessibilityService.instance ?: return
         val auto = pendingReturnToken
         val manual = pendingManualToken
         pendingReturnToken = 0L
         pendingManualToken = 0L
-        if (service.acknowledgeResultVisible(auto, manual)) {
+        Log.i("SequmioRunner", "Resumed result Activity: auto=" + (auto != 0L) +
+            " manual=" + (manual != 0L) + " focused=" + hasWindowFocus())
+        if (service.acknowledgeResultVisible(auto, manual, hasWindowFocus())) {
             // One user-visible tactile confirmation per completed run.
             val feedback = if (Build.VERSION.SDK_INT >= 30)
                 android.view.HapticFeedbackConstants.CONFIRM

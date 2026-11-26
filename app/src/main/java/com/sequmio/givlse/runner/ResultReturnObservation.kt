@@ -39,6 +39,13 @@ internal class ResultReturnObservation {
         return null
     }
 
+    /** Active application window evidence; never override a known manual notification return. */
+    fun foregroundObserved(): Boolean? {
+        if (!pending || token == 0L || manualConfirmed) return null
+        visibleBeforeDeadline = true
+        return false
+    }
+
     fun deadline(screenAvailable: Boolean, ownForeground: Boolean?): Boolean? {
         if (!pending) return null
         pending = false
@@ -46,7 +53,10 @@ internal class ResultReturnObservation {
         if (manualConfirmed) return true
         // Prefer not showing an incorrect warning over classifying an
         // ambiguous manual launcher return as a failure.
-        if (visibleBeforeDeadline || (screenAvailable && ownForeground == true)) return false
+        if (visibleBeforeDeadline || (screenAvailable && ownForeground == true)) {
+            automaticConfirmed = true
+            return false
+        }
         if (!screenAvailable || ownForeground == null) return null
         return true
     }

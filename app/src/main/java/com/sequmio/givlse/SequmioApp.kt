@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.sequmio.givlse.data.AppCatalog
 import com.sequmio.givlse.data.SettingsStore
+import com.sequmio.givlse.data.ResultReturnStatus
 import com.sequmio.givlse.data.MyAppDraftStore
 import com.sequmio.givlse.data.ScenarioCodec
 import com.sequmio.givlse.data.PublishedApp
@@ -84,9 +85,13 @@ internal fun SequmioApp(
 ) {
     val context = LocalContext.current
     val store = remember { SettingsStore(context) }
-    var returnNeedsReview by remember { mutableStateOf(store.resultReturnNeedsReview()) }
+    var returnStatus by remember { mutableStateOf(store.resultReturnStatus()) }
+    var returnHintDismissed by remember { mutableStateOf(store.resultReturnHintDismissed()) }
     DisposableEffect(store) {
-        val unsubscribe = store.observeResultReturnNeedsReview { returnNeedsReview = it }
+        val unsubscribe = store.observeResultReturnSettings {
+            returnStatus = store.resultReturnStatus()
+            returnHintDismissed = store.resultReturnHintDismissed()
+        }
         onDispose { unsubscribe() }
     }
     val apps = remember(permissionRefreshToken) { AppCatalog.list(context) }
@@ -318,13 +323,21 @@ internal fun SequmioApp(
                 )
             }
         }
-        if (page == Page.RUNNER && returnNeedsReview && !active) {
-            Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("Automatic return was not observed. Tests can still run.",
-                    color = SeqColors.Muted, fontSize = 12.sp)
-                SeqTextButton(onClick = { openPermissions(Page.RUNNER) }) {
-                    Text("Review background launch settings")
+        if (page == Page.RUNNER && returnStatus == ResultReturnStatus.NOT_OBSERVED &&
+            !returnHintDismissed && !active) {
+            SeqCard(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp)) {
+                Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+                    verticalAlignment = Alignment.Top) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text("Automatic return was not observed", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        Text("Tests can still run without automatic return.", color = SeqColors.Muted, fontSize = 12.sp)
+                        SeqTextButton(onClick = { openPermissions(Page.RUNNER) }) {
+                            Text("Review background launch settings")
+                        }
+                    }
+                    IconButton(onClick = { store.setResultReturnHintDismissed(true) }) {
+                        Icon(Icons.Outlined.Close, "Hide automatic return recommendation", tint = SeqColors.Muted)
+                    }
                 }
             }
         }
@@ -574,7 +587,9 @@ internal fun SequmioApp(
                     ready = connected,
                     systemEnabled = systemAccessibilityEnabled,
                     notificationsGranted = notificationsGranted,
-                    returnNeedsReview = returnNeedsReview,
+                    returnStatus = returnStatus,
+                    returnHintDismissed = returnHintDismissed,
+                    onReturnHintDismissed = { store.setResultReturnHintDismissed(it) },
                     consent = consent,
                     onConsent = { store.saveAccessConsent(); consent = true },
                     onBack = { page = setupReturnPage },
