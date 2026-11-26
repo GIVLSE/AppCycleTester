@@ -2,6 +2,18 @@ package com.sequmio.givlse
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.zIndex
+import com.sequmio.givlse.data.StepReorder
+import com.sequmio.givlse.data.StepBounds
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -124,9 +136,52 @@ internal fun SequmioVisualScenarioEditor(
     val rowObjects = steps.map { JSONObject(it) }
     val checks = rowObjects.count { it.optString("action") in StepUi.checks }
     val issues = rowObjects.count { StepUi.warning(it) != null } + if (checks == 0) 1 else 0
-    val dragPx = with(LocalDensity.current) { 70.dp.toPx() }
+    val scroll = rememberScrollState()
+    val bounds = remember(steps.size, showJson, pickPending) { mutableStateMapOf<Int, StepBounds>() }
+    var dragging by remember { mutableIntStateOf(-1) }
+    var dragDelta by remember { mutableFloatStateOf(0f) }
+    var dragStartScroll by remember { mutableIntStateOf(0) }
+    var viewportTop by remember { mutableFloatStateOf(0f) }
+    var viewportBottom by remember { mutableFloatStateOf(0f) }
+    val edge = with(LocalDensity.current) { 64.dp.toPx() }
+    val dragBounds = bounds[dragging]
+    val displacement = if (dragging >= 0) dragDelta + scroll.value - dragStartScroll else 0f
+    val destination = if (dragBounds != null)
+        StepReorder.destination(dragging, dragBounds.center + displacement, bounds)
+        else dragging
+    val gap = with(LocalDensity.current) { 12.dp.toPx() }
+    fun endDrag(commit: Boolean) {
+        val from = dragging
+        val to = if (from >= 0) bounds[from]?.let {
+            StepReorder.destination(from, it.center + dragDelta + scroll.value - dragStartScroll, bounds)
+        } ?: from else from
+        dragging = -1
+        dragDelta = 0f
+        if (commit) move(from, to)
+    }
+    LaunchedEffect(dragging) {
+        if (dragging >= 0) {
+            while (dragging >= 0) {
+                val item = bounds[dragging] ?: break
+                val screenY = item.center + dragDelta - dragStartScroll
+                val speed = when {
+                    screenY < viewportTop + edge && dragging > 0 ->
+                        -((viewportTop + edge - screenY) / edge).coerceIn(0f, 1f) * 18f
+                    screenY > viewportBottom - edge && dragging < steps.lastIndex ->
+                        ((screenY - (viewportBottom - edge)) / edge).coerceIn(0f, 1f) * 18f
+                    else -> 0f
+                }
+                if (speed != 0f) scroll.scrollBy(speed)
+                delay(16)
+            }
+        }
+    }
 
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp),
+    Box(Modifier.fillMaxSize().onGloballyPositioned {
+        viewportTop = it.positionInRoot().y
+        viewportBottom = viewportTop + it.size.height
+    }) {
+    Column(Modifier.fillMaxSize().verticalScroll(scroll).padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SeqTopBar("Scenario Editor", {
             if (pickPending) { onCancelPick(); pickPending = false } else requestBack()
@@ -195,10 +250,26 @@ internal fun SequmioVisualScenarioEditor(
                 val params = step.optJSONObject("params") ?: JSONObject()
                 val element = StepUi.elementLabel(step)
                 val warning = StepUi.warning(step)
-                SeqCard(Modifier.fillMaxWidth()) {
+                val selected = i == dragging
+                val neighborOffset = StepReorder.neighborOffset(i, dragging, destination,
+                    (dragBounds?.height ?: 0f) + gap)
+                val animatedOffset by animateFloatAsState(neighborOffset, spring(), label = "step shift")
+                val displayIndex = StepReorder.displayIndex(i, dragging, destination)
+                Box(Modifier.fillMaxWidth().zIndex(if (selected) 2f else 0f)
+                    .onGloballyPositioned {
+                        val next = StepBounds(it.positionInRoot().y + scroll.value, it.size.height.toFloat())
+                        if (bounds[i] != next) bounds[i] = next
+                    }) {
+                if (selected) {
+                    Box(Modifier.matchParentSize().border(1.dp, SeqColors.Border, RoundedCornerShape(16.dp)))
+                }
+                SeqCard(Modifier.fillMaxWidth().graphicsLayer {
+                    translationY = if (selected) displacement else animatedOffset
+                    shadowElevation = if (selected) 12.dp.toPx() else 0f
+                }.then(if (selected) Modifier.border(2.dp, SeqColors.Teal, RoundedCornerShape(16.dp)) else Modifier)) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("${i + 1}", color = SeqColors.Muted, modifier = Modifier.padding(end = 9.dp))
+                            Text("${displayIndex + 1}", color = if (selected) SeqColors.Teal else SeqColors.Muted, modifier = Modifier.padding(end = 9.dp))
                             Icon(if (isCheck) Icons.Outlined.CheckCircle else Icons.Outlined.PlayArrow,
                                 null, tint = tint, modifier = Modifier.size(23.dp))
                             Column(Modifier.weight(1f).padding(horizontal = 9.dp)) {
@@ -217,25 +288,26 @@ internal fun SequmioVisualScenarioEditor(
                                     color = SeqColors.Muted, fontSize = 11.sp)
                                 if (warning != null) Text(warning, color = SeqColors.Error, fontSize = 12.sp)
                             }
-                            IconButton(onClick = { editing = i; showAdvanced = false }) {
+                            IconButton(onClick = { editing = i; showAdvanced = false }, enabled = dragging < 0) {
                                 Icon(Icons.Outlined.Edit, "Edit step")
                             }
-                            // Long press and drag the handle by one row. Arrow controls are accessible fallback.
-                            var delta by remember { mutableFloatStateOf(0f) }
                             Icon(Icons.Outlined.DragHandle, "Hold and drag to reorder",
-                                tint = SeqColors.Muted,
+                                tint = if (selected) SeqColors.Teal else SeqColors.Muted,
                                 modifier = Modifier.size(36.dp).pointerInput(i, steps.size) {
-                                    detectDragGesturesAfterLongPress(onDragStart = { delta = 0f },
-                                        onDragEnd = {
-                                            val offset = (delta / dragPx).toInt()
-                                            if (offset != 0) move(i, (i + offset).coerceIn(0, steps.lastIndex))
-                                            delta = 0f
-                                        }, onDragCancel = { delta = 0f }) { change, amount ->
-                                        change.consume(); delta += amount.y
+                                    detectDragGesturesAfterLongPress(onDragStart = {
+                                        if (bounds.size == steps.size) {
+                                            dragStartScroll = scroll.value
+                                            dragDelta = 0f
+                                            dragging = i
+                                        }
+                                    }, onDragEnd = { if (dragging == i) endDrag(true) },
+                                        onDragCancel = { if (dragging == i) endDrag(false) }) { change, amount ->
+                                        if (dragging == i) { change.consume(); dragDelta += amount.y }
                                     }
                                 })
                         }
-                    }
+                     }
+                }
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -259,6 +331,7 @@ internal fun SequmioVisualScenarioEditor(
         Text("Changes stay on this device until you update the published listing.",
             color = SeqColors.Muted, fontSize = 12.sp)
         }
+    }
     }
     if (addKind.isNotBlank()) AlertDialog(onDismissRequest = { addKind = "" },
         title = { Text(if (addKind == "check") "Add Verification" else "Add Action") },

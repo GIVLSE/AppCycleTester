@@ -90,6 +90,7 @@ class CycleAccessibilityService : AccessibilityService() {
     private var runGeneration = 0
     private var resultPresented = false
     private var awaitingAutomaticReturn = false
+    private var automaticReturnToken = 0L
     private var completionResults: RunCompletionAccumulator? = null
     private var lastCheckpointSecond = -1L
     private var destroying = false
@@ -656,8 +657,10 @@ class CycleAccessibilityService : AccessibilityService() {
 
     /** Return promptly; durable report writing continues on the ordered IO worker. */
     private fun presentRunResult(reason: String, status: String) {
+        automaticReturnToken = SystemClock.elapsedRealtime()
         val intent = Intent(this, MainActivity::class.java)
             .setAction(MainActivity.ACTION_SHOW_RUN_RESULT)
+            .putExtra(MainActivity.EXTRA_AUTOMATIC_RETURN, automaticReturnToken)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or
                 Intent.FLAG_ACTIVITY_SINGLE_TOP)
         // Notification is also a fallback when Android/OEM background launch is restricted.
@@ -668,7 +671,8 @@ class CycleAccessibilityService : AccessibilityService() {
                 manager.createNotificationChannel(NotificationChannel(
                     channel, "Sequmio test results", NotificationManager.IMPORTANCE_HIGH
                 ))
-                val open = PendingIntent.getActivity(this, 411, intent,
+                val manualIntent = Intent(intent).apply { removeExtra(MainActivity.EXTRA_AUTOMATIC_RETURN) }
+                val open = PendingIntent.getActivity(this, 411, manualIntent,
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
                 manager.notify(411, Notification.Builder(this, channel)
                     .setSmallIcon(android.R.drawable.ic_menu_info_details)
@@ -717,12 +721,15 @@ class CycleAccessibilityService : AccessibilityService() {
         }
     }
 
-    fun acknowledgeResultVisible(): Boolean {
+    fun acknowledgeResultVisible(returnToken: Long = 0L): Boolean {
         if (resultPresented) return false
         resultPresented = true
         if (awaitingAutomaticReturn) {
             awaitingAutomaticReturn = false
-            store.setResultReturnNeedsReview(false)
+            if (returnToken != 0L && returnToken == automaticReturnToken)
+                store.setResultReturnNeedsReview(false)
+            else
+                store.setResultReturnNeedsReview(true)
         }
         Log.i("SequmioRunner", "Result activity visible")
         return true

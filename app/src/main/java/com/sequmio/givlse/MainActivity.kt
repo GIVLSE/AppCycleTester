@@ -34,12 +34,15 @@ import androidx.compose.ui.Modifier
 class MainActivity : ComponentActivity() {
     companion object {
         const val ACTION_SHOW_RUN_RESULT = "com.sequmio.givlse.SHOW_RUN_RESULT"
+        const val EXTRA_AUTOMATIC_RETURN = "automatic_return_token"
     }
 
     private val runResultOpenVersion = MutableStateFlow(0)
+    private var pendingReturnToken = 0L
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        pendingReturnToken = intent.getLongExtra(EXTRA_AUTOMATIC_RETURN, 0L)
         if (intent.action == ACTION_SHOW_RUN_RESULT) runResultOpenVersion.value += 1
     }
 
@@ -81,8 +84,10 @@ class MainActivity : ComponentActivity() {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) {
             refreshAccessibility()
+            val returnToken = pendingReturnToken
+            pendingReturnToken = 0L
             if (RunnerRuntime.state.value.phase == RunPhase.FINISHED &&
-                CycleAccessibilityService.instance?.acknowledgeResultVisible() == true) {
+                CycleAccessibilityService.instance?.acknowledgeResultVisible(returnToken) == true) {
                 // One user-visible tactile confirmation per completed run; respects system settings.
                 val feedback = if (Build.VERSION.SDK_INT >= 30)
                     android.view.HapticFeedbackConstants.CONFIRM
@@ -123,6 +128,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        pendingReturnToken = intent?.getLongExtra(EXTRA_AUTOMATIC_RETURN, 0L) ?: 0L
         if (intent?.action == ACTION_SHOW_RUN_RESULT) runResultOpenVersion.value += 1
         if (CycleAccessibilityService.instance == null) {
             RunReportStore(this).recoverInterrupted()
