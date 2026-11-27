@@ -63,6 +63,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import com.sequmio.givlse.data.PlanCaseUpdates
 import com.sequmio.givlse.data.OwnerPlanSync
+import com.sequmio.givlse.data.JoinedPlanSync
+import com.sequmio.givlse.data.CommunityRepository
 import java.util.Locale
 
 private const val RUNNER_DISCONNECTED_MESSAGE =
@@ -103,6 +105,28 @@ internal fun SequmioApp(
     var setupReturnPage by remember { mutableStateOf(Page.RUNNER) }
     val account = remember { SequmioAccount(context) }
     val ownerUid = account.profile?.uid
+    var joinedPublished by remember(ownerUid) { mutableStateOf<List<PublishedApp>?>(null) }
+    var excludedJoined by remember(ownerUid) {
+        mutableStateOf(ownerUid?.let(store::excludedJoinedApps).orEmpty())
+    }
+    var joinedRefresh by remember(ownerUid) { mutableIntStateOf(0) }
+    var queuedJoined by remember(ownerUid) {
+        mutableStateOf<List<Pair<PublishedApp, InstalledApp>>>(emptyList())
+    }
+    LaunchedEffect(ownerUid, permissionRefreshToken, joinedRefresh) {
+        val uid = ownerUid ?: return@LaunchedEffect
+        try {
+            val snapshot = kotlinx.coroutines.withTimeoutOrNull(15_000L) {
+                CommunityRepository(account).joinedPublishedApps(uid)
+            } ?: error("Joined apps sync timed out")
+            if (account.profile?.uid == uid) joinedPublished = snapshot
+        } catch (cancel: kotlinx.coroutines.CancellationException) {
+            throw cancel
+        } catch (error: Exception) {
+            // No authoritative response: retain the last verified snapshot and local plan.
+            android.util.Log.w("SequmioSync", "Joined apps sync unavailable", error)
+        }
+    }
     val draftStore = remember(ownerUid) { MyAppDraftStore(context, ownerUid) }
     var ownAppDraft by remember(ownerUid) { mutableStateOf(draftStore.load()) }
     var ownedChoices by remember(ownerUid) { mutableStateOf(draftStore.choices()) }
@@ -213,6 +237,30 @@ internal fun SequmioApp(
             if (next != plan) setPlan(next)
         }
     }
+    // A null snapshot means offline / not yet verified, never "no memberships".
+    LaunchedEffect(ownerUid, joinedPublished, excludedJoined, apps, active, durationTarget, picker, queuedJoined) {
+        if (!active && durationTarget == null && !picker) {
+            val uid = ownerUid
+            if (account.profile?.uid == uid) {
+                var next = JoinedPlanSync.merge(plan, uid, joinedPublished, apps, excludedJoined)
+                if (uid != null && queuedJoined.isNotEmpty()) {
+                    queuedJoined.forEach { (remote, installed) ->
+                        if (installed.packageName !in excludedJoined &&
+                            apps.any { it.packageName == installed.packageName }) {
+                            next = JoinedPlanSync.addExplicit(next, uid, remote, installed)
+                        }
+                    }
+                    queuedJoined = emptyList()
+                }
+                if (next != plan) setPlan(next)
+            }
+        }
+    }
+    fun setJoinedExcluded(pkg: String, excluded: Boolean) {
+        val uid = ownerUid ?: return
+        store.setJoinedExcluded(uid, pkg, excluded)
+        excludedJoined = store.excludedJoinedApps(uid)
+    }
     fun setOwnedExcluded(pkg: String, excluded: Boolean) {
         val uid = ownerUid ?: return
         store.setOwnedExcluded(uid, pkg, excluded)
@@ -225,6 +273,11 @@ internal fun SequmioApp(
         if (uid != null && draft != null) {
             setOwnedExcluded(installed.packageName, false)
             val next = OwnerPlanSync.addExplicit(plan, uid, draft, installed)
+            if (next != plan) setPlan(next)
+        } else if (uid != null && joinedPublished?.any { it.packageName == installed.packageName } == true) {
+            val remote = joinedPublished!!.first { it.packageName == installed.packageName }
+            setJoinedExcluded(installed.packageName, false)
+            val next = JoinedPlanSync.addExplicit(plan, uid, remote, installed)
             if (next != plan) setPlan(next)
         } else if (plan.targets.none { it.packageName == installed.packageName }) {
             setPlan(plan.copy(targets = plan.targets + TestTarget(
@@ -248,35 +301,20 @@ internal fun SequmioApp(
         if (previous != null) syncEditedCase(previous, updated.scenarioJson, ownAppDraft.packageName)
         saveDraft(ownAppDraft.copy(scenarioJson = combined))
     }
-    fun mergeCommunity(
-        changes: List<Pair<PublishedApp, InstalledApp>>,
-        explicitJoin: Boolean
-    ) {
-        val imported = changes.mapNotNull { (published, installed) ->
-            val spec = runCatching {
-                ScenarioCodec.parseAll(published.scenarioJson, published.packageName)
-            }.getOrNull() ?: return@mapNotNull null
-            installed.packageName to TestTarget(
-                installed.packageName, installed.activityClass, published.name,
-                spec.sumOf { it.totalDurationSec }.coerceAtMost(7200),
-                published.scenarioJson, "community"
-            )
-        }.toMap()
-        if (imported.isEmpty()) return
-        val next = plan.targets.map { existing ->
-            val remote = imported[existing.packageName]
-            if (remote != null && (explicitJoin || existing.origin == "community"))
-                remote.copy(executionMode = if (explicitJoin && existing.scenarioJson.isNullOrBlank())
-                    remote.executionMode else existing.executionMode,
-                    durationSeconds = if (existing.executionMode == ExecutionMode.RUN_TEST_CASES)
-                        remote.durationSeconds else existing.durationSeconds,
-                    scenarioTimeoutSeconds = existing.scenarioTimeoutSeconds,
-                    selectedCaseKeys = existing.selectedCaseKeys) else existing
-        }.toMutableList()
-        imported.values.forEach { remote ->
-            if (next.none { it.packageName == remote.packageName }) next.add(remote)
+    fun joinCommunity(published: PublishedApp, installed: InstalledApp) {
+        val uid = ownerUid ?: return
+        if (account.profile?.uid != uid || published.ownerUid == uid) return
+        setJoinedExcluded(installed.packageName, false)
+        // A just-confirmed join may not be in the previous server snapshot.
+        joinedPublished = joinedPublished?.filterNot { it.packageName == published.packageName }?.plus(published)
+        if (active || durationTarget != null || picker) {
+            queuedJoined = queuedJoined.filterNot { it.first.packageName == published.packageName } +
+                (published to installed)
+        } else {
+            val next = JoinedPlanSync.addExplicit(plan, uid, published, installed)
+            if (next != plan) setPlan(next)
         }
-        if (next != plan.targets) setPlan(plan.copy(targets = next))
+        joinedRefresh++
     }
     fun openSettings() {
         settingsReturnPage = when (page) {
@@ -373,6 +411,9 @@ internal fun SequmioApp(
                         if (publishedOwned.any { it.packageName == pkg } ||
                             plan.targets.any { it.packageName == pkg && it.origin == "owner" })
                             setOwnedExcluded(pkg, true)
+                        if (joinedPublished?.any { it.packageName == pkg } == true ||
+                            plan.targets.any { it.packageName == pkg && it.origin == "community" })
+                            setJoinedExcluded(pkg, true)
                         setPlan(plan.copy(targets = plan.targets.filterNot { it.packageName == pkg }))
                     },
                     onRepeat = { setPlan(plan.copy(repeatMode = it)) },
@@ -386,9 +427,9 @@ internal fun SequmioApp(
                     refreshToken = permissionRefreshToken,
                     onOpenSettings = { openSettings() },
                     onJoined = { published, installed ->
-                        mergeCommunity(listOf(published to installed), true)
+                        joinCommunity(published, installed)
                     },
-                    onSync = { list -> mergeCommunity(list, false) },
+                    onSync = { joinedRefresh++ },
                     onOwnedTest = { published, installed ->
                         if (!active && ownerUid != null && published.ownerUid == ownerUid) {
                             val draft = published.toDraft()

@@ -146,6 +146,34 @@ class CommunityRepository(private val account: SequmioAccount) {
             }
     }
 
+    /** Authoritative account snapshot, independent of the 50-entry discovery catalog.
+     * Query published status explicitly: private drafts are not readable by testers.
+     * Do not turn a partial/failed fetch into an empty authoritative snapshot.
+     */
+    suspend fun joinedPublishedApps(uid: String): List<PublishedApp> {
+        require(uid == requiredUid()) { "Account changed" }
+        val server = com.google.firebase.firestore.Source.SERVER
+        val memberships = db().collection("memberships")
+            .whereEqualTo("userUid", uid).get(server).await()
+        require(uid == requiredUid()) { "Account changed" }
+        val packages = memberships.documents
+            .filter { it.getBoolean("selfConfirmed") == true }
+            .mapNotNull { it.getString("packageName")?.takeIf { pkg -> pkg.isNotBlank() } }
+            .distinct().sorted()
+        val result = mutableListOf<PublishedApp>()
+        for (chunk in packages.chunked(10)) {
+            require(uid == requiredUid()) { "Account changed" }
+            val docs = db().collection("apps")
+                .whereEqualTo("status", "published")
+                .whereIn(com.google.firebase.firestore.FieldPath.documentId(), chunk)
+                .get(server).await()
+            result += docs.documents.mapNotNull { fromDocument(it.data.orEmpty()) }
+                .filter { it.packageName in chunk && it.status == "published" && it.ownerUid != uid }
+        }
+        require(uid == requiredUid()) { "Account changed" }
+        return result.sortedWith(compareBy<PublishedApp> { it.name.lowercase() }.thenBy { it.packageName })
+    }
+
     suspend fun confirmJoin(app: PublishedApp, group: Boolean, optIn: Boolean, install: Boolean) {
         val uid = requiredUid()
         require(group && optIn && install) {

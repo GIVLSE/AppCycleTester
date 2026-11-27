@@ -48,7 +48,7 @@ internal fun SequmioCommunityCatalog(
     refreshToken: Int,
     onOpenSettings: () -> Unit,
     onJoined: (PublishedApp, InstalledApp) -> Unit,
-    onSync: (List<Pair<PublishedApp, InstalledApp>>) -> Unit,
+    onSync: () -> Unit,
     onOwnedTest: (PublishedApp, InstalledApp) -> Unit,
     onLocalTest: (InstalledApp) -> Unit
 ) {
@@ -98,23 +98,15 @@ internal fun SequmioCommunityCatalog(
                 // Reconcile successful joins, including a previously interrupted response.
                 joined.forEach { if (it in pending) savePending(it, null) }
                 val known = catalog.associateBy { it.packageName }
-                val extra = (pending.keys - known.keys).mapNotNull { pkg ->
+                val extra = ((pending.keys + joined) - known.keys).mapNotNull { pkg ->
                     runCatching { repo.publishedApp(pkg) }.getOrNull()
                 }
                 published = catalog + extra
                 selected?.let { old ->
                     published.firstOrNull { it.packageName == old.packageName }?.let { selected = it }
                 }
-                val synced = memberList.mapNotNull { membership ->
-                    val remote = known[membership.packageName] ?: runCatching {
-                        repo.publishedApp(membership.packageName)
-                    }.getOrNull()
-                    val local = installed.firstOrNull {
-                        it.packageName == membership.packageName
-                    }
-                    if (remote != null && local != null) remote to local else null
-                }
-                if (synced.isNotEmpty()) onSync(synced)
+                // Root owns authoritative plan synchronization, including empty snapshots.
+                onSync()
                 notice = ""
             } catch (error: Exception) {
                 published = emptyList()

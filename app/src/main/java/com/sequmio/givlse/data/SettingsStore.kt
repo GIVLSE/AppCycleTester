@@ -52,6 +52,16 @@ class SettingsStore(context: Context) {
         prefs.edit().putStringSet("owned_plan_excluded:$uid", next).apply()
     }
 
+    // Community exclusions are local and scoped to the authenticated tester.
+    fun excludedJoinedApps(uid: String): Set<String> =
+        prefs.getStringSet("joined_plan_excluded:$uid", emptySet()).orEmpty().toSet()
+
+    fun setJoinedExcluded(uid: String, pkg: String, excluded: Boolean) {
+        val previous = excludedJoinedApps(uid)
+        val next = if (excluded) previous + pkg else previous - pkg
+        prefs.edit().putStringSet("joined_plan_excluded:$uid", next).apply()
+    }
+
     fun loadPlan(): TestPlan = try {
         val json = JSONObject(prefs.getString("plan", "{}") ?: "{}")
         val targetsArray = json.optJSONArray("targets") ?: JSONArray()
