@@ -12,8 +12,19 @@ import org.json.JSONObject
 /** Read the real Firebase session without instantiating another auth listener. */
 internal object QaLocalAccount {
     fun uid(context: Context): String? = runCatching {
-        FirebaseApp.getApps(context.applicationContext).firstOrNull { it.name == "SequmioCloud" }
-            ?.let { FirebaseAuth.getInstance(it).currentUser?.uid }
+        val appContext = context.applicationContext
+        val app = synchronized(QaLocalAccount) {
+            FirebaseApp.getApps(appContext).firstOrNull { it.name == "SequmioCloud" } ?:
+                if (com.sequmio.givlse.BuildConfig.FIREBASE_PROJECT_ID.isNotBlank() &&
+                    com.sequmio.givlse.BuildConfig.FIREBASE_APP_ID.isNotBlank() &&
+                    com.sequmio.givlse.BuildConfig.FIREBASE_API_KEY.isNotBlank()) {
+                    FirebaseApp.initializeApp(appContext, com.google.firebase.FirebaseOptions.Builder()
+                        .setProjectId(com.sequmio.givlse.BuildConfig.FIREBASE_PROJECT_ID)
+                        .setApplicationId(com.sequmio.givlse.BuildConfig.FIREBASE_APP_ID)
+                        .setApiKey(com.sequmio.givlse.BuildConfig.FIREBASE_API_KEY).build(), "SequmioCloud")
+                } else null
+        }
+        app?.let { FirebaseAuth.getInstance(it).currentUser?.uid }
     }.getOrNull()
 }
 

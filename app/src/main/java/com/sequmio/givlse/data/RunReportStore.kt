@@ -308,7 +308,6 @@ class RunReportStore(private val context: Context) {
                     saved = archive(json)
                     if (saved) {
                         RunProgressStore(context).recordPassedApps(json.optJSONArray("targets") ?: JSONArray())
-                        QaProgressStore(context).record(json)
                     }
                 }
             } catch (e: Exception) {
@@ -333,6 +332,7 @@ class RunReportStore(private val context: Context) {
             Log.e("SequmioReports", "History archive commit failed")
             return false
         }
+        runCatching { QaProgressStore(context).record(json) }
         revisionState.value += 1
         if (CloudUploadPrefs(context).enabled) {
             runCatching { CloudRunUploader.enqueue(context, id) }

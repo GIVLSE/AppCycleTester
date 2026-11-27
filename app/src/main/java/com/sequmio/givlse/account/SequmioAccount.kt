@@ -183,6 +183,15 @@ class SequmioAccount(context: Context) {
                     listing.reference.delete().await()
                 }
             }
+            // Remove explicitly shared images before removing their report records.
+            for (field in listOf("ownerUid", "testerUid")) {
+                while (true) {
+                    val images = database.collection("runEvidence").whereEqualTo(field, uid)
+                        .limit(100).get(com.google.firebase.firestore.Source.SERVER).await().documents
+                    if (images.isEmpty()) break
+                    images.forEach { it.reference.delete().await() }
+                }
+            }
             for (field in listOf("ownerUid", "testerUid")) {
                 while (true) {
                     val runs = database.collection("testRuns")
@@ -207,6 +216,7 @@ class SequmioAccount(context: Context) {
             current.delete().await()
             com.sequmio.givlse.data.PendingJoinStore(appContext, uid).clear()
             com.sequmio.givlse.data.QaProgressStore(appContext).clear(uid)
+            com.sequmio.givlse.data.EvidenceStore(appContext).clear(uid)
             com.sequmio.givlse.data.QaReminderScheduler.reconcile(appContext)
             profile = null
             CloudUploadPrefs(appContext).enabled = false

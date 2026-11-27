@@ -178,6 +178,7 @@ internal fun SequmioQaDashboard(appId: String, account: SequmioAccount, onBack: 
                         SeqTextButton(onClick = { expandedCase = if (expandedCase == run.id) null else run.id }) {
                             Text(if (expandedCase == run.id) "Hide steps" else "Step results (${run.steps.size})")
                         }
+                        if (run.status == "FAIL") QaSharedEvidence(account, run.id)
                         if (expandedCase == run.id) run.steps.forEach { step ->
                             Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                                 Column(Modifier.weight(1f)) {
