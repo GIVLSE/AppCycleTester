@@ -17,14 +17,17 @@ data class QaRun(
     val id: String, val appId: String, val status: String,
     val build: String, val model: String, val androidApi: Int,
     val suite: String, val scenario: String, val versions: String,
-    val endedAt: Long, val testerUid: String, val steps: List<QaStep>
+    val endedAt: Long, val testerUid: String, val steps: List<QaStep>,
+    val runId: String = "", val elapsedSeconds: Long = -1L, val buildCode: Long = 0L,
+    val sessionStatus: String = "", val startedAt: Long = 0L
 )
 data class QaDigest(
     val day: String, val total: Int, val pass: Int, val fail: Int,
     val stopped: Int, val incomplete: Int, val devices: Int,
     val testers: Int, val emailed: Boolean
 )
-data class QaDashboardData(val runs: List<QaRun>, val digests: List<QaDigest>) {
+data class QaDashboardData(val runs: List<QaRun>, val digests: List<QaDigest>,
+    val joined: Long? = null, val publishedCases: List<QaCaseKey>? = null, val limited: Boolean = false) {
     val total: Int get() = runs.size
     val pass: Int get() = runs.count { it.status == "PASS" }
     val fail: Int get() = runs.count { it.status == "FAIL" }
@@ -66,14 +69,23 @@ class QaDashboardRepository(private val account: SequmioAccount) {
         return QaTodaySummary.fromCases(cases)
     }
 
-    suspend fun load(appId: String): QaDashboardData {
+    suspend fun load(appId: String, days: Int = 7): QaDashboardData {
         val uid = requireNotNull(account.profile?.uid) { "Sign in first" }
         val db = requireNotNull(account.cloudStore()) { "Cloud backend unavailable" }
-        val runDocs = db.collection("testRuns").whereEqualTo("ownerUid", uid)
-            .limit(250).get().await().documents
-        val reports = db.collection("dailyReports").whereEqualTo("ownerUid", uid)
-            .limit(80).get().await().documents
-        val runs = runDocs.filter { it.getString("appId") == appId }.map { doc ->
+        require(days in listOf(0, 1, 7, 30))
+        val zone = java.time.ZoneOffset.UTC
+        val today = LocalDate.now(zone)
+        val end = Timestamp(Date.from(today.plusDays(1).atStartOfDay(zone).toInstant()))
+        // Use the existing ascending owner/app/time index; never mix other apps.
+        val base = db.collection("testRuns").whereEqualTo("ownerUid", uid)
+            .whereEqualTo("appId", appId).whereLessThan("endedAt", end)
+        val query = if (days == 0) base else base.whereGreaterThanOrEqualTo("endedAt",
+            Timestamp(Date.from(today.minusDays(days.toLong() - 1).atStartOfDay(zone).toInstant())))
+        // Ascending query uses the existing production index; bounded oldest
+        // window when capped, explicitly marked incomplete in the UI.
+        val runDocs = query.orderBy("endedAt").limit(2001).get(Source.SERVER).await().documents
+        val reports = emptyList<com.google.firebase.firestore.DocumentSnapshot>()
+        val runs = runDocs.take(2000).map { doc ->
             val steps = (doc.get("stepResults") as? List<*>).orEmpty()
                 .mapNotNull { row ->
                     val item = row as? Map<*, *> ?: return@mapNotNull null
@@ -99,7 +111,10 @@ class QaDashboardRepository(private val account: SequmioAccount) {
                 doc.getString("scenarioVersions").orEmpty(),
                 doc.getTimestamp("endedAt")?.toDate()?.time ?: 0,
                 doc.getString("testerUid").orEmpty(),
-                steps
+                steps,
+                doc.getString("runId").orEmpty(), doc.getLong("elapsedSeconds") ?: -1L,
+                doc.getLong("appVersionCode") ?: 0L, doc.getString("sessionStatus").orEmpty(),
+                doc.getTimestamp("startedAt")?.toDate()?.time ?: 0L
             )
         }.sortedByDescending { it.endedAt }
         val digests = reports.filter { it.getString("appId") == appId }.map { d ->
@@ -115,6 +130,18 @@ class QaDashboardRepository(private val account: SequmioAccount) {
                 d.getBoolean("emailSent") == true
             )
         }.sortedByDescending { it.day }
-        return QaDashboardData(runs, digests)
+        suspend fun <T> optional(block: suspend () -> T): T? = try { block() }
+            catch (cancel: kotlinx.coroutines.CancellationException) { throw cancel }
+            catch (_: Exception) { null }
+        val joined = optional { joinedCount(appId) }
+        val publishedCases = optional {
+            val app = CommunityRepository(account).myPublishedApp(appId)
+            require(app != null && app.status == "published")
+            ScenarioCodec.parseAll(app.scenarioJson, appId).map {
+                QaCaseKey(it.suite, it.name, it.version.toString())
+            }
+        }
+        require(account.profile?.uid == uid) { "Account changed" }
+        return QaDashboardData(runs, digests, joined, publishedCases, runDocs.size > 2000)
     }
 }
