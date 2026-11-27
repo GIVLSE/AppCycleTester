@@ -52,14 +52,25 @@ internal class QaProgressStore(context: Context) {
         val uid = report.optString("testerUid").takeIf { it.isNotBlank() } ?: return
         val targets = report.optJSONArray("targets") ?: return
         val end = report.optLong("endedAt").takeIf { it > 0 } ?: return
-        val day = Instant.ofEpochMilli(end).atZone(ZoneId.systemDefault()).toLocalDate()
+        val zone = ZoneId.systemDefault()
+        val day = Instant.ofEpochMilli(end).atZone(zone).toLocalDate()
         val valid = (0 until 60).map { day.minusDays(it.toLong()).toString() }.toSet()
         val editor = prefs.edit()
         for (i in 0 until targets.length()) {
             val target = targets.optJSONObject(i) ?: continue
             if (target.optString("accountUid") != uid || !QaProgressPolicy.qualifies(target)) continue
             val pkg = target.optString("packageName").takeIf { it.isNotBlank() } ?: continue
-            editor.putStringSet("days:$uid:$pkg", (days(uid,pkg) + day.toString()).intersect(valid))
+            val cases = target.optJSONArray("scenarios")
+            val executed = if (cases != null && cases.length() > 0) {
+                (0 until cases.length()).mapNotNull { j ->
+                    val case = cases.optJSONObject(j) ?: return@mapNotNull null
+                    if (case.optString("status") !in listOf("PASS","FAIL")) return@mapNotNull null
+                    val at = case.optLong("endedAt").takeIf { it > 0 } ?: return@mapNotNull null
+                    Instant.ofEpochMilli(at).atZone(zone).toLocalDate().toString()
+                }
+            } else if (report.optString("reason") != "Process or Accessibility service interrupted") listOf(day.toString())
+            else emptyList()
+            editor.putStringSet("days:$uid:$pkg", (days(uid,pkg) + executed).intersect(valid))
         }
         editor.apply()
     }

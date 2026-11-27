@@ -41,7 +41,7 @@ class SequmioAccount(context: Context) {
         BuildConfig.FIREBASE_APP_ID.isNotBlank() &&
         BuildConfig.FIREBASE_PROJECT_ID.isNotBlank()
 
-    private val firebaseApp: FirebaseApp? = if (configured) {
+    private val firebaseApp: FirebaseApp? = if (configured) synchronized(com.sequmio.givlse.data.QaLocalAccount) {
         val existing = FirebaseApp.getApps(appContext).firstOrNull { it.name == "SequmioCloud" }
         existing ?: FirebaseApp.initializeApp(
             appContext,

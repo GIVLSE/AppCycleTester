@@ -66,11 +66,11 @@ internal fun SequmioEvidenceReview(account:SequmioAccount,runId:String,items:Lis
         items(items,key={it.key}) { item ->
             val bytes by produceState<ByteArray?>(null,item.key,uid) {
                 value=withContext(Dispatchers.IO) {
-                    if(uid!=null && item.image.isFile && item.image.length() in 1L..EvidenceStore.MAX_BYTES.toLong())
+                    if(uid!=null && QaLocalAccount.uid(ctx)==uid && item.image.isFile && item.image.length() in 1L..EvidenceStore.MAX_BYTES.toLong())
                         runCatching { item.image.readBytes() }.getOrNull() else null
                 }
             }
-            val bitmap by produceState<Bitmap?>(null,bytes) { value=withContext(Dispatchers.Default) { bytes?.let(EvidenceStore::decode) } }
+            val bitmap by produceState<Bitmap?>(null,bytes) { value=withContext(Dispatchers.Default) { bytes?.let { EvidenceStore.decode(it) } } }
             val image=bitmap
             SeqCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(12.dp),verticalArrangement=Arrangement.spacedBy(7.dp)) {
@@ -137,7 +137,7 @@ internal fun QaSharedEvidence(account:SequmioAccount,reportId:String) {
         loading=true;message="";bitmap=null
         try {
             val bytes=repository.read(reportId)
-            bitmap=withContext(Dispatchers.Default){bytes?.let(EvidenceStore::decode)}
+            bitmap=withContext(Dispatchers.Default){bytes?.let { EvidenceStore.decode(it) }}
             if(bitmap==null) message="No shared screenshot for this case."
         } catch(cancel:kotlinx.coroutines.CancellationException){throw cancel}
         catch(_:Exception){message="Evidence unavailable."}

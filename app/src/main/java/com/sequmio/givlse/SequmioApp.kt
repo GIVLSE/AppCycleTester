@@ -1166,8 +1166,10 @@ private fun SequmioHistory(reports: List<HistoryRunSummary>, account: SequmioAcc
     val uid = account.profile?.uid
     val evidenceStore = remember { com.sequmio.givlse.data.EvidenceStore(context) }
     val evidenceRevision by com.sequmio.givlse.data.EvidenceStore.revision.collectAsState()
-    val evidence by produceState(emptyList<com.sequmio.givlse.data.EvidenceItem>(), uid, evidenceRevision) {
-        value = if (uid == null) emptyList() else withContext(Dispatchers.IO) { evidenceStore.list(uid) }
+    var evidence by remember(uid) { mutableStateOf(emptyList<com.sequmio.givlse.data.EvidenceItem>()) }
+    LaunchedEffect(uid, evidenceRevision) {
+        val loaded = if (uid == null) emptyList() else withContext(Dispatchers.IO) { evidenceStore.list(uid) }
+        if (account.profile?.uid == uid) evidence = loaded
     }
     var evidenceRun by remember(uid) { mutableStateOf<String?>(null) }
     evidenceRun?.let { runId ->

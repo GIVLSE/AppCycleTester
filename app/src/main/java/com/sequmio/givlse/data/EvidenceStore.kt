@@ -44,6 +44,8 @@ internal class EvidenceStore(context: Context) {
     private fun scan(uid: String): List<EvidenceItem> {
         val dir=dir(uid)
         val now=System.currentTimeMillis()
+        dir.listFiles().orEmpty().filter { it.extension == "jpg" &&
+            !File(dir,it.nameWithoutExtension+".json").isFile }.forEach { it.delete() }
         val found=dir.listFiles().orEmpty().filter { it.extension=="json" && validKey(it.nameWithoutExtension) }.mapNotNull { meta ->
             val key=meta.nameWithoutExtension
             val img=File(dir,"$key.jpg")

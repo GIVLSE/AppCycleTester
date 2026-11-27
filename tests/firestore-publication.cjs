@@ -102,7 +102,37 @@ async function main() {
       assertFails(dev.doc("memberships/other_" + pkg).delete()));
     await check("QA-07 tester can still read own membership", () =>
       assertSucceeds(other.doc("memberships/other_" + pkg).get()));
-    console.log("RESULT: " + count + "/24 PASSED");
+    await env.withSecurityRulesDisabled(async context => {
+      const db = context.firestore();
+      await db.doc("testRuns/failed-case").set({ownerUid:"developer",testerUid:"other",appId:pkg,status:"FAIL"});
+      await db.doc("testRuns/passed-case").set({ownerUid:"developer",testerUid:"other",appId:pkg,status:"PASS"});
+    });
+    const firebase = require("firebase/compat/app");
+    require("firebase/compat/firestore");
+    const evidence = (reportId, changes={}) => ({
+      reportId, appId:pkg, ownerUid:"developer", testerUid:"other", stepIndex:1,
+      createdAt:firebase.firestore.FieldValue.serverTimestamp(), imageBase64:"/9j/2Q==", ...changes
+    });
+    const image = db => db.doc("runEvidence/failed-case");
+    await check("EV-01 owner can read absent evidence for own report", async () => {
+      assert.equal((await assertSucceeds(image(dev).get())).exists,false);
+    });
+    await check("EV-02 stranger cannot create evidence", () => assertFails(image(stranger).set(evidence("failed-case"))));
+    await check("EV-03 pass cannot attach evidence", () => assertFails(other.doc("runEvidence/passed-case").set(evidence("passed-case"))));
+    await check("EV-04 wrong recipient denied", () => assertFails(image(other).set(evidence("failed-case",{ownerUid:"stranger"}))));
+    await check("EV-05 oversized image denied", () => assertFails(image(other).set(evidence("failed-case",{imageBase64:"A".repeat(280001)}))));
+    await check("EV-06 tester attaches reviewed failed-case image", () => assertSucceeds(image(other).set(evidence("failed-case"))));
+    await check("EV-07 developer reads own evidence", () => assertSucceeds(image(dev).get()));
+    await check("EV-08 tester reads own evidence", () => assertSucceeds(image(other).get()));
+    await check("EV-09 stranger cannot read evidence", () => assertFails(image(stranger).get()));
+    await check("EV-10 guest cannot read evidence", () => assertFails(image(guest).get()));
+    await check("EV-11 image immutable", () => assertFails(image(other).update({imageBase64:"different"})));
+    await check("EV-12 owner-scoped cleanup query", async () => {
+      assert.equal((await assertSucceeds(dev.collection("runEvidence").where("ownerUid","==","developer").get())).size,1);
+    });
+    await check("EV-13 stranger cannot delete evidence", () => assertFails(image(stranger).delete()));
+    await check("EV-14 tester can remove shared image", () => assertSucceeds(image(other).delete()));
+    console.log("RESULT: " + count + "/" + count + " PASSED");
   } finally { await env.cleanup(); }
 }
 main().catch(e => { console.error(e); process.exitCode = 1; });

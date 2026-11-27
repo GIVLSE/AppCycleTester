@@ -19,5 +19,11 @@
       ]
     }
   ],
-  "fieldOverrides": []
+  "fieldOverrides": [
+    {
+      "collectionGroup": "runEvidence",
+      "fieldPath": "imageBase64",
+      "indexes": []
+    }
+  ]
 }
