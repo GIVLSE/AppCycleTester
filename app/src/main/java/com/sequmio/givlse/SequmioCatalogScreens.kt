@@ -47,6 +47,7 @@ internal fun SequmioCommunityCatalog(
     installed: List<InstalledApp>,
     refreshToken: Int,
     onOpenSettings: () -> Unit,
+    onProgress: () -> Unit,
     onJoined: (PublishedApp, InstalledApp) -> Unit,
     onSync: () -> Unit,
     onOwnedTest: (PublishedApp, InstalledApp) -> Unit,
@@ -128,6 +129,18 @@ internal fun SequmioCommunityCatalog(
                     SeqIconAction(Icons.Outlined.Refresh, "Refresh catalog",
                         onClick = { refresh++ }, enabled = !busy)
                 })
+            if (uid != null) {
+                SeqCard(Modifier.fillMaxWidth()) {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("My QA Progress", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                            Text("Daily testing activity and reminders", color = SeqColors.Muted, fontSize = 11.sp)
+                        }
+                        SeqTextButton(onClick = onProgress) { Text("Open") }
+                    }
+                }
+            }
             Text("Discover community tests or prepare an installed app for Runner.",
                 color = SeqColors.Muted, fontSize = 12.sp)
             OutlinedTextField(

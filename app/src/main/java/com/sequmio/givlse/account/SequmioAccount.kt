@@ -206,6 +206,8 @@ class SequmioAccount(context: Context) {
             database.collection("users").document(uid).delete().await()
             current.delete().await()
             com.sequmio.givlse.data.PendingJoinStore(appContext, uid).clear()
+            com.sequmio.givlse.data.QaProgressStore(appContext).clear(uid)
+            com.sequmio.givlse.data.QaReminderScheduler.reconcile(appContext)
             profile = null
             CloudUploadPrefs(appContext).enabled = false
             status = "Cloud account and owned data deleted."
@@ -222,6 +224,7 @@ class SequmioAccount(context: Context) {
     suspend fun signOut() {
         auth?.signOut()
         profile = null
+        com.sequmio.givlse.data.QaReminderScheduler.reconcile(appContext)
         dailyDigest = false
         CloudUploadPrefs(appContext).enabled = false
         status = "Signed out. Automatic report sharing was disabled."
