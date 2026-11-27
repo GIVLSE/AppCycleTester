@@ -94,8 +94,19 @@ class RunReportStore(private val context: Context) {
         if (!archive(json)) storageError = true
     }
 
+    private var runId = ""
+    private var runUid: String? = null
+
+    fun evidenceKey(index: Int): String? = caseCounts[index]?.takeIf { it > 0 }
+        ?.let { runId.takeIf(String::isNotBlank)?.let { id -> id + "_" + index + "_" + (it - 1) } }
+    fun evidenceUid(): String? = runUid
+
     fun begin(plan: TestPlan) {
         caseCounts.clear()
+        val id = UUID.randomUUID().toString()
+        val uid = QaLocalAccount.uid(context)
+        runId = id
+        runUid = uid
         dispatch {
         storageError = false
         recoverInterruptedOnWorker()
@@ -107,7 +118,7 @@ class RunReportStore(private val context: Context) {
                 .put("appVersionCode", version.second)
                 .put("packageName", t.packageName)
                 .put("durationSeconds", t.durationSeconds)
-                .put("origin", t.origin)
+                .put("origin", t.origin).put("accountUid", t.ownerUid.orEmpty())
                 .put("executionMode", t.executionMode.name)
                 .put("outcome", AppPoolOutcome.NOT_EXECUTED.name)
                 .put("scenarioName", t.scenarioJson?.let {
@@ -129,7 +140,7 @@ class RunReportStore(private val context: Context) {
                 .put("retries", 0).put("failures", 0).put("foregroundSeconds", 0))
         }
         save(JSONObject()
-            .put("schema", 3).put("id", UUID.randomUUID().toString())
+            .put("schema", 3).put("id", id).put("testerUid", uid.orEmpty())
             .put("status", "RUNNING").put("startedAt", System.currentTimeMillis())
             .put("endedAt", 0L).put("elapsedSeconds", 0L)
             .put("completedCycles", 0).put("repeatMode", plan.repeatMode.name)
@@ -295,8 +306,9 @@ class RunReportStore(private val context: Context) {
                     // Keep a terminal checkpoint if archiving fails or process dies.
                     save(json, force = true)
                     saved = archive(json)
-                    if (saved)
+                    if (saved) {
                         RunProgressStore(context).recordPassedApps(json.optJSONArray("targets") ?: JSONArray())
+                    }
                 }
             } catch (e: Exception) {
                 Log.e("SequmioReports", "Final report failed", e)
@@ -320,6 +332,7 @@ class RunReportStore(private val context: Context) {
             Log.e("SequmioReports", "History archive commit failed")
             return false
         }
+        runCatching { QaProgressStore(context).record(json) }
         revisionState.value += 1
         if (CloudUploadPrefs(context).enabled) {
             runCatching { CloudRunUploader.enqueue(context, id) }

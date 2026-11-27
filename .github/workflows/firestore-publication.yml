@@ -6,6 +6,11 @@ on:
       - firestore.rules
       - tests/firestore-publication.cjs
       - .github/workflows/firestore-publication.yml
+  pull_request:
+    paths:
+      - firestore.rules
+      - tests/firestore-publication.cjs
+      - .github/workflows/firestore-publication.yml
   workflow_dispatch:
 permissions:
   contents: read

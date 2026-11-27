@@ -41,7 +41,7 @@ class SequmioAccount(context: Context) {
         BuildConfig.FIREBASE_APP_ID.isNotBlank() &&
         BuildConfig.FIREBASE_PROJECT_ID.isNotBlank()
 
-    private val firebaseApp: FirebaseApp? = if (configured) {
+    private val firebaseApp: FirebaseApp? = if (configured) synchronized(com.sequmio.givlse.data.QaLocalAccount) {
         val existing = FirebaseApp.getApps(appContext).firstOrNull { it.name == "SequmioCloud" }
         existing ?: FirebaseApp.initializeApp(
             appContext,
@@ -183,6 +183,15 @@ class SequmioAccount(context: Context) {
                     listing.reference.delete().await()
                 }
             }
+            // Remove explicitly shared images before removing their report records.
+            for (field in listOf("ownerUid", "testerUid")) {
+                while (true) {
+                    val images = database.collection("runEvidence").whereEqualTo(field, uid)
+                        .limit(100).get(com.google.firebase.firestore.Source.SERVER).await().documents
+                    if (images.isEmpty()) break
+                    images.forEach { it.reference.delete().await() }
+                }
+            }
             for (field in listOf("ownerUid", "testerUid")) {
                 while (true) {
                     val runs = database.collection("testRuns")
@@ -206,6 +215,9 @@ class SequmioAccount(context: Context) {
             database.collection("users").document(uid).delete().await()
             current.delete().await()
             com.sequmio.givlse.data.PendingJoinStore(appContext, uid).clear()
+            com.sequmio.givlse.data.QaProgressStore(appContext).clear(uid)
+            com.sequmio.givlse.data.EvidenceStore(appContext).clear(uid)
+            com.sequmio.givlse.data.QaReminderScheduler.reconcile(appContext)
             profile = null
             CloudUploadPrefs(appContext).enabled = false
             status = "Cloud account and owned data deleted."
@@ -222,6 +234,7 @@ class SequmioAccount(context: Context) {
     suspend fun signOut() {
         auth?.signOut()
         profile = null
+        com.sequmio.givlse.data.QaReminderScheduler.reconcile(appContext)
         dailyDigest = false
         CloudUploadPrefs(appContext).enabled = false
         status = "Signed out. Automatic report sharing was disabled."

@@ -16,7 +16,7 @@ import com.sequmio.givlse.data.StepOutcome
 /**
  * Deterministic, bounded, on-device scenario player.
  * Only runs within the exact foreground target package selected by the tester.
- * No external code, JavaScript, global scripts, screenshots or text collection.
+ * No external code or global scripts. Optional local failure evidence is separately consented.
  */
 class ScenarioPlayer(
     private val service: AccessibilityService,
@@ -27,6 +27,7 @@ class ScenarioPlayer(
     private val onFailure: (String) -> Unit,
     private val onError: (String) -> Unit = onFailure,
     private val onResult: (StepExecutionResult) -> Unit = {},
+    private val onFailureEvidence: (Int, () -> Unit) -> Unit = { _, done -> done() },
     private val singlePass: Boolean = false,
     private val onCompleted: (ScenarioSpec) -> Unit = {}
 ) {
@@ -287,7 +288,7 @@ class ScenarioPlayer(
             stepStartedAt = 0L
             interrupt(verdict, "Not executed after required step did not complete")
             val detail = "Step " + failedIndex + " " + step.action + " " + verdict + ": " + message
-            if (verdict == "FAIL") onFailure(detail) else onError(detail)
+            if (verdict == "FAIL") onFailureEvidence(failedIndex) { onFailure(detail) } else onError(detail)
         }
     }
 

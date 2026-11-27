@@ -256,6 +256,7 @@ internal fun SequmioSettings(
     var confirmDeletion by remember { mutableStateOf(false) }
     var showReports by remember { mutableStateOf(false) }
     var showSupport by remember { mutableStateOf(false) }
+    var showEvidence by remember { mutableStateOf(false) }
     val canShare = profile != null && account.configured
     LaunchedEffect(profile?.uid) {
         shareResults = uploadPrefs.enabled
@@ -355,6 +356,10 @@ internal fun SequmioSettings(
                         onCheckedChange = { changeSharing(it) })
                 })
             SettingsRowDivider()
+            SettingsMenuRow(Icons.Outlined.Image, "Screenshot Evidence",
+                "Optional failure screenshots · review before sharing",
+                onClick = { showEvidence = true })
+            SettingsRowDivider()
             SettingsMenuRow(Icons.Outlined.VerifiedUser, "Permissions & Accessibility",
                 "Required for recording and automation", onClick = onPermissions)
             SettingsRowDivider()
@@ -368,6 +373,7 @@ internal fun SequmioSettings(
                 onClick = onAbout)
         }
     }
+    if (showEvidence) EvidenceSettingsDialog(account, onDismiss = { showEvidence = false })
     if (showSupport) {
         AlertDialog(onDismissRequest = { showSupport = false },
             title = { Text("Support") },
@@ -380,7 +386,7 @@ internal fun SequmioSettings(
             text = {
                 Column(Modifier.verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Share test metadata with the tested app's developer. No screen contents, input text or passwords are uploaded.",
+                    Text("Share test metadata with the tested app's developer. Automatic metadata reports do not contain screenshots, screen contents, input text or passwords. Separate screenshot sharing requires explicit review.",
                         color = SeqColors.Muted, fontSize = 13.sp)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("Automatic sharing", Modifier.weight(1f))
@@ -416,7 +422,7 @@ internal fun SequmioSettings(
                 "Sequmio may send only test metadata to the app owner: " +
                 "your account tester ID, device model, Android/API version, " +
                 "tested build version, scenario steps, timing and outcomes. " +
-                "No screen or typed text is sent. You can turn this off at " +
+                "Automatic metadata reports contain no screenshots or typed text. You can turn this off at " +
                 "any time in Settings.") },
             confirmButton = {
                 SeqTextButton(onClick = {

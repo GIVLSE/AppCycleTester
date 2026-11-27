@@ -95,7 +95,9 @@ internal fun SequmioAccessSetup(
                         "app. It captures event selectors and approximate scroll actions " +
                         "as editable scenario steps; text input is saved as a placeholder " +
                         "instead of collecting the characters typed. Password fields are " +
-                        "excluded. No raw touches, screenshots or screen video are stored. " +
+                        "excluded. The recorder stores no raw touches, screenshots or video. " +
+                        "Separately, optional Screenshot Evidence can capture a failed test's app window " +
+                        "only with additional explicit consent; images stay local unless you review and share them. " +
                         "You decide whether to publish the edited scenario to Firebase.",
                     color = SeqColors.Muted, fontSize = 14.sp
                 )
