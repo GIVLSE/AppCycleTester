@@ -253,9 +253,11 @@ internal fun SequmioSettings(
     val uploadPrefs = remember { CloudUploadPrefs(context) }
     var shareResults by remember { mutableStateOf(uploadPrefs.enabled) }
     var confirmSharing by remember { mutableStateOf(false) }
+    var autoEvidenceOptIn by remember(profile?.uid) { mutableStateOf(false) }
     var confirmDeletion by remember { mutableStateOf(false) }
     var showReports by remember { mutableStateOf(false) }
     var showSupport by remember { mutableStateOf(false) }
+    var showEvidence by remember { mutableStateOf(false) }
     val canShare = profile != null && account.configured
     LaunchedEffect(profile?.uid) {
         shareResults = uploadPrefs.enabled
@@ -263,9 +265,10 @@ internal fun SequmioSettings(
     }
     fun changeSharing(desired: Boolean) {
         if (!canShare) return
-        if (desired) confirmSharing = true else {
+        if (desired) { autoEvidenceOptIn = false; confirmSharing = true } else {
             shareResults = false
             uploadPrefs.enabled = false
+            profile?.uid?.let { com.sequmio.givlse.data.EvidenceStore(context).setEnabled(it,false) }
         }
     }
     Column(
@@ -355,6 +358,10 @@ internal fun SequmioSettings(
                         onCheckedChange = { changeSharing(it) })
                 })
             SettingsRowDivider()
+            SettingsMenuRow(Icons.Outlined.Image, "Screenshot Evidence",
+                "Optional automatic failure screenshots",
+                onClick = { showEvidence = true })
+            SettingsRowDivider()
             SettingsMenuRow(Icons.Outlined.VerifiedUser, "Permissions & Accessibility",
                 "Required for recording and automation", onClick = onPermissions)
             SettingsRowDivider()
@@ -368,6 +375,7 @@ internal fun SequmioSettings(
                 onClick = onAbout)
         }
     }
+    if (showEvidence) EvidenceSettingsDialog(account, onDismiss = { showEvidence = false })
     if (showSupport) {
         AlertDialog(onDismissRequest = { showSupport = false },
             title = { Text("Support") },
@@ -380,7 +388,7 @@ internal fun SequmioSettings(
             text = {
                 Column(Modifier.verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Share test metadata with the tested app's developer. No screen contents, input text or passwords are uploaded.",
+                    Text("Share test metadata with the tested app's developer. Metadata reports contain no screenshots or typed text. Automatic failure screenshots require separate consent in Screenshot Evidence.",
                         color = SeqColors.Muted, fontSize = 13.sp)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("Automatic sharing", Modifier.weight(1f))
@@ -412,15 +420,24 @@ internal fun SequmioSettings(
             titleContentColor = SeqColors.Text,
             textContentColor = SeqColors.Text,
             title = { Text("Allow automatic QA report upload?") },
-            text = { Text("Following each completed or interrupted test, " +
-                "Sequmio may send only test metadata to the app owner: " +
-                "your account tester ID, device model, Android/API version, " +
-                "tested build version, scenario steps, timing and outcomes. " +
-                "No screen or typed text is sent. You can turn this off at " +
-                "any time in Settings.") },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                    Text("Following a completed or interrupted test, Sequmio may automatically send metadata to the app owner: account tester ID, device model, Android and build version, scenario steps, timing and outcomes. Metadata includes no screenshots or typed text.")
+                    if(android.os.Build.VERSION.SDK_INT>=34) {
+                        Row(verticalAlignment=Alignment.CenterVertically) {
+                            Checkbox(checked=autoEvidenceOptIn,onCheckedChange={autoEvidenceOptIn=it})
+                            Text("Also automatically share failure screenshots",Modifier.weight(1f),fontWeight=FontWeight.SemiBold)
+                        }
+                        Text("Optional. When enabled, a failed assertion in a test you start captures the tested app window and automatically sends it to its developer via Firebase, without per-image review. Images may contain private information; use non-sensitive test data only. Disable in Settings at any time.",fontSize=12.sp,color=SeqColors.Muted)
+                    }
+                }
+            },
             confirmButton = {
                 SeqTextButton(onClick = {
                     uploadPrefs.enabled = true
+                    if(autoEvidenceOptIn && android.os.Build.VERSION.SDK_INT>=34) profile?.uid?.let {
+                        com.sequmio.givlse.data.EvidenceStore(context).setEnabled(it,true)
+                    }
                     shareResults = true
                     confirmSharing = false
                 }) { Text("Enable sharing") }

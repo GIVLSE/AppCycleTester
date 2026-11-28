@@ -68,7 +68,7 @@ private const val RUNNER_DISCONNECTED_MESSAGE =
     "Android access is enabled, but Runner is not connected. Retry connection below."
 
 private enum class Page { RUNNER, APP_LIST, MY_APP, HISTORY, PLAN, SETUP,
-    SETTINGS, ABOUT, SUITE_MANAGER, SCENARIO_EDITOR, QA_DASHBOARD }
+    SETTINGS, ABOUT, SUITE_MANAGER, SCENARIO_EDITOR, QA_DASHBOARD, QA_PROGRESS }
 
 @Composable
 internal fun SequmioApp(
@@ -216,6 +216,14 @@ internal fun SequmioApp(
     }
     val active = runner.phase == RunPhase.RUNNING || runner.phase == RunPhase.PAUSED
     val reportRevision by RunReportStore.revision.collectAsState()
+    LaunchedEffect(ownerUid, joinedPublished, apps) {
+        val uid = ownerUid
+        if (uid != null && account.profile?.uid == uid && joinedPublished != null) {
+            com.sequmio.givlse.data.QaProgressStore(context).setJoined(uid,
+                joinedPublished.orEmpty().map { it.packageName }, apps.map { it.packageName }.toSet())
+        }
+        com.sequmio.givlse.data.QaReminderScheduler.reconcile(context)
+    }
     val runReports by produceState(emptyList<HistoryRunSummary>(), page, reportRevision) {
         if (page == Page.HISTORY) value = withContext(Dispatchers.IO) {
             RunReportStore(context.applicationContext).recent().map(HistoryRunSummary::fromReport)
@@ -419,6 +427,7 @@ internal fun SequmioApp(
                     installed = apps,
                     refreshToken = permissionRefreshToken,
                     onOpenSettings = { openSettings() },
+                    onProgress = { page = Page.QA_PROGRESS },
                     onJoined = { published, installed ->
                         joinCommunity(published, installed)
                     },
@@ -605,6 +614,9 @@ internal fun SequmioApp(
                     account = account,
                     onBack = { page = Page.MY_APP }
                 )
+                Page.QA_PROGRESS -> SequmioQaProgress(account, joinedPublished, apps,
+                    reportRevision, notificationsGranted, requestNotificationPermission,
+                    onBack = { page = Page.APP_LIST })
                 Page.HISTORY -> SequmioHistory(runReports)
                 Page.SETTINGS -> SequmioSettings(
                     account = account,

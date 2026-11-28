@@ -70,10 +70,12 @@ class RunUploadWorker(context: Context, params: WorkerParameters) :
             ?: return Result.success()
         val json = runCatching { JSONObject(report.rawJson) }.getOrNull()
             ?: return Result.failure()
+        // New reports bind to the account present at run start. Never send under a later login.
+        if (json.has("testerUid") && json.optString("testerUid") != uid) return Result.success()
         val targets = json.optJSONArray("targets") ?: return Result.success()
         try {
             for (index in 0 until targets.length()) {
-                if (!prefs.enabled) return Result.success()
+                if (!prefs.enabled || account.profile?.uid != uid) return Result.success()
                 val target = targets.optJSONObject(index) ?: continue
                 val appId = target.optString("packageName")
                 if (appId.isBlank() || target.optString("scenarioName").isBlank()) continue
@@ -150,6 +152,7 @@ class RunUploadWorker(context: Context, params: WorkerParameters) :
                         .document(report.id + "_" + index + "_" + caseIndex)
                     // A read of a nonexistent report is denied by the current rules.
                     // Create directly; immutable identical-payload retries are allowed.
+                    if (!prefs.enabled || account.profile?.uid != uid) return Result.success()
                     upload.set(record).await()
                 }
             }

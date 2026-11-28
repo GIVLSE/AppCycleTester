@@ -823,6 +823,27 @@ class CycleAccessibilityService : AccessibilityService() {
             onFailure = { error -> failScenario(error, "FAIL") },
             onError = { error -> failScenario(error, "BLOCKED") },
             onResult = { result -> reports.step(index, result) },
+            onFailureEvidence = { step, done ->
+                val playerAtFailure = scenarioPlayer
+                val generation = runGeneration
+                val uid = reports.evidenceUid()
+                val key = reports.evidenceKey(index)
+                if (uid == null || key == null || target.origin !in listOf("community", "owner") ||
+                    target.ownerUid != uid || !com.sequmio.givlse.data.EvidenceStore(this).enabled(uid) ||
+                    android.os.Build.VERSION.SDK_INT < 34) done()
+                else {
+                    handler.removeCallbacks(scenarioTimeout)
+                    com.sequmio.givlse.runner.FailureEvidenceCapture.request(this, handler, uid,
+                        key, targetPackage, spec.name, step,
+                        stillCurrent = {
+                            phase == RunPhase.RUNNING && runGeneration == generation &&
+                                scenarioPlayer === playerAtFailure
+                        }) {
+                        if (phase == RunPhase.RUNNING && runGeneration == generation &&
+                            scenarioPlayer === playerAtFailure) done()
+                    }
+                }
+            },
             singlePass = true,
             onCompleted = { completed ->
                 if (SystemClock.elapsedRealtime() >= scenarioDeadline) {

@@ -157,6 +157,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        com.sequmio.givlse.data.EvidenceStore(this).purgeLegacy()
         readReturnIntent(intent)
         if (intent?.action == ACTION_SHOW_RUN_RESULT) runResultOpenVersion.value += 1
         if (CycleAccessibilityService.instance == null) {

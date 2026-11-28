@@ -41,7 +41,7 @@ class SequmioAccount(context: Context) {
         BuildConfig.FIREBASE_APP_ID.isNotBlank() &&
         BuildConfig.FIREBASE_PROJECT_ID.isNotBlank()
 
-    private val firebaseApp: FirebaseApp? = if (configured) {
+    private val firebaseApp: FirebaseApp? = if (configured) synchronized(com.sequmio.givlse.data.QaLocalAccount) {
         val existing = FirebaseApp.getApps(appContext).firstOrNull { it.name == "SequmioCloud" }
         existing ?: FirebaseApp.initializeApp(
             appContext,
@@ -59,6 +59,7 @@ class SequmioAccount(context: Context) {
 
     /** Public catalog can be read as a guest; community writes require sign-in. */
     fun cloudStore(): FirebaseFirestore? = db
+    internal fun evidenceContext(): Context = appContext
 
 
     var profile: AccountProfile? by mutableStateOf(auth?.currentUser?.let { user ->
@@ -169,6 +170,8 @@ class SequmioAccount(context: Context) {
         busy = true
         status = null
         try {
+            CloudUploadPrefs(appContext).enabled = false
+            com.sequmio.givlse.data.EvidenceStore(appContext).setEnabled(uid,false)
             while (true) {
                 val docs = database.collection("apps").whereEqualTo("ownerUid", uid)
                     .limit(100).get().await().documents
@@ -181,6 +184,15 @@ class SequmioAccount(context: Context) {
                         versions.forEach { it.reference.delete().await() }
                     }
                     listing.reference.delete().await()
+                }
+            }
+            // Remove explicitly shared images before removing their report records.
+            for (field in listOf("ownerUid", "testerUid")) {
+                while (true) {
+                    val images = database.collection("runEvidence").whereEqualTo(field, uid)
+                        .limit(100).get(com.google.firebase.firestore.Source.SERVER).await().documents
+                    if (images.isEmpty()) break
+                    images.forEach { it.reference.delete().await() }
                 }
             }
             for (field in listOf("ownerUid", "testerUid")) {
@@ -206,6 +218,9 @@ class SequmioAccount(context: Context) {
             database.collection("users").document(uid).delete().await()
             current.delete().await()
             com.sequmio.givlse.data.PendingJoinStore(appContext, uid).clear()
+            com.sequmio.givlse.data.QaProgressStore(appContext).clear(uid)
+            com.sequmio.givlse.data.EvidenceStore(appContext).clear(uid)
+            com.sequmio.givlse.data.QaReminderScheduler.reconcile(appContext)
             profile = null
             CloudUploadPrefs(appContext).enabled = false
             status = "Cloud account and owned data deleted."
@@ -220,8 +235,11 @@ class SequmioAccount(context: Context) {
     }
 
     suspend fun signOut() {
+        CloudUploadPrefs(appContext).enabled = false
+        auth?.currentUser?.uid?.let { com.sequmio.givlse.data.EvidenceStore(appContext).setEnabled(it,false) }
         auth?.signOut()
         profile = null
+        com.sequmio.givlse.data.QaReminderScheduler.reconcile(appContext)
         dailyDigest = false
         CloudUploadPrefs(appContext).enabled = false
         status = "Signed out. Automatic report sharing was disabled."
