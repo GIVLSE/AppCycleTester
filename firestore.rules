@@ -119,7 +119,7 @@ service cloud.firestore {
         (resource.data.ownerUid == request.auth.uid ||
           resource.data.testerUid == request.auth.uid);
     }
-    // Explicitly reviewed screenshot, separate from immutable metadata reports.
+    // Separately consented automatic screenshot, separate from immutable metadata reports.
     match /runEvidence/{reportId} {
       function report() {
         return get(/databases/$(database)/documents/testRuns/$(reportId));

@@ -97,7 +97,7 @@ internal fun SequmioAccessSetup(
                         "instead of collecting the characters typed. Password fields are " +
                         "excluded. The recorder stores no raw touches, screenshots or video. " +
                         "Separately, optional Screenshot Evidence can capture a failed test's app window " +
-                        "only with additional explicit consent; images stay local unless you review and share them. " +
+                        "only with additional explicit consent to automatic transfer to the tested app developer. " +
                         "You decide whether to publish the edited scenario to Firebase.",
                     color = SeqColors.Muted, fontSize = 14.sp
                 )

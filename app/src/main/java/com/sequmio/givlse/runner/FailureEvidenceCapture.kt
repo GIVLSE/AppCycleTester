@@ -24,7 +24,7 @@ internal object FailureEvidenceCapture {
             it.type==AccessibilityWindowInfo.TYPE_APPLICATION && it.isActive } ?: return null
         if(window.root?.packageName?.toString()!=pkg) return null
         // Fail closed on editable/password nodes or overly large trees. Pixels can
-        // still contain sensitive information; the tester must review before sharing.
+        // still contain sensitive information; automatic sharing requires separate opt-in.
         val queue=ArrayDeque<AccessibilityNodeInfo>()
         queue.add(root)
         var count=0

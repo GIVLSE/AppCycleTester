@@ -59,6 +59,7 @@ class SequmioAccount(context: Context) {
 
     /** Public catalog can be read as a guest; community writes require sign-in. */
     fun cloudStore(): FirebaseFirestore? = db
+    internal fun evidenceContext(): Context = appContext
 
 
     var profile: AccountProfile? by mutableStateOf(auth?.currentUser?.let { user ->
@@ -169,6 +170,8 @@ class SequmioAccount(context: Context) {
         busy = true
         status = null
         try {
+            CloudUploadPrefs(appContext).enabled = false
+            com.sequmio.givlse.data.EvidenceStore(appContext).setEnabled(uid,false)
             while (true) {
                 val docs = database.collection("apps").whereEqualTo("ownerUid", uid)
                     .limit(100).get().await().documents
@@ -232,6 +235,8 @@ class SequmioAccount(context: Context) {
     }
 
     suspend fun signOut() {
+        CloudUploadPrefs(appContext).enabled = false
+        auth?.currentUser?.uid?.let { com.sequmio.givlse.data.EvidenceStore(appContext).setEnabled(it,false) }
         auth?.signOut()
         profile = null
         com.sequmio.givlse.data.QaReminderScheduler.reconcile(appContext)

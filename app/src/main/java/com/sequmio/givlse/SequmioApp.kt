@@ -617,7 +617,7 @@ internal fun SequmioApp(
                 Page.QA_PROGRESS -> SequmioQaProgress(account, joinedPublished, apps,
                     reportRevision, notificationsGranted, requestNotificationPermission,
                     onBack = { page = Page.APP_LIST })
-                Page.HISTORY -> SequmioHistory(runReports, account)
+                Page.HISTORY -> SequmioHistory(runReports)
                 Page.SETTINGS -> SequmioSettings(
                     account = account,
                     onBack = { page = settingsReturnPage },
@@ -1161,22 +1161,7 @@ internal fun SeqTopBar(title: String, onBack: (() -> Unit)? = null) {
 
 /** QA-facing run summaries. Full report data stays in the existing archive/uploader. */
 @Composable
-private fun SequmioHistory(reports: List<HistoryRunSummary>, account: SequmioAccount) {
-    val context = LocalContext.current
-    val uid = account.profile?.uid
-    val evidenceStore = remember { com.sequmio.givlse.data.EvidenceStore(context) }
-    val evidenceRevision by com.sequmio.givlse.data.EvidenceStore.revision.collectAsState()
-    var evidence by remember(uid) { mutableStateOf(emptyList<com.sequmio.givlse.data.EvidenceItem>()) }
-    LaunchedEffect(uid, evidenceRevision) {
-        val loaded = if (uid == null) emptyList() else withContext(Dispatchers.IO) { evidenceStore.list(uid) }
-        if (account.profile?.uid == uid) evidence = loaded
-    }
-    var evidenceRun by remember(uid) { mutableStateOf<String?>(null) }
-    evidenceRun?.let { runId ->
-        SequmioEvidenceReview(account, runId, evidence.filter { it.key.startsWith(runId + "_") },
-            onBack = { evidenceRun = null })
-        return
-    }
+private fun SequmioHistory(reports: List<HistoryRunSummary>) {
     val listState = rememberLazyListState()
     var expandedReportId by rememberSaveable { mutableStateOf<String?>(null) }
     var eventReportId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -1291,11 +1276,6 @@ private fun SequmioHistory(reports: List<HistoryRunSummary>, account: SequmioAcc
                         }
                     }
                     HorizontalDivider(color = SeqColors.Border.copy(alpha = 0.55f))
-                    val evidenceCount = evidence.count { it.key.startsWith(report.id + "_") }
-                    if (evidenceCount > 0) SeqTextButton(onClick = { evidenceRun = report.id },
-                        modifier = Modifier.fillMaxWidth()) {
-                        Text("Screenshot evidence (" + evidenceCount + ")", fontSize = 12.sp)
-                    }
                     SeqTextButton(onClick = { eventReportId = report.id },
                         modifier = Modifier.fillMaxWidth()) {
                         Icon(Icons.Outlined.Timeline, null, Modifier.size(17.dp))

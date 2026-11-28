@@ -21,7 +21,7 @@ internal class EvidenceStore(context: Context) {
         val revision: StateFlow<Long> = rev
         private val lock = Any()
         const val MAX_BYTES = 200_000
-        private const val KEEP_MS = 7L*24*60*60*1000
+        internal const val KEEP_MS = 24L*60*60*1000
         private val KEY = Regex("[0-9a-fA-F-]{36}_[0-9]+_[0-9]+")
         fun validKey(key: String) = KEY.matches(key)
         fun decode(bytes: ByteArray): Bitmap? {
@@ -34,10 +34,32 @@ internal class EvidenceStore(context: Context) {
     }
     private fun dir(uid: String): File {
         val hash=MessageDigest.getInstance("SHA-256").digest(uid.toByteArray()).joinToString("") { "%02x".format(it.toInt() and 255) }
-        return File(ctx.noBackupFilesDir,"qa_evidence/"+hash)
+        return File(ctx.noBackupFilesDir,"qa_evidence_pending/"+hash)
     }
-    fun enabled(uid: String) = prefs.getBoolean("capture:$uid",false)
-    fun setEnabled(uid: String,value: Boolean) { prefs.edit().putBoolean("capture:$uid",value).apply() }
+    // Separate v2 consent: old local-only capture permission never authorizes uploads.
+    fun consent(uid: String) = prefs.getBoolean("auto_share_v2:$uid",false)
+    fun enabled(uid: String) = consent(uid) && CloudUploadPrefs(ctx).enabled
+    fun setEnabled(uid: String,value: Boolean) = synchronized(lock) {
+        if (!value) {
+            prefs.edit().remove("auto_share_v2:$uid").commit()
+            dir(uid).deleteRecursively()
+            AutoEvidenceUploader.cancel(ctx,uid)
+        } else {
+            require(QaLocalAccount.uid(ctx)==uid && CloudUploadPrefs(ctx).enabled)
+            prefs.edit().putBoolean("auto_share_v2:$uid",true).commit()
+        }
+    }
+    fun purgeLegacy() = synchronized(lock) {
+        // Local-only captures from 1.3.5 must never be silently uploaded.
+        File(ctx.noBackupFilesDir,"qa_evidence").deleteRecursively()
+    }
+    fun expire(uid: String,key: String) = synchronized(lock) {
+        if (validKey(key)) {
+            val dir=dir(uid)
+            val row=runCatching { JSONObject(File(dir,"$key.json").readText()) }.getOrNull()
+            if(row==null || System.currentTimeMillis()-row.optLong("at")>=KEEP_MS) deleteFiles(dir,key)
+        }
+    }
     private fun deleteFiles(dir: File,key: String) {
         File(dir,"$key.jpg").delete();File(dir,"$key.json").delete()
     }
@@ -85,6 +107,7 @@ internal class EvidenceStore(context: Context) {
                 meta.writeText(JSONObject().put("appId",appId).put("scenario",scenario.take(120)).put("step",step).put("at",at).toString())
                 scan(uid)
                 rev.value += 1
+                AutoEvidenceUploader.enqueue(ctx,uid,key)
             } catch(error:Exception) { deleteFiles(dir,key);throw error }
         }
     }
@@ -93,7 +116,10 @@ internal class EvidenceStore(context: Context) {
     }
     fun clear(uid: String) = synchronized(lock) {
         dir(uid).deleteRecursively()
-        prefs.edit().remove("capture:$uid").apply()
+        prefs.edit().remove("capture:$uid").remove("auto_share_v2:$uid").commit()
+        AutoEvidenceUploader.cancel(ctx,uid)
+        val hash=MessageDigest.getInstance("SHA-256").digest(uid.toByteArray()).joinToString("") { "%02x".format(it.toInt() and 255) }
+        File(ctx.noBackupFilesDir,"qa_evidence/"+hash).deleteRecursively()
         rev.value+=1
     }
 }

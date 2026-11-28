@@ -828,7 +828,8 @@ class CycleAccessibilityService : AccessibilityService() {
                 val generation = runGeneration
                 val uid = reports.evidenceUid()
                 val key = reports.evidenceKey(index)
-                if (uid == null || key == null || !com.sequmio.givlse.data.EvidenceStore(this).enabled(uid) ||
+                if (uid == null || key == null || target.origin !in listOf("community", "owner") ||
+                    target.ownerUid != uid || !com.sequmio.givlse.data.EvidenceStore(this).enabled(uid) ||
                     android.os.Build.VERSION.SDK_INT < 34) done()
                 else {
                     handler.removeCallbacks(scenarioTimeout)
